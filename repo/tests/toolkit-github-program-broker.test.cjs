@@ -5,8 +5,26 @@ const {canonicalSerialize,digestValue}=require('../scripts/toolkit-execution-loo
 const receipt=require('../scripts/toolkit-github-program-receipt.cjs');
 const root=path.resolve(__dirname,'../..');const manifest=path.join(root,'repo/scripts/github-program-broker/Cargo.toml');
 const fixture=JSON.parse(fs.readFileSync(path.join(root,'repo/scripts/github-program-broker/tests/fixtures/source-slice-1-vectors.json')));
+// Test-owned dependencies and compiler outputs stay outside the checkout, including
+// generic CI jobs which do not configure broker-specific tools.
+const ownedTemporaryRoots=[];
+function temporaryRoot(label){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'toolkit-lock007-'+label+'-'));ownedTemporaryRoots.push(dir);return dir;}
+const cargoTarget=process.env.CARGO_TARGET_DIR||temporaryRoot('build');
+let schemaPython=process.env.BROKER_SCHEMA_PYTHON;
+function schemaInterpreter(){
+ if(schemaPython)return schemaPython;
+ if(process.env.CI!=='true')return 'python';
+ const environment=temporaryRoot('schema');
+ run('python',['-m','venv',environment]);
+ schemaPython=path.join(environment,process.platform==='win32'?'Scripts/python.exe':'bin/python');
+ run(schemaPython,['-m','pip','--isolated','install','--disable-pip-version-check','--no-input','--quiet','--index-url','https://pypi.org/simple','jsonschema==4.26.0']);
+ console.log('LOCK007_SCHEMA_ORACLE=jsonschema==4.26.0 isolated CI environment');
+ return schemaPython;
+}
+test.after(()=>{for(const dir of ownedTemporaryRoots){assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));assert.ok(path.basename(dir).startsWith('toolkit-lock007-'));fs.rmSync(dir,{recursive:true,force:true});}});
+
 function run(command,args,options={}){const r=cp.spawnSync(command,args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:120000,maxBuffer:16*1024*1024,...options});assert.equal(r.status,0,`${command}: ${r.error?.message||''}\n${r.stdout}\n${r.stderr}`);return r.stdout;}
-function oracle(rows,release=false){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'toolkit-lock007-oracle-'));const input=path.join(dir,'cases.json');try{fs.writeFileSync(input,JSON.stringify(rows));const output=run('cargo',['+1.98.0','test','--locked','--manifest-path',manifest,...(release?['--release']:[]),'--test','contracts','external_oracle','--','--ignored','--exact','--nocapture'],{env:{...process.env,BROKER_ORACLE_INPUT:input}});const match=output.match(/^ORACLE_JSON=([^\r\n]+)$/m);assert.ok(match,'Rust oracle output missing');return JSON.parse(match[1]);}finally{fs.unlinkSync(input);fs.rmdirSync(dir);}}
+function oracle(rows,release=false){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'toolkit-lock007-oracle-'));const input=path.join(dir,'cases.json');try{fs.writeFileSync(input,JSON.stringify(rows));const output=run('cargo',['+1.98.0','test','--locked','--manifest-path',manifest,...(release?['--release']:[]),'--test','contracts','external_oracle','--','--ignored','--exact','--nocapture'],{env:{...process.env,CARGO_TARGET_DIR:cargoTarget,BROKER_ORACLE_INPUT:input}});const match=output.match(/^ORACLE_JSON=([^\r\n]+)$/m);assert.ok(match,'Rust oracle output missing');return JSON.parse(match[1]);}finally{fs.unlinkSync(input);fs.rmdirSync(dir);}}
 const raw=(mode,v,request)=>({mode,raw:canonicalSerialize(v),...(request?{request}:{})});
 const copy=structuredClone;
 function rehash(v){if(v.result?.value && Object.hasOwn(v.result,"result_digest")){v.result.result_digest=digestValue(Object.fromEntries(["operation","value"].filter(k=>Object.hasOwn(v.result,k)).map(k=>[k,v.result[k]])));}return v;}
@@ -27,7 +45,7 @@ registry=Registry().with_resources([(base+n,Resource.from_contents(scoped(d,base
 uri=base+'broker-ipc-v1.schema.json'
 validators={m:Draft202012Validator({'$ref':uri+('' if m=='request' else '#/$defs/response')},registry=registry,format_checker=FormatChecker()) for m in ['request','response']}
 print(json.dumps([validators[r['mode']].is_valid(json.loads(r['raw'])) for r in json.load(sys.stdin)]))
-`;return JSON.parse(run(process.env.BROKER_SCHEMA_PYTHON||'python',['-W','ignore::DeprecationWarning','-c',code],{input:JSON.stringify(rows)}));}
+`;return JSON.parse(run(schemaInterpreter(),['-W','ignore::DeprecationWarning','-c',code],{input:JSON.stringify(rows)}));}
 test('same raw envelopes through standard JSON Schema, Rust decoder and request-bound production decoder',()=>{
  const rows=[];const expected=[];const add=(mode,v,valid,request)=>{rows.push(raw(mode,v,request));expected.push(valid);};
  for(const request of fixture.requests){add('request',request,true);for(const key of Object.keys(request)){const v=copy(request);delete v[key];add('request',v,false);}for(const key of Object.keys(request.operation)){const v=copy(request);delete v.operation[key];add('request',v,false);}}
