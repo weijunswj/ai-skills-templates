@@ -33,6 +33,17 @@ import json,sys,pathlib
 from jsonschema import Draft202012Validator,FormatChecker
 from referencing import Registry,Resource
 from urllib.parse import urljoin
+from datetime import datetime
+# Every protocol timestamp schema requires canonical UTC milliseconds. Use the
+# independent standard-library calendar parser unconditionally: optional format
+# packages must never decide whether these assertions run.
+formats=FormatChecker()
+@formats.checks("date-time", raises=ValueError)
+def canonical_timestamp(value):
+ if not isinstance(value,str): return True
+ datetime.strptime(value,"%Y-%m-%dT%H:%M:%S.%fZ")
+ return True
+assert not formats.conforms("2026-02-30T00:00:00.000Z","date-time"), "DATE_TIME_CHECKER_UNAVAILABLE"
 folder=pathlib.Path('repo/contracts/github-program-receipt')
 base='https://toolkit.invalid/'
 docs={p.name:json.loads(p.read_text(encoding='utf-8-sig')) for p in folder.glob('*.schema.json')}
@@ -43,7 +54,7 @@ def scoped(x,uri):
  return {k:(uri if k=='$id' else ids.get(v,urljoin(uri,v)) if k=='$ref' else scoped(v,uri)) for k,v in x.items()}
 registry=Registry().with_resources([(base+n,Resource.from_contents(scoped(d,base+n))) for n,d in docs.items()])
 uri=base+'broker-ipc-v1.schema.json'
-validators={m:Draft202012Validator({'$ref':uri+('' if m=='request' else '#/$defs/response')},registry=registry,format_checker=FormatChecker()) for m in ['request','response']}
+validators={m:Draft202012Validator({'$ref':uri+('' if m=='request' else '#/$defs/response')},registry=registry,format_checker=formats) for m in ['request','response']}
 print(json.dumps([validators[r['mode']].is_valid(json.loads(r['raw'])) for r in json.load(sys.stdin)]))
 `;return JSON.parse(run(schemaInterpreter(),['-W','ignore::DeprecationWarning','-c',code],{input:JSON.stringify(rows)}));}
 test('same raw envelopes through standard JSON Schema, Rust decoder and request-bound production decoder',()=>{
@@ -164,4 +175,12 @@ test('raw request lexical identifiers cannot gain a trailing newline through reg
  const got=oracle(rows);assert.ok(got.every(x=>!x.valid));
  for(let i=0;i<4;i++)assert.equal(got[i].request_id,null);
  for(let i=4;i<got.length;i++)assert.equal(got[i].request_id,fixture.request_id);
+});
+
+
+test('standard schema date-time assertions and Rust Gregorian validation agree on raw requests',()=>{
+ const rows=[];const expected=[];
+ for(const [timestamp,valid] of [['2024-02-29T00:00:00.000Z',true],['2026-02-28T23:59:59.999Z',true],['2026-02-29T00:00:00.000Z',false],['2026-02-30T00:00:00.000Z',false],['2026-13-01T00:00:00.000Z',false],['2026-01-01T24:00:00.000Z',false]]){const v=copy(fixture.requests[1]);v.operation.authority.updated_at=timestamp;rows.push(raw('request',v));expected.push(valid);}
+ assert.deepEqual(schemaResults(rows),expected);
+ for(const release of [false,true])assert.deepEqual(oracle(rows,release).map(x=>x.valid),expected);
 });
