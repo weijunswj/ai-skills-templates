@@ -93,6 +93,8 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+        with:
+          upload: never
 
   security:
     name: Broker Dependency Security
