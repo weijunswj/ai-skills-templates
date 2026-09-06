@@ -1,0 +1,333 @@
+name: GitHub Program Broker Release Proof
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+
+env:
+  BROKER_MANIFEST: repo/scripts/github-program-broker/Cargo.toml
+  BROKER_DIR: repo/scripts/github-program-broker
+  RUST_TOOLCHAIN: 1.98.0
+  EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  contract:
+    name: Broker Contract
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate head
+        run: |
+          set -euo pipefail
+          test -n "$EXPECTED_HEAD_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          toolchain: 1.98.0
+          components: rustfmt,clippy
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Rust format, check, clippy, and locked debug tests
+        working-directory: ${{ env.BROKER_DIR }}
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+
+      - name: Canonical Toolkit validation gate
+        run: npm run validate:all
+
+  CodeQL:
+    name: CodeQL
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate head
+        run: |
+          set -euo pipefail
+          test -n "$EXPECTED_HEAD_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          toolchain: 1.98.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: rust
+
+      - name: Build for CodeQL
+        run: cargo build --locked --manifest-path "$BROKER_MANIFEST"
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+
+  security:
+    name: Broker Dependency Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact candidate head
+        run: |
+          set -euo pipefail
+          test -n "$EXPECTED_HEAD_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          toolchain: 1.98.0
+
+      - name: Install pinned audit tools
+        run: |
+          set -euo pipefail
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo install cargo-deny --version 0.20.2 --locked
+          test "$(cargo audit --version | awk '{print $NF}')" = "0.22.2"
+          test "$(cargo deny --version | awk '{print $NF}')" = "0.20.2"
+
+      - name: Run cargo audit and deny
+        working-directory: ${{ env.BROKER_DIR }}
+        run: |
+          set -euo pipefail
+          cargo audit
+          cargo deny check
+
+  Windows:
+    name: Windows Broker Release Proof
+    needs: security
+    runs-on: windows-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          toolchain: 1.98.0
+          components: rustfmt,clippy
+
+      - name: Run Windows release proof
+        shell: pwsh
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifest = $env:BROKER_MANIFEST
+          $brokerDir = $env:BROKER_DIR
+          $headSha = (git rev-parse HEAD).Trim()
+          $treeSha = (git rev-parse 'HEAD^{tree}').Trim()
+          if ($headSha -ne $env:EXPECTED_HEAD_SHA) { throw 'candidate head changed during checkout' }
+          $target = (rustc -vV | Select-String '^host:').ToString().Trim()
+          $toolchain = (rustup show active-toolchain).Trim()
+          $rustc = (rustc --version).Trim()
+          $cargo = (cargo --version).Trim()
+          $runner = "$env:RUNNER_OS/$env:RUNNER_ARCH"
+          $started = (Get-Date).ToUniversalTime().ToString('o')
+          $fmtCommand = 'cargo fmt --all -- --check'
+          Push-Location $brokerDir
+          & cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'format check failed' }
+          Pop-Location
+
+          $buildCommand = "cargo build --locked --release --manifest-path $manifest"
+          $buildStarted = (Get-Date).ToUniversalTime().ToString('o')
+          Write-Output "BUILD_COMMAND=$buildCommand"
+          & cargo build --locked --release --manifest-path $manifest
+          $buildExit = $LASTEXITCODE
+          $buildFinished = (Get-Date).ToUniversalTime().ToString('o')
+
+          $debugTestCommand = "cargo test --locked --manifest-path $manifest"
+          Write-Output "DEBUG_TEST_COMMAND=$debugTestCommand"
+          & cargo test --locked --manifest-path $manifest
+          $debugTestExit = $LASTEXITCODE
+
+          $releaseTestCommand = "cargo test --locked --release --manifest-path $manifest"
+          Write-Output "RELEASE_TEST_COMMAND=$releaseTestCommand"
+          & cargo test --locked --release --manifest-path $manifest
+          $releaseTestExit = $LASTEXITCODE
+          $testFinished = (Get-Date).ToUniversalTime().ToString('o')
+
+          $binary = Join-Path (Join-Path $brokerDir 'target\release') 'github-program-broker.exe'
+          if (Test-Path -LiteralPath $binary) {
+            $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash.ToLowerInvariant()
+            $binarySize = (Get-Item -LiteralPath $binary).Length
+          } else {
+            $binaryHash = 'missing'
+            $binarySize = 'missing'
+          }
+          $finished = (Get-Date).ToUniversalTime().ToString('o')
+          $lines = @(
+            '## Windows Broker Release Proof',
+            "PR=$env:PR_NUMBER",
+            "BASE_REF=$env:PR_BASE_REF",
+            "BASE_SHA=$env:PR_BASE_SHA",
+            "HEAD_SHA=$headSha",
+            "TREE_SHA=$treeSha",
+            "RUNNER=$runner",
+            "RUSTC=$rustc",
+            "CARGO=$cargo",
+            "TOOLCHAIN=$toolchain",
+            "TARGET=$target",
+            "CARGO_LOCK_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $brokerDir 'Cargo.lock')).Hash.ToLowerInvariant())",
+            "FMT_COMMAND=$fmtCommand",
+            "BUILD_COMMAND=$buildCommand",
+            "BUILD_EXIT=$buildExit",
+            "DEBUG_TEST_COMMAND=$debugTestCommand",
+            "DEBUG_TEST_EXIT=$debugTestExit",
+            "RELEASE_TEST_COMMAND=$releaseTestCommand",
+            "RELEASE_TEST_EXIT=$releaseTestExit",
+            "BINARY_SHA256=$binaryHash",
+            "BINARY_BYTES=$binarySize",
+            "STARTED_AT=$started",
+            "BUILD_STARTED_AT=$buildStarted",
+            "BUILD_FINISHED_AT=$buildFinished",
+            "TEST_FINISHED_AT=$testFinished",
+            "FINISHED_AT=$finished",
+            'BINARY_UPLOAD=none'
+          )
+          $lines | ForEach-Object { Write-Output $_; Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $_ }
+          if ($buildExit -ne 0 -or $debugTestExit -ne 0 -or $releaseTestExit -ne 0) { exit 1 }
+
+  Ubuntu:
+    name: Ubuntu Broker Release Proof
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          toolchain: 1.98.0
+          components: rustfmt,clippy
+
+      - name: Run Ubuntu release proof
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          set -uo pipefail
+          manifest="$BROKER_MANIFEST"
+          head_sha="$(git rev-parse HEAD)"
+          tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          test "$head_sha" = "$EXPECTED_HEAD_SHA"
+          runner="$RUNNER_OS/$RUNNER_ARCH"
+          rustc_version="$(rustc --version)"
+          cargo_version="$(cargo --version)"
+          toolchain="$(rustup show active-toolchain)"
+          target="$(rustc -vV | awk -F': ' '/^host:/{print $2}')"
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          fmt_command='cargo fmt --all -- --check'
+          (cd "$BROKER_DIR" && cargo fmt --all -- --check)
+          fmt_exit=$?
+          build_command="cargo build --locked --release --manifest-path $manifest"
+          build_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "BUILD_COMMAND=$build_command"
+          cargo build --locked --release --manifest-path "$manifest"
+          build_exit=$?
+          build_finished="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          debug_test_command="cargo test --locked --manifest-path $manifest"
+          echo "DEBUG_TEST_COMMAND=$debug_test_command"
+          cargo test --locked --manifest-path "$manifest"
+          debug_test_exit=$?
+          release_test_command="cargo test --locked --release --manifest-path $manifest"
+          echo "RELEASE_TEST_COMMAND=$release_test_command"
+          cargo test --locked --release --manifest-path "$manifest"
+          release_test_exit=$?
+          test_finished="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          binary="$BROKER_DIR/target/release/github-program-broker"
+          if [ -f "$binary" ]; then
+            binary_hash="$(sha256sum "$binary" | awk '{print $1}')"
+            binary_bytes="$(stat -c '%s' "$binary")"
+          else
+            binary_hash=missing
+            binary_bytes=missing
+          fi
+          finished="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cargo_lock_hash="$(sha256sum "$BROKER_DIR/Cargo.lock" | awk '{print $1}')"
+          {
+            echo '## Ubuntu Broker Release Proof'
+            echo "PR=$PR_NUMBER"
+            echo "BASE_REF=$PR_BASE_REF"
+            echo "BASE_SHA=$PR_BASE_SHA"
+            echo "HEAD_SHA=$head_sha"
+            echo "TREE_SHA=$tree_sha"
+            echo "RUNNER=$runner"
+            echo "RUSTC=$rustc_version"
+            echo "CARGO=$cargo_version"
+            echo "TOOLCHAIN=$toolchain"
+            echo "TARGET=$target"
+            echo "CARGO_LOCK_SHA256=$cargo_lock_hash"
+            echo "FMT_COMMAND=$fmt_command"
+            echo "FMT_EXIT=$fmt_exit"
+            echo "BUILD_COMMAND=$build_command"
+            echo "BUILD_EXIT=$build_exit"
+            echo "DEBUG_TEST_COMMAND=$debug_test_command"
+            echo "DEBUG_TEST_EXIT=$debug_test_exit"
+            echo "RELEASE_TEST_COMMAND=$release_test_command"
+            echo "RELEASE_TEST_EXIT=$release_test_exit"
+            echo "BINARY_SHA256=$binary_hash"
+            echo "BINARY_BYTES=$binary_bytes"
+            echo "STARTED_AT=$started"
+            echo "BUILD_STARTED_AT=$build_started"
+            echo "BUILD_FINISHED_AT=$build_finished"
+            echo "TEST_FINISHED_AT=$test_finished"
+            echo "FINISHED_AT=$finished"
+            echo 'BINARY_UPLOAD=none'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$fmt_exit" -eq 0
+          test "$build_exit" -eq 0
+          test "$debug_test_exit" -eq 0
+          test "$release_test_exit" -eq 0

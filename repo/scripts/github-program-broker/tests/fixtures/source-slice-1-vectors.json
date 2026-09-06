@@ -1,0 +1,37 @@
+{
+  "schema": "toolkit.github-program.broker-ipc.v1",
+  "request_id": "0123456789abcdef0123456789abcdef",
+  "operations": [
+    "READBACK_INSPECTION",
+    "ALLOCATE_RUN",
+    "START_RUN",
+    "APPEND_RECEIPT",
+    "INTERRUPT_RUN",
+    "MUTATION_ADMIT",
+    "MUTATION_DISPATCH",
+    "MUTATION_OUTCOME",
+    "MUTATION_RECONCILE",
+    "ORPHAN_RECOVERY",
+    "MIGRATE_V2_TO_V3"
+  ],
+  "canonical_surrogates": [
+    {
+      "name": "U+D800",
+      "canonical_json_hex": "225c756438303022",
+      "sha256": "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5"
+    },
+    {
+      "name": "U+DC00",
+      "canonical_json_hex": "225c756463303022",
+      "sha256": "353c7370beca95e64c258c908edac60c2ab30d355ca1b5b7fc31c5bce4a4c65a"
+    }
+  ],
+  "result_digest_input": {
+    "operation": "READBACK_INSPECTION",
+    "value": {
+      "kind": "READBACK_INSPECTION",
+      "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "result_digest": "07236f4c066f161280f77bd5807c4e6c6bf6297b59597a419e1c60b2d5475f27"
+}

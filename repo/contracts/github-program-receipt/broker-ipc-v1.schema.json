@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "toolkit.github-program.broker-ipc.v1",
+  "title": "Toolkit GitHub Programme Native Broker IPC v1",
+  "description": "A bounded, canonical, length-prefixed request/response contract. It carries validation identities only and does not grant provider or store authority.",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+$"
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "operationKind": {
+      "enum": [
+        "READBACK_INSPECTION",
+        "ALLOCATE_RUN",
+        "START_RUN",
+        "APPEND_RECEIPT",
+        "INTERRUPT_RUN",
+        "MUTATION_ADMIT",
+        "MUTATION_DISPATCH",
+        "MUTATION_OUTCOME",
+        "MUTATION_RECONCILE",
+        "ORPHAN_RECOVERY",
+        "MIGRATE_V2_TO_V3"
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/operationKind" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "request_id", "operation"],
+      "properties": {
+        "schema": { "const": "toolkit.github-program.broker-ipc.v1" },
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "operation": { "$ref": "#/$defs/operation" }
+      }
+    },
+    "readbackValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state_digest"],
+      "properties": {
+        "kind": { "const": "READBACK_INSPECTION" },
+        "state_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "allocateValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "allocation_id", "allocation_digest"],
+      "properties": {
+        "kind": { "const": "ALLOCATE_RUN" },
+        "allocation_id": { "$ref": "#/$defs/identifier" },
+        "allocation_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "startValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "run_id", "start_digest"],
+      "properties": {
+        "kind": { "const": "START_RUN" },
+        "run_id": { "$ref": "#/$defs/identifier" },
+        "start_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "appendValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "receipt_id", "sequence"],
+      "properties": {
+        "kind": { "const": "APPEND_RECEIPT" },
+        "receipt_id": { "$ref": "#/$defs/digest" },
+        "sequence": { "type": "integer", "minimum": 1, "maximum": 128 }
+      }
+    },
+    "interruptValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "interrupt_id"],
+      "properties": {
+        "kind": { "const": "INTERRUPT_RUN" },
+        "interrupt_id": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "mutationAdmitValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "operation_id", "operation_digest"],
+      "properties": {
+        "kind": { "const": "MUTATION_ADMIT" },
+        "operation_id": { "$ref": "#/$defs/identifier" },
+        "operation_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "mutationDispatchValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "operation_id", "dispatch_digest"],
+      "properties": {
+        "kind": { "const": "MUTATION_DISPATCH" },
+        "operation_id": { "$ref": "#/$defs/identifier" },
+        "dispatch_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "mutationOutcomeValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "operation_id", "outcome_digest"],
+      "properties": {
+        "kind": { "const": "MUTATION_OUTCOME" },
+        "operation_id": { "$ref": "#/$defs/identifier" },
+        "outcome_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "mutationReconcileValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "operation_id", "reconciliation_digest"],
+      "properties": {
+        "kind": { "const": "MUTATION_RECONCILE" },
+        "operation_id": { "$ref": "#/$defs/identifier" },
+        "reconciliation_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "orphanValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "recovery_id", "evidence_digest"],
+      "properties": {
+        "kind": { "const": "ORPHAN_RECOVERY" },
+        "recovery_id": { "$ref": "#/$defs/identifier" },
+        "evidence_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "migrationValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "migration_id", "migration_digest"],
+      "properties": {
+        "kind": { "const": "MIGRATE_V2_TO_V3" },
+        "migration_id": { "$ref": "#/$defs/identifier" },
+        "migration_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "resultValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/readbackValue" },
+        { "$ref": "#/$defs/allocateValue" },
+        { "$ref": "#/$defs/startValue" },
+        { "$ref": "#/$defs/appendValue" },
+        { "$ref": "#/$defs/interruptValue" },
+        { "$ref": "#/$defs/mutationAdmitValue" },
+        { "$ref": "#/$defs/mutationDispatchValue" },
+        { "$ref": "#/$defs/mutationOutcomeValue" },
+        { "$ref": "#/$defs/mutationReconcileValue" },
+        { "$ref": "#/$defs/orphanValue" },
+        { "$ref": "#/$defs/migrationValue" }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "value", "result_digest"],
+      "properties": {
+        "operation": { "$ref": "#/$defs/operationKind" },
+        "value": { "$ref": "#/$defs/resultValue" },
+        "result_digest": { "$ref": "#/$defs/digest" }
+      },
+      "oneOf": [
+        { "properties": { "operation": { "const": "READBACK_INSPECTION" }, "value": { "$ref": "#/$defs/readbackValue" } } },
+        { "properties": { "operation": { "const": "ALLOCATE_RUN" }, "value": { "$ref": "#/$defs/allocateValue" } } },
+        { "properties": { "operation": { "const": "START_RUN" }, "value": { "$ref": "#/$defs/startValue" } } },
+        { "properties": { "operation": { "const": "APPEND_RECEIPT" }, "value": { "$ref": "#/$defs/appendValue" } } },
+        { "properties": { "operation": { "const": "INTERRUPT_RUN" }, "value": { "$ref": "#/$defs/interruptValue" } } },
+        { "properties": { "operation": { "const": "MUTATION_ADMIT" }, "value": { "$ref": "#/$defs/mutationAdmitValue" } } },
+        { "properties": { "operation": { "const": "MUTATION_DISPATCH" }, "value": { "$ref": "#/$defs/mutationDispatchValue" } } },
+        { "properties": { "operation": { "const": "MUTATION_OUTCOME" }, "value": { "$ref": "#/$defs/mutationOutcomeValue" } } },
+        { "properties": { "operation": { "const": "MUTATION_RECONCILE" }, "value": { "$ref": "#/$defs/mutationReconcileValue" } } },
+        { "properties": { "operation": { "const": "ORPHAN_RECOVERY" }, "value": { "$ref": "#/$defs/orphanValue" } } },
+        { "properties": { "operation": { "const": "MIGRATE_V2_TO_V3" }, "value": { "$ref": "#/$defs/migrationValue" } } }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[A-Z0-9_-]+$"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "request_id", "result", "error"],
+      "properties": {
+        "schema": { "const": "toolkit.github-program.broker-ipc.v1" },
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "result": {
+          "anyOf": [{ "$ref": "#/$defs/result" }, { "type": "null" }]
+        },
+        "error": {
+          "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }]
+        }
+      },
+      "oneOf": [
+        { "properties": { "result": { "$ref": "#/$defs/result" }, "error": { "type": "null" } } },
+        { "properties": { "result": { "type": "null" }, "error": { "$ref": "#/$defs/error" } } }
+      ]
+    }
+  }
+}
