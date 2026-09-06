@@ -134,7 +134,10 @@ test('pre-ID and late-failure ownership uses raw canonical input including dupli
  add('{}',false);add('{"request_id":"bad"}',false);add('{"operation":{"kind":0}}',false);
  for(const v of [0,null,{}, {kind:'unknown'}, {kind:'READBACK_INSPECTION',target:7}])add(canonicalSerialize({...req,operation:v}),true);
  for(const surrogate of ['\\ud800','\\udc00'])add(canonicalSerialize(req).replace('NAMESPACE',surrogate),true);
- add(canonicalSerialize(req).replace('{','{"request_id":"'+id+'",'),false);add(canonicalSerialize(req).replace('{','{"request_\\u0069d":"'+id+'",'),false);add(' '+canonicalSerialize(req),false);
+ const canonicalRequest=canonicalSerialize(req);assert.equal(canonicalRequest[0],'{');
+ // Insert one deliberate duplicate top-level key; this is fixture construction, not escaping.
+ const requestMembers=canonicalRequest.slice(1);
+ add('{"request_id":"'+id+'",'+requestMembers,false);add('{"request_\\u0069d":"'+id+'",'+requestMembers,false);add(' '+canonicalRequest,false);
  const got=oracle(rows);for(let i=0;i<rows.length;i++){assert.equal(got[i].valid,false);assert.equal(got[i].request_id,want[i],`ownership ${i}`);}
 });
 module.exports={oracle,schemaResults};
