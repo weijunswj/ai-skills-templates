@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod canonical;
 pub mod crypto;
 pub mod error;

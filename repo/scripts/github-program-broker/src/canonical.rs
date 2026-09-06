@@ -64,7 +64,11 @@ impl JsonString {
 
 pub fn parse(bytes: &[u8]) -> Result<JsonValue, CanonicalError> {
     std::str::from_utf8(bytes).map_err(|_| CanonicalError::InvalidUtf8)?;
-    let mut parser = Parser { bytes, position: 0 };
+    let mut parser = Parser {
+        bytes,
+        position: 0,
+        depth: 0,
+    };
     let value = parser.parse_value()?;
     parser.skip_whitespace();
     if parser.position != bytes.len() {
@@ -88,6 +92,12 @@ pub fn canonical_bytes(value: &JsonValue) -> Vec<u8> {
 }
 
 pub fn from_serde(value: &SerdeValue) -> Result<JsonValue, CanonicalError> {
+    from_serde_at(value, 0)
+}
+fn from_serde_at(value: &SerdeValue, depth: usize) -> Result<JsonValue, CanonicalError> {
+    if depth > 16 {
+        return Err(CanonicalError::LimitViolation);
+    }
     match value {
         SerdeValue::Null => Ok(JsonValue::Null),
         SerdeValue::Bool(value) => Ok(JsonValue::Bool(*value)),
@@ -99,18 +109,24 @@ pub fn from_serde(value: &SerdeValue) -> Result<JsonValue, CanonicalError> {
         SerdeValue::String(value) => Ok(JsonValue::String(JsonString::from_text(value))),
         SerdeValue::Array(values) => values
             .iter()
-            .map(from_serde)
+            .map(|v| from_serde_at(v, depth + 1))
             .collect::<Result<Vec<_>, _>>()
             .map(JsonValue::Array),
         SerdeValue::Object(values) => values
             .iter()
-            .map(|(key, item)| Ok((JsonString::from_text(key), from_serde(item)?)))
+            .map(|(key, item)| Ok((JsonString::from_text(key), from_serde_at(item, depth + 1)?)))
             .collect::<Result<Vec<_>, CanonicalError>>()
             .map(JsonValue::Object),
     }
 }
 
 pub fn to_serde(value: &JsonValue) -> Result<SerdeValue, CanonicalError> {
+    to_serde_at(value, 0)
+}
+fn to_serde_at(value: &JsonValue, depth: usize) -> Result<SerdeValue, CanonicalError> {
+    if depth > 16 {
+        return Err(CanonicalError::LimitViolation);
+    }
     match value {
         JsonValue::Null => Ok(SerdeValue::Null),
         JsonValue::Bool(value) => Ok(SerdeValue::Bool(*value)),
@@ -121,13 +137,13 @@ pub fn to_serde(value: &JsonValue) -> Result<SerdeValue, CanonicalError> {
         JsonValue::String(value) => Ok(SerdeValue::String(value.to_plain_string()?)),
         JsonValue::Array(values) => values
             .iter()
-            .map(to_serde)
+            .map(|v| to_serde_at(v, depth + 1))
             .collect::<Result<Vec<_>, _>>()
             .map(SerdeValue::Array),
         JsonValue::Object(values) => {
             let mut output = Map::new();
             for (key, item) in values {
-                output.insert(key.to_plain_string()?, to_serde(item)?);
+                output.insert(key.to_plain_string()?, to_serde_at(item, depth + 1)?);
             }
             Ok(SerdeValue::Object(output))
         }
@@ -141,6 +157,7 @@ pub fn canonical_serde_bytes(value: &SerdeValue) -> Result<Vec<u8>, CanonicalErr
 struct Parser<'a> {
     bytes: &'a [u8],
     position: usize,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -151,11 +168,26 @@ impl<'a> Parser<'a> {
             Some(b't') => self.literal(b"true", JsonValue::Bool(true)),
             Some(b'f') => self.literal(b"false", JsonValue::Bool(false)),
             Some(b'"') => Ok(JsonValue::String(self.parse_string()?)),
-            Some(b'[') => self.parse_array(),
-            Some(b'{') => self.parse_object(),
+            Some(b'[') => self.container(false),
+            Some(b'{') => self.container(true),
             Some(b'-' | b'0'..=b'9') => self.parse_number(),
             _ => Err(CanonicalError::Malformed),
         }
+    }
+
+    fn container(&mut self, object: bool) -> Result<JsonValue, CanonicalError> {
+        // Lock-005 pin 5523643278 / Run-030 section 11: check before recursion.
+        if self.depth >= 16 {
+            return Err(CanonicalError::LimitViolation);
+        }
+        self.depth += 1;
+        let result = if object {
+            self.parse_object()
+        } else {
+            self.parse_array()
+        };
+        self.depth -= 1;
+        result
     }
 
     fn literal(&mut self, literal: &[u8], value: JsonValue) -> Result<JsonValue, CanonicalError> {
@@ -175,6 +207,9 @@ impl<'a> Parser<'a> {
             return Ok(JsonValue::Array(values));
         }
         loop {
+            if values.len() >= 256 {
+                return Err(CanonicalError::LimitViolation);
+            }
             values.push(self.parse_value()?);
             self.skip_whitespace();
             if self.consume(b']') {
@@ -199,6 +234,9 @@ impl<'a> Parser<'a> {
                 return Err(CanonicalError::Malformed);
             }
             self.position -= 1;
+            if members.len() >= 64 {
+                return Err(CanonicalError::LimitViolation);
+            }
             let key = self.parse_string()?;
             self.skip_whitespace();
             if !self.consume(b':') {
@@ -231,7 +269,16 @@ impl<'a> Parser<'a> {
             match byte {
                 b'"' => {
                     self.position += 1;
-                    return Ok(JsonString::from_units(units));
+                    let string = JsonString::from_units(units);
+                    // Count logical UTF-8 bytes; unpaired UTF-16 units use their
+                    // well-formed canonical escape spelling.
+                    let size: usize = char::decode_utf16(string.units.iter().copied())
+                        .map(|c| c.map_or(6, char::len_utf8))
+                        .sum();
+                    if size > 4096 {
+                        return Err(CanonicalError::LimitViolation);
+                    }
+                    return Ok(string);
                 }
                 b'\\' => {
                     self.position += 1;
@@ -259,7 +306,7 @@ impl<'a> Parser<'a> {
                     let text =
                         std::str::from_utf8(remainder).map_err(|_| CanonicalError::InvalidUtf8)?;
                     let character = text.chars().next().ok_or(CanonicalError::Malformed)?;
-                    if character == '"' || character == '\\' || character.is_control() {
+                    if character == '"' || character == '\\' || u32::from(character) < 0x20 {
                         return Err(CanonicalError::Malformed);
                     }
                     let mut encoded = [0u16; 2];
@@ -358,7 +405,11 @@ fn canonical_number(value: f64) -> String {
     if value == 0.0 {
         return "0".to_owned();
     }
-    let raw = value.to_string().replace('E', "e");
+    // serde_json's pinned shortest-roundtrip formatter uses nearest/even decimal
+    // selection. Rust Display differs at midpoint ties (e.g. 621984972275886.25).
+    let raw = serde_json::to_string(&value)
+        .expect("finite scalar serialization")
+        .replace('E', "e");
     let (negative, body) = raw
         .strip_prefix('-')
         .map_or((false, raw.as_str()), |body| (true, body));
@@ -415,34 +466,46 @@ fn canonical_number(value: f64) -> String {
 }
 
 fn write_value(value: &JsonValue, output: &mut String) {
-    match value {
-        JsonValue::Null => output.push_str("null"),
-        JsonValue::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
-        JsonValue::Number(value) => output.push_str(value),
-        JsonValue::String(value) => write_string(value, output),
-        JsonValue::Array(values) => {
-            output.push('[');
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.push(',');
+    enum Task<'a> {
+        Value(&'a JsonValue),
+        Key(&'a JsonString),
+        Byte(char),
+    }
+    let mut pending = vec![Task::Value(value)];
+    while let Some(task) = pending.pop() {
+        match task {
+            Task::Byte(c) => output.push(c),
+            Task::Key(k) => write_string(k, output),
+            Task::Value(v) => match v {
+                JsonValue::Null => output.push_str("null"),
+                JsonValue::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
+                JsonValue::Number(n) => output.push_str(n),
+                JsonValue::String(s) => write_string(s, output),
+                JsonValue::Array(values) => {
+                    output.push('[');
+                    pending.push(Task::Byte(']'));
+                    for (i, v) in values.iter().enumerate().rev() {
+                        pending.push(Task::Value(v));
+                        if i != 0 {
+                            pending.push(Task::Byte(','));
+                        }
+                    }
                 }
-                write_value(value, output);
-            }
-            output.push(']');
-        }
-        JsonValue::Object(values) => {
-            let mut members: Vec<_> = values.iter().collect();
-            members.sort_by(|left, right| compare_units(&left.0, &right.0));
-            output.push('{');
-            for (index, (key, value)) in members.into_iter().enumerate() {
-                if index != 0 {
-                    output.push(',');
+                JsonValue::Object(values) => {
+                    let mut members: Vec<_> = values.iter().collect();
+                    members.sort_by(|a, b| compare_units(&a.0, &b.0));
+                    output.push('{');
+                    pending.push(Task::Byte('}'));
+                    for (i, (k, v)) in members.into_iter().enumerate().rev() {
+                        pending.push(Task::Value(v));
+                        pending.push(Task::Byte(':'));
+                        pending.push(Task::Key(k));
+                        if i != 0 {
+                            pending.push(Task::Byte(','));
+                        }
+                    }
                 }
-                write_string(key, output);
-                output.push(':');
-                write_value(value, output);
-            }
-            output.push('}');
+            },
         }
     }
 }
@@ -486,7 +549,7 @@ fn write_string(value: &JsonString, output: &mut String) {
             '\n' => output.push_str("\\n"),
             '\r' => output.push_str("\\r"),
             '\t' => output.push_str("\\t"),
-            character if character.is_control() => write_unicode_escape(unit, output),
+            character if u32::from(character) < 0x20 => write_unicode_escape(unit, output),
             character => output.push(character),
         }
         index += 1;

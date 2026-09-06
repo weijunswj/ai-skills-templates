@@ -1,26 +1,925 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "toolkit.github-program.broker-ipc.v1",
-  "title": "Toolkit GitHub Programme Native Broker IPC v1",
-  "description": "A bounded, canonical, length-prefixed request/response contract. It carries validation identities only and does not grant provider or store authority.",
-  "oneOf": [
-    { "$ref": "#/$defs/request" },
-    { "$ref": "#/$defs/response" }
+  "title": "Toolkit broker IPC - Lock-007 inherited typed contract",
+  "$comment": "Authority: Run-030 sections 11-15; Child 5544075873, 5551641263, 5552422741, 5557964784, 5558994119. Structural schema; digests, request binding and readback integrity also require the protocol validator. Payload max 65536 UTF-8 bytes, nesting 16, object keys 64, array items 256, strings 4096 UTF-8 bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "request_id",
+    "operation",
+    "namespace",
+    "lock",
+    "expected"
   ],
+  "properties": {
+    "schema": {
+      "const": "toolkit.github-program.broker-ipc.v1"
+    },
+    "request_id": {
+      "$ref": "#/$defs/request_id"
+    },
+    "operation": {
+      "$ref": "#/$defs/operation"
+    },
+    "namespace": {
+      "$ref": "#/$defs/namespace"
+    },
+    "lock": {
+      "$ref": "#/$defs/id"
+    },
+    "expected": {
+      "$ref": "#/$defs/expected"
+    }
+  },
   "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]{1,160}$(?![\\s\\S])"
+    },
     "digest": {
       "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
+      "pattern": "^[a-f0-9]{64}$(?![\\s\\S])"
     },
-    "identifier": {
+    "sha1": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 160,
-      "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+$"
+      "pattern": "^[a-f0-9]{40}$(?![\\s\\S])"
     },
-    "requestId": {
+    "request_id": {
       "type": "string",
-      "pattern": "^[a-f0-9]{32}$"
+      "pattern": "^[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$(?![\\s\\S])"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}$(?![\\s\\S])"
+    },
+    "authority": {
+      "$ref": "run-receipt-v1.schema.json#/$defs/authority"
+    },
+    "start": {
+      "$ref": "run-receipt-v1.schema.json#/$defs/start"
+    },
+    "candidate": {
+      "$ref": "run-receipt-v1.schema.json#/$defs/candidate"
+    },
+    "lease": {
+      "$ref": "run-receipt-v1.schema.json#/$defs/lease"
+    },
+    "payload": {
+      "$ref": "run-receipt-v1.schema.json#/$defs/payload"
+    },
+    "receipt": {
+      "$ref": "run-receipt-v1.schema.json#"
+    },
+    "holder_attestation": {
+      "$ref": "holder-attestation-v1.schema.json#"
+    },
+    "pre_recovery_evidence": {
+      "$ref": "pre-recovery-evidence-v1.schema.json#"
+    },
+    "recovery_record": {
+      "$ref": "recovery-record-v1.schema.json#"
+    },
+    "namespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "parent_issue",
+        "child_issue"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "parent_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "child_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_digest"
+      ],
+      "properties": {
+        "state_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "target_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]{1,80}$(?![\\s\\S])"
+        },
+        "resource_id": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]{1,512}$(?![\\s\\S])"
+        }
+      }
+    },
+    "mutation_state": {
+      "enum": [
+        "PREPARED",
+        "IN_FLIGHT",
+        "APPLIED",
+        "NOT_APPLIED",
+        "UNKNOWN"
+      ]
+    },
+    "operation_kind": {
+      "enum": [
+        "GIT_REF_UPDATE",
+        "CONDITIONAL_PROVIDER_UPDATE",
+        "IDEMPOTENT_SET",
+        "APPEND_CREATE"
+      ]
+    },
+    "safety_class": {
+      "enum": [
+        "CAS",
+        "IDEMPOTENT",
+        "APPEND_IDEMPOTENT"
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_digest",
+        "expected_source_digest",
+        "cas_digest",
+        "adapter_identity_digest",
+        "operation_kind",
+        "safety_class",
+        "target_identity",
+        "expected_post_state_digest",
+        "retry_of_operation_id"
+      ],
+      "properties": {
+        "target_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "expected_source_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "cas_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "adapter_identity_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_kind": {
+          "$ref": "#/$defs/operation_kind"
+        },
+        "safety_class": {
+          "$ref": "#/$defs/safety_class"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "expected_post_state_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_of_operation_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "outcome_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_operation_digest",
+        "adapter_identity_digest",
+        "target_digest",
+        "cas_digest",
+        "evidence_digest",
+        "operation_id",
+        "target_identity",
+        "provider_operation_key",
+        "classification",
+        "observed_post_state_digest",
+        "rejection_digest",
+        "delayed_completion_excluded",
+        "evidence_at"
+      ],
+      "properties": {
+        "logical_operation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "adapter_identity_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "target_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "cas_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "evidence_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "provider_operation_key": {
+          "$ref": "#/$defs/id"
+        },
+        "classification": {
+          "enum": [
+            "APPLIED",
+            "NOT_APPLIED",
+            "UNKNOWN"
+          ]
+        },
+        "observed_post_state_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejection_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delayed_completion_excluded": {
+          "type": "boolean"
+        },
+        "evidence_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "receipt_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_type",
+        "candidate",
+        "payload",
+        "created_at"
+      ],
+      "properties": {
+        "receipt_type": {
+          "enum": [
+            "TRANSITION_PREVIEW",
+            "EXECUTOR_TERMINAL",
+            "G4_TERMINAL",
+            "RUN_INTERRUPTED"
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/candidate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/payload"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "allocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allocation_id",
+        "run_id",
+        "lock",
+        "lease"
+      ],
+      "properties": {
+        "allocation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "lock": {
+          "$ref": "#/$defs/id"
+        },
+        "lease": {
+          "$ref": "#/$defs/lease"
+        }
+      }
+    },
+    "mutation_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_digest",
+        "expected_source_digest",
+        "cas_digest",
+        "adapter_identity_digest",
+        "operation_kind",
+        "safety_class",
+        "target_identity",
+        "expected_post_state_digest",
+        "retry_of_operation_id",
+        "operation_id",
+        "run_id",
+        "allocation_id",
+        "lock",
+        "lease_id",
+        "fence_id",
+        "provider_operation_key",
+        "logical_operation_digest",
+        "authority_digest",
+        "operation_digest",
+        "fence_sequence",
+        "created_at"
+      ],
+      "properties": {
+        "target_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "expected_source_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "cas_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "adapter_identity_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_kind": {
+          "$ref": "#/$defs/operation_kind"
+        },
+        "safety_class": {
+          "$ref": "#/$defs/safety_class"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "expected_post_state_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_of_operation_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "allocation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "lock": {
+          "$ref": "#/$defs/id"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/id"
+        },
+        "fence_id": {
+          "$ref": "#/$defs/id"
+        },
+        "provider_operation_key": {
+          "$ref": "#/$defs/id"
+        },
+        "logical_operation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "authority_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "fence_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "mutation_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_digest",
+        "provider_evidence_digest",
+        "detail_digest",
+        "event_digest",
+        "event_id",
+        "operation_id",
+        "sequence",
+        "prior_event_id",
+        "event_type",
+        "state",
+        "event_at",
+        "readback_digest"
+      ],
+      "properties": {
+        "authority_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "provider_evidence_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "detail_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "event_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "event_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "prior_event_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_type": {
+          "enum": [
+            "PREPARED",
+            "IN_FLIGHT",
+            "OUTCOME_RECORDED",
+            "RECONCILED"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/mutation_state"
+        },
+        "event_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "readback_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "recovery_status": {
+      "enum": [
+        "RUN_NOT_FOUND",
+        "TERMINAL",
+        "UNSTARTED_ALLOCATION_EXPIRED",
+        "UNSTARTED_ALLOCATION_ACTIVE",
+        "STARTED_LEASE_EXPIRED",
+        "LIVE_RUN_NOT_ADOPTABLE"
+      ]
+    },
+    "readback": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "namespace",
+            "namespace_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "NAMESPACE"
+            },
+            "namespace": {
+              "$ref": "#/$defs/namespace"
+            },
+            "namespace_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "type": "boolean"
+            },
+            "run_started_receipt_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/digest"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "run_id",
+            "receipts",
+            "chain_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RECEIPT_CHAIN"
+            },
+            "run_id": {
+              "$ref": "#/$defs/id"
+            },
+            "receipts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/receipt"
+              },
+              "maxItems": 128,
+              "minItems": 1
+            },
+            "chain_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation",
+            "state",
+            "events"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION"
+            },
+            "operation": {
+              "$ref": "#/$defs/mutation_operation"
+            },
+            "state": {
+              "$ref": "#/$defs/mutation_state"
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/mutation_event"
+              },
+              "maxItems": 256,
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "run_id",
+            "status",
+            "receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RECOVERY"
+            },
+            "run_id": {
+              "$ref": "#/$defs/id"
+            },
+            "status": {
+              "$ref": "#/$defs/recovery_status"
+            },
+            "receipt_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/digest"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "readback_target": {
+      "enum": [
+        "NAMESPACE",
+        "RUN",
+        "RECEIPT_CHAIN",
+        "MUTATION",
+        "RECOVERY"
+      ]
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target"
+          ],
+          "properties": {
+            "kind": {
+              "const": "READBACK_INSPECTION"
+            },
+            "target": {
+              "$ref": "#/$defs/readback_target"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "authority",
+            "start",
+            "candidate",
+            "lease_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ALLOCATE_RUN"
+            },
+            "authority": {
+              "$ref": "#/$defs/authority"
+            },
+            "start": {
+              "$ref": "#/$defs/start"
+            },
+            "candidate": {
+              "type": "null"
+            },
+            "lease_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 86400000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "START_RUN"
+            },
+            "allocation_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "properties": {
+            "kind": {
+              "const": "APPEND_RECEIPT"
+            },
+            "receipt": {
+              "$ref": "#/$defs/receipt_input"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "const": "INTERRUPT_RUN"
+            },
+            "reason": {
+              "enum": [
+                "REQUESTED",
+                "BROKER_RECOVERY",
+                "SHUTDOWN"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "descriptor"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_ADMIT"
+            },
+            "descriptor": {
+              "$ref": "#/$defs/descriptor"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_DISPATCH"
+            },
+            "operation_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id",
+            "evidence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_OUTCOME"
+            },
+            "operation_id": {
+              "$ref": "#/$defs/id"
+            },
+            "evidence": {
+              "$ref": "#/$defs/outcome_evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_RECONCILE"
+            },
+            "operation_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "old_run_digest",
+            "evidence_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ORPHAN_RECOVERY"
+            },
+            "old_run_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "evidence_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source_schema_fingerprint"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MIGRATE_V2_TO_V3"
+            },
+            "source_schema_fingerprint": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ]
     },
     "operationKind": {
       "enum": [
@@ -37,200 +936,786 @@
         "MIGRATE_V2_TO_V3"
       ]
     },
-    "operation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {
-        "kind": { "$ref": "#/$defs/operationKind" }
-      }
-    },
-    "request": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["schema", "request_id", "operation"],
-      "properties": {
-        "schema": { "const": "toolkit.github-program.broker-ipc.v1" },
-        "request_id": { "$ref": "#/$defs/requestId" },
-        "operation": { "$ref": "#/$defs/operation" }
-      }
-    },
-    "readbackValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "state_digest"],
-      "properties": {
-        "kind": { "const": "READBACK_INSPECTION" },
-        "state_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "allocateValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "allocation_id", "allocation_digest"],
-      "properties": {
-        "kind": { "const": "ALLOCATE_RUN" },
-        "allocation_id": { "$ref": "#/$defs/identifier" },
-        "allocation_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "startValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "run_id", "start_digest"],
-      "properties": {
-        "kind": { "const": "START_RUN" },
-        "run_id": { "$ref": "#/$defs/identifier" },
-        "start_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "appendValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "receipt_id", "sequence"],
-      "properties": {
-        "kind": { "const": "APPEND_RECEIPT" },
-        "receipt_id": { "$ref": "#/$defs/digest" },
-        "sequence": { "type": "integer", "minimum": 1, "maximum": 128 }
-      }
-    },
-    "interruptValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "interrupt_id"],
-      "properties": {
-        "kind": { "const": "INTERRUPT_RUN" },
-        "interrupt_id": { "$ref": "#/$defs/identifier" }
-      }
-    },
-    "mutationAdmitValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "operation_id", "operation_digest"],
-      "properties": {
-        "kind": { "const": "MUTATION_ADMIT" },
-        "operation_id": { "$ref": "#/$defs/identifier" },
-        "operation_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "mutationDispatchValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "operation_id", "dispatch_digest"],
-      "properties": {
-        "kind": { "const": "MUTATION_DISPATCH" },
-        "operation_id": { "$ref": "#/$defs/identifier" },
-        "dispatch_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "mutationOutcomeValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "operation_id", "outcome_digest"],
-      "properties": {
-        "kind": { "const": "MUTATION_OUTCOME" },
-        "operation_id": { "$ref": "#/$defs/identifier" },
-        "outcome_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "mutationReconcileValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "operation_id", "reconciliation_digest"],
-      "properties": {
-        "kind": { "const": "MUTATION_RECONCILE" },
-        "operation_id": { "$ref": "#/$defs/identifier" },
-        "reconciliation_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "orphanValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "recovery_id", "evidence_digest"],
-      "properties": {
-        "kind": { "const": "ORPHAN_RECOVERY" },
-        "recovery_id": { "$ref": "#/$defs/identifier" },
-        "evidence_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "migrationValue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "migration_id", "migration_digest"],
-      "properties": {
-        "kind": { "const": "MIGRATE_V2_TO_V3" },
-        "migration_id": { "$ref": "#/$defs/identifier" },
-        "migration_digest": { "$ref": "#/$defs/digest" }
-      }
-    },
-    "resultValue": {
+    "successValue": {
       "oneOf": [
-        { "$ref": "#/$defs/readbackValue" },
-        { "$ref": "#/$defs/allocateValue" },
-        { "$ref": "#/$defs/startValue" },
-        { "$ref": "#/$defs/appendValue" },
-        { "$ref": "#/$defs/interruptValue" },
-        { "$ref": "#/$defs/mutationAdmitValue" },
-        { "$ref": "#/$defs/mutationDispatchValue" },
-        { "$ref": "#/$defs/mutationOutcomeValue" },
-        { "$ref": "#/$defs/mutationReconcileValue" },
-        { "$ref": "#/$defs/orphanValue" },
-        { "$ref": "#/$defs/migrationValue" }
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "READBACK_INSPECTION"
+            },
+            "target": {
+              "$ref": "#/$defs/readback_target"
+            },
+            "readback": {
+              "$ref": "#/$defs/readback"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "NAMESPACE"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "NAMESPACE"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RUN"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RUN"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RECEIPT_CHAIN"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RECEIPT_CHAIN"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "MUTATION"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "MUTATION"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RECOVERY"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RECOVERY"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ALLOCATE_RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "const": false
+            },
+            "run_started_receipt_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "START_RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "const": true
+            },
+            "run_started_receipt_id": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt",
+            "duplicate"
+          ],
+          "properties": {
+            "kind": {
+              "const": "APPEND_RECEIPT"
+            },
+            "receipt": {
+              "$ref": "#/$defs/receipt"
+            },
+            "duplicate": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt",
+            "duplicate"
+          ],
+          "properties": {
+            "kind": {
+              "const": "INTERRUPT_RUN"
+            },
+            "receipt": {
+              "$ref": "#/$defs/receipt"
+            },
+            "duplicate": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_ADMIT"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "IN_FLIGHT"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/mutation_event"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_DISPATCH"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "IN_FLIGHT"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/mutation_event"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_OUTCOME"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "APPLIED",
+                    "NOT_APPLIED",
+                    "UNKNOWN"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/mutation_event"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_RECONCILE"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "PREPARED",
+                    "IN_FLIGHT",
+                    "APPLIED",
+                    "NOT_APPLIED",
+                    "UNKNOWN"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/mutation_event"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "recovery_record",
+            "replacement_allocation"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ORPHAN_RECOVERY"
+            },
+            "recovery_record": {
+              "$ref": "#/$defs/recovery_record"
+            },
+            "replacement_allocation": {
+              "$ref": "#/$defs/allocation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "status",
+            "source_schema_fingerprint",
+            "destination_schema_fingerprint",
+            "namespace_digest",
+            "store_binding_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MIGRATE_V2_TO_V3"
+            },
+            "status": {
+              "const": "MIGRATED"
+            },
+            "source_schema_fingerprint": {
+              "$ref": "#/$defs/digest"
+            },
+            "destination_schema_fingerprint": {
+              "$ref": "#/$defs/digest"
+            },
+            "namespace_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "store_binding_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
       ]
     },
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operation", "value", "result_digest"],
+      "required": [
+        "operation",
+        "value",
+        "result_digest"
+      ],
       "properties": {
-        "operation": { "$ref": "#/$defs/operationKind" },
-        "value": { "$ref": "#/$defs/resultValue" },
-        "result_digest": { "$ref": "#/$defs/digest" }
+        "operation": {
+          "$ref": "#/$defs/operationKind"
+        },
+        "value": {
+          "$ref": "#/$defs/successValue"
+        },
+        "result_digest": {
+          "$ref": "#/$defs/digest"
+        }
       },
-      "oneOf": [
-        { "properties": { "operation": { "const": "READBACK_INSPECTION" }, "value": { "$ref": "#/$defs/readbackValue" } } },
-        { "properties": { "operation": { "const": "ALLOCATE_RUN" }, "value": { "$ref": "#/$defs/allocateValue" } } },
-        { "properties": { "operation": { "const": "START_RUN" }, "value": { "$ref": "#/$defs/startValue" } } },
-        { "properties": { "operation": { "const": "APPEND_RECEIPT" }, "value": { "$ref": "#/$defs/appendValue" } } },
-        { "properties": { "operation": { "const": "INTERRUPT_RUN" }, "value": { "$ref": "#/$defs/interruptValue" } } },
-        { "properties": { "operation": { "const": "MUTATION_ADMIT" }, "value": { "$ref": "#/$defs/mutationAdmitValue" } } },
-        { "properties": { "operation": { "const": "MUTATION_DISPATCH" }, "value": { "$ref": "#/$defs/mutationDispatchValue" } } },
-        { "properties": { "operation": { "const": "MUTATION_OUTCOME" }, "value": { "$ref": "#/$defs/mutationOutcomeValue" } } },
-        { "properties": { "operation": { "const": "MUTATION_RECONCILE" }, "value": { "$ref": "#/$defs/mutationReconcileValue" } } },
-        { "properties": { "operation": { "const": "ORPHAN_RECOVERY" }, "value": { "$ref": "#/$defs/orphanValue" } } },
-        { "properties": { "operation": { "const": "MIGRATE_V2_TO_V3" }, "value": { "$ref": "#/$defs/migrationValue" } } }
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "READBACK_INSPECTION"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "READBACK_INSPECTION"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "ALLOCATE_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "ALLOCATE_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "START_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "START_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "APPEND_RECEIPT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "APPEND_RECEIPT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "INTERRUPT_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "INTERRUPT_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_ADMIT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_ADMIT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_DISPATCH"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_DISPATCH"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_OUTCOME"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_OUTCOME"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_RECONCILE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_RECONCILE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "ORPHAN_RECOVERY"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "ORPHAN_RECOVERY"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MIGRATE_V2_TO_V3"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MIGRATE_V2_TO_V3"
+                  }
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "error": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code"],
+      "required": [
+        "code"
+      ],
       "properties": {
         "code": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 96,
-          "pattern": "^[A-Z0-9_-]+$"
+          "enum": [
+            "BROKER_MALFORMED_FRAME",
+            "BROKER_MALFORMED_REQUEST",
+            "BROKER_UNSUPPORTED_SCHEMA",
+            "BROKER_UNSUPPORTED_OPERATION",
+            "BROKER_INVALID_FIELD",
+            "BROKER_LIMIT_VIOLATION",
+            "BROKER_REQUEST_CONFLICT",
+            "BROKER_BUSY",
+            "BROKER_STALE_EXPECTED_STATE",
+            "BROKER_UNVERIFIABLE_IDENTITY",
+            "BROKER_UNSUPPORTED_PLATFORM",
+            "BROKER_INTERNAL_INVARIANT"
+          ]
         }
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["schema", "request_id", "result", "error"],
-      "properties": {
-        "schema": { "const": "toolkit.github-program.broker-ipc.v1" },
-        "request_id": { "$ref": "#/$defs/requestId" },
-        "result": {
-          "anyOf": [{ "$ref": "#/$defs/result" }, { "type": "null" }]
-        },
-        "error": {
-          "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }]
-        }
-      },
       "oneOf": [
-        { "properties": { "result": { "$ref": "#/$defs/result" }, "error": { "type": "null" } } },
-        { "properties": { "result": { "type": "null" }, "error": { "$ref": "#/$defs/error" } } }
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "request_id",
+            "ok",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "schema": {
+              "const": "toolkit.github-program.broker-ipc.v1"
+            },
+            "request_id": {
+              "$ref": "#/$defs/request_id"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "$ref": "#/$defs/result"
+            },
+            "error": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "request_id",
+            "ok",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "schema": {
+              "const": "toolkit.github-program.broker-ipc.v1"
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/request_id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ok": {
+              "const": false
+            },
+            "result": {
+              "type": "null"
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
       ]
     }
   }

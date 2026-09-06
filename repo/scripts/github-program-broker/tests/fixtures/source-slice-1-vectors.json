@@ -30,8 +30,1138 @@
     "operation": "READBACK_INSPECTION",
     "value": {
       "kind": "READBACK_INSPECTION",
-      "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "target": "NAMESPACE",
+      "readback": {
+        "kind": "NAMESPACE",
+        "namespace": {
+          "repository": "example/toolkit",
+          "parent_issue": 1,
+          "child_issue": 2
+        },
+        "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6"
+      }
     }
   },
-  "result_digest": "07236f4c066f161280f77bd5807c4e6c6bf6297b59597a419e1c60b2d5475f27"
+  "result_digest": "8a27c923bfb91fa52fd81198af4bcee43e3418efd978178c38a01e9dea2d3450",
+  "authority": {
+    "run030": "Run-030 sections 10-26; accepted by Child 359 comment 5544075873",
+    "acceptance": "5544075873",
+    "carry_forward": "5557964784",
+    "repair2": "5558994119"
+  },
+  "requests": [
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "READBACK_INSPECTION",
+        "target": "NAMESPACE"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "ALLOCATE_RUN",
+        "authority": {
+          "child_comment_id": 3,
+          "parent_comment_id": 4,
+          "node_id": "comment-synthetic",
+          "author_login": "example",
+          "author_association": "OWNER",
+          "body_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "updated_at": "2026-09-06T00:00:00.000Z",
+          "update_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "scope_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+        },
+        "start": {
+          "base_sha": "1111111111111111111111111111111111111111",
+          "head_sha": "1111111111111111111111111111111111111111",
+          "tree_sha": "1111111111111111111111111111111111111111",
+          "status_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "clean_worktree": true,
+          "ref": {
+            "detached": false,
+            "name": "example/repair"
+          }
+        },
+        "candidate": null,
+        "lease_ms": 300000
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "START_RUN",
+        "allocation_id": "allocation-test"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "APPEND_RECEIPT",
+        "receipt": {
+          "receipt_type": "RUN_INTERRUPTED",
+          "candidate": null,
+          "payload": {
+            "classification": "RUN_INTERRUPTED"
+          },
+          "created_at": "2026-09-06T00:00:00.000Z"
+        }
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "INTERRUPT_RUN",
+        "reason": "REQUESTED"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "MUTATION_ADMIT",
+        "descriptor": {
+          "operation_kind": "IDEMPOTENT_SET",
+          "safety_class": "IDEMPOTENT",
+          "target_identity": {
+            "resource_type": "provider_resource",
+            "resource_id": "resource-test"
+          },
+          "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+          "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "retry_of_operation_id": null
+        }
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "MUTATION_DISPATCH",
+        "operation_id": "operation-test"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "MUTATION_OUTCOME",
+        "operation_id": "operation-test",
+        "evidence": {
+          "operation_id": "operation-test",
+          "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+          "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "target_identity": {
+            "resource_type": "provider_resource",
+            "resource_id": "resource-test"
+          },
+          "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+          "provider_operation_key": "gpr:operation-test",
+          "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "classification": "APPLIED",
+          "observed_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "rejection_digest": null,
+          "delayed_completion_excluded": true,
+          "evidence_at": "2026-09-06T00:00:00.000Z",
+          "evidence_digest": "fbba096a960018b2c2f9efc8737d6485ce62ae1651b424168d6f94e1653f0d04"
+        }
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "MUTATION_RECONCILE",
+        "operation_id": "operation-test"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "ORPHAN_RECOVERY",
+        "old_run_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+        "evidence_digest": "cde50b95656859c5ed9cdf1783e13475f42256dab3ab719232c4c1b6a5cd2e2d"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "operation": {
+        "kind": "MIGRATE_V2_TO_V3",
+        "source_schema_fingerprint": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+      },
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "lock": "lock-test",
+      "expected": {
+        "state_digest": null
+      }
+    }
+  ],
+  "responses": [
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "READBACK_INSPECTION",
+        "value": {
+          "kind": "READBACK_INSPECTION",
+          "target": "NAMESPACE",
+          "readback": {
+            "kind": "NAMESPACE",
+            "namespace": {
+              "repository": "example/toolkit",
+              "parent_issue": 1,
+              "child_issue": 2
+            },
+            "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6"
+          }
+        },
+        "result_digest": "8a27c923bfb91fa52fd81198af4bcee43e3418efd978178c38a01e9dea2d3450"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "ALLOCATE_RUN",
+        "value": {
+          "kind": "ALLOCATE_RUN",
+          "allocation": {
+            "allocation_id": "allocation-test",
+            "run_id": "run-test",
+            "lock": "lock-test",
+            "lease": {
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "issued_at": "2026-09-06T00:00:00.000Z",
+              "expires_at": "2026-09-06T00:05:00.000Z"
+            }
+          },
+          "started": false,
+          "run_started_receipt_id": null
+        },
+        "result_digest": "91c0f2a8e1d3e73ac1250635f652f96bc748a017a05b953478582acec908bcf6"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "START_RUN",
+        "value": {
+          "kind": "START_RUN",
+          "allocation": {
+            "allocation_id": "allocation-test",
+            "run_id": "run-test",
+            "lock": "lock-test",
+            "lease": {
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "issued_at": "2026-09-06T00:00:00.000Z",
+              "expires_at": "2026-09-06T00:05:00.000Z"
+            }
+          },
+          "started": true,
+          "run_started_receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f"
+        },
+        "result_digest": "fd1a28e66b4a04003c69fe70e7647a26ae4e6de89696437c7e3f6922514f094f"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "APPEND_RECEIPT",
+        "value": {
+          "kind": "APPEND_RECEIPT",
+          "receipt": {
+            "schema": "toolkit.github-program.run-receipt.v1",
+            "receipt_type": "RUN_INTERRUPTED",
+            "sequence": 2,
+            "prior_receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f",
+            "run_id": "run-test",
+            "allocation_id": "allocation-test",
+            "repository": "example/toolkit",
+            "parent_issue": 1,
+            "child_issue": 2,
+            "lock": "lock-test",
+            "authority": {
+              "child_comment_id": 3,
+              "parent_comment_id": 4,
+              "node_id": "comment-synthetic",
+              "author_login": "example",
+              "author_association": "OWNER",
+              "body_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "updated_at": "2026-09-06T00:00:00.000Z",
+              "update_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "scope_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+            },
+            "start": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "1111111111111111111111111111111111111111",
+              "tree_sha": "1111111111111111111111111111111111111111",
+              "status_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "clean_worktree": true,
+              "ref": {
+                "detached": false,
+                "name": "example/repair"
+              }
+            },
+            "candidate": null,
+            "lease": {
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "issued_at": "2026-09-06T00:00:00.000Z",
+              "expires_at": "2026-09-06T00:05:00.000Z"
+            },
+            "payload": {
+              "classification": "RUN_INTERRUPTED"
+            },
+            "created_at": "2026-09-06T00:00:00.000Z",
+            "receipt_id": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41"
+          },
+          "duplicate": false
+        },
+        "result_digest": "a9b452614d5eb929b66b89b8f3dbba2af6382f5f39657a6708bebb79b3e0f81c"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "INTERRUPT_RUN",
+        "value": {
+          "kind": "INTERRUPT_RUN",
+          "receipt": {
+            "schema": "toolkit.github-program.run-receipt.v1",
+            "receipt_type": "RUN_INTERRUPTED",
+            "sequence": 2,
+            "prior_receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f",
+            "run_id": "run-test",
+            "allocation_id": "allocation-test",
+            "repository": "example/toolkit",
+            "parent_issue": 1,
+            "child_issue": 2,
+            "lock": "lock-test",
+            "authority": {
+              "child_comment_id": 3,
+              "parent_comment_id": 4,
+              "node_id": "comment-synthetic",
+              "author_login": "example",
+              "author_association": "OWNER",
+              "body_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "updated_at": "2026-09-06T00:00:00.000Z",
+              "update_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "scope_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+            },
+            "start": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "1111111111111111111111111111111111111111",
+              "tree_sha": "1111111111111111111111111111111111111111",
+              "status_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "clean_worktree": true,
+              "ref": {
+                "detached": false,
+                "name": "example/repair"
+              }
+            },
+            "candidate": null,
+            "lease": {
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "issued_at": "2026-09-06T00:00:00.000Z",
+              "expires_at": "2026-09-06T00:05:00.000Z"
+            },
+            "payload": {
+              "classification": "RUN_INTERRUPTED"
+            },
+            "created_at": "2026-09-06T00:00:00.000Z",
+            "receipt_id": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41"
+          },
+          "duplicate": false
+        },
+        "result_digest": "54bb3382e95cf66433dfb9ce1f883e81b65c85adee05088c684f0d98eb129e39"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "MUTATION_ADMIT",
+        "value": {
+          "kind": "MUTATION_ADMIT",
+          "readback": {
+            "kind": "MUTATION",
+            "operation": {
+              "operation_id": "operation-test",
+              "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+              "run_id": "run-test",
+              "allocation_id": "allocation-test",
+              "lock": "lock-test",
+              "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "operation_kind": "IDEMPOTENT_SET",
+              "safety_class": "IDEMPOTENT",
+              "target_identity": {
+                "resource_type": "provider_resource",
+                "resource_id": "resource-test"
+              },
+              "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+              "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "retry_of_operation_id": null,
+              "provider_operation_key": "gpr:operation-test",
+              "created_at": "2026-09-06T00:00:00.000Z",
+              "operation_digest": "6e4b9a162ba5dd89a9f522d20d1d532cf6e4cba75cf0476cdb021f76c0fa1ee7"
+            },
+            "state": "IN_FLIGHT",
+            "events": [
+              {
+                "event_id": "event-1",
+                "operation_id": "operation-test",
+                "sequence": 1,
+                "prior_event_id": null,
+                "event_type": "PREPARED",
+                "state": "PREPARED",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "a23702f63fa719b85149cfd39643ca841e5768d7bea91f4ff31cbf241aadefa9"
+              },
+              {
+                "event_id": "event-2",
+                "operation_id": "operation-test",
+                "sequence": 2,
+                "prior_event_id": "event-1",
+                "event_type": "IN_FLIGHT",
+                "state": "IN_FLIGHT",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "6e3f4a79092c749a784e5643c1e955bec317419f02ba2a686b8647b4fc77b03a"
+              }
+            ]
+          }
+        },
+        "result_digest": "b3c71398f447139b9a32482faea797d969aad5cdf7b72f9d0548fb55efb3e919"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "MUTATION_DISPATCH",
+        "value": {
+          "kind": "MUTATION_DISPATCH",
+          "readback": {
+            "kind": "MUTATION",
+            "operation": {
+              "operation_id": "operation-test",
+              "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+              "run_id": "run-test",
+              "allocation_id": "allocation-test",
+              "lock": "lock-test",
+              "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "operation_kind": "IDEMPOTENT_SET",
+              "safety_class": "IDEMPOTENT",
+              "target_identity": {
+                "resource_type": "provider_resource",
+                "resource_id": "resource-test"
+              },
+              "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+              "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "retry_of_operation_id": null,
+              "provider_operation_key": "gpr:operation-test",
+              "created_at": "2026-09-06T00:00:00.000Z",
+              "operation_digest": "6e4b9a162ba5dd89a9f522d20d1d532cf6e4cba75cf0476cdb021f76c0fa1ee7"
+            },
+            "state": "IN_FLIGHT",
+            "events": [
+              {
+                "event_id": "event-1",
+                "operation_id": "operation-test",
+                "sequence": 1,
+                "prior_event_id": null,
+                "event_type": "PREPARED",
+                "state": "PREPARED",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "a23702f63fa719b85149cfd39643ca841e5768d7bea91f4ff31cbf241aadefa9"
+              },
+              {
+                "event_id": "event-2",
+                "operation_id": "operation-test",
+                "sequence": 2,
+                "prior_event_id": "event-1",
+                "event_type": "IN_FLIGHT",
+                "state": "IN_FLIGHT",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "6e3f4a79092c749a784e5643c1e955bec317419f02ba2a686b8647b4fc77b03a"
+              }
+            ]
+          }
+        },
+        "result_digest": "6bf2c2907488d8a8e3ae2c484996dcabb506358220009cc950eb3f68058e3720"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "MUTATION_OUTCOME",
+        "value": {
+          "kind": "MUTATION_OUTCOME",
+          "readback": {
+            "kind": "MUTATION",
+            "operation": {
+              "operation_id": "operation-test",
+              "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+              "run_id": "run-test",
+              "allocation_id": "allocation-test",
+              "lock": "lock-test",
+              "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "operation_kind": "IDEMPOTENT_SET",
+              "safety_class": "IDEMPOTENT",
+              "target_identity": {
+                "resource_type": "provider_resource",
+                "resource_id": "resource-test"
+              },
+              "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+              "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "retry_of_operation_id": null,
+              "provider_operation_key": "gpr:operation-test",
+              "created_at": "2026-09-06T00:00:00.000Z",
+              "operation_digest": "6e4b9a162ba5dd89a9f522d20d1d532cf6e4cba75cf0476cdb021f76c0fa1ee7"
+            },
+            "state": "APPLIED",
+            "events": [
+              {
+                "event_id": "event-1",
+                "operation_id": "operation-test",
+                "sequence": 1,
+                "prior_event_id": null,
+                "event_type": "PREPARED",
+                "state": "PREPARED",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "a23702f63fa719b85149cfd39643ca841e5768d7bea91f4ff31cbf241aadefa9"
+              },
+              {
+                "event_id": "event-2",
+                "operation_id": "operation-test",
+                "sequence": 2,
+                "prior_event_id": "event-1",
+                "event_type": "IN_FLIGHT",
+                "state": "IN_FLIGHT",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "6e3f4a79092c749a784e5643c1e955bec317419f02ba2a686b8647b4fc77b03a"
+              },
+              {
+                "event_id": "event-3",
+                "operation_id": "operation-test",
+                "sequence": 3,
+                "prior_event_id": "event-2",
+                "event_type": "OUTCOME_RECORDED",
+                "state": "APPLIED",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "93181c8409e81f5a2431832ba9791307816e73d8e2e14fe41c943d78716e282c"
+              }
+            ]
+          }
+        },
+        "result_digest": "76d13b9b217a8e29a9f725b63591d1dd5b6f88a0ad736f93e78fbed09bc6702c"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "MUTATION_RECONCILE",
+        "value": {
+          "kind": "MUTATION_RECONCILE",
+          "readback": {
+            "kind": "MUTATION",
+            "operation": {
+              "operation_id": "operation-test",
+              "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+              "run_id": "run-test",
+              "allocation_id": "allocation-test",
+              "lock": "lock-test",
+              "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+              "lease_id": "lease-test",
+              "fence_id": "fence-test",
+              "fence_sequence": 1,
+              "operation_kind": "IDEMPOTENT_SET",
+              "safety_class": "IDEMPOTENT",
+              "target_identity": {
+                "resource_type": "provider_resource",
+                "resource_id": "resource-test"
+              },
+              "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+              "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "retry_of_operation_id": null,
+              "provider_operation_key": "gpr:operation-test",
+              "created_at": "2026-09-06T00:00:00.000Z",
+              "operation_digest": "6e4b9a162ba5dd89a9f522d20d1d532cf6e4cba75cf0476cdb021f76c0fa1ee7"
+            },
+            "state": "IN_FLIGHT",
+            "events": [
+              {
+                "event_id": "event-1",
+                "operation_id": "operation-test",
+                "sequence": 1,
+                "prior_event_id": null,
+                "event_type": "PREPARED",
+                "state": "PREPARED",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "a23702f63fa719b85149cfd39643ca841e5768d7bea91f4ff31cbf241aadefa9"
+              },
+              {
+                "event_id": "event-2",
+                "operation_id": "operation-test",
+                "sequence": 2,
+                "prior_event_id": "event-1",
+                "event_type": "IN_FLIGHT",
+                "state": "IN_FLIGHT",
+                "event_at": "2026-09-06T00:00:00.000Z",
+                "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+                "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "readback_digest": null,
+                "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+                "event_digest": "6e3f4a79092c749a784e5643c1e955bec317419f02ba2a686b8647b4fc77b03a"
+              }
+            ]
+          }
+        },
+        "result_digest": "94228dff5e9589ab645f9e4dcb32e4e8bf78331caa59307d4b98f0357037a2c5"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "ORPHAN_RECOVERY",
+        "value": {
+          "kind": "ORPHAN_RECOVERY",
+          "recovery_record": {
+            "schema": "toolkit.github-program.recovery-record.v1",
+            "recovery_record_id": "recovery-test",
+            "request_id": "0123456789abcdef0123456789abcdef",
+            "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6",
+            "old_allocation_id": "allocation-test",
+            "old_run_id": "run-test",
+            "old_lease_id": "lease-test",
+            "old_fence_id": "fence-test",
+            "old_fence_sequence": 1,
+            "pre_recovery_evidence": {
+              "schema": "toolkit.github-program.pre-recovery-evidence.v1",
+              "request_id": "0123456789abcdef0123456789abcdef",
+              "repository": "example/toolkit",
+              "parent_issue": 1,
+              "child_issue": 2,
+              "lock": "lock-test",
+              "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6",
+              "old_allocation_id": "allocation-test",
+              "old_run_id": "run-test",
+              "old_allocation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "old_run_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "old_lease_id": "lease-test",
+              "old_fence_id": "fence-test",
+              "old_fence_sequence": 1,
+              "old_lease_issued_at": "2026-09-06T00:00:00.000Z",
+              "old_lease_expires_at": "2026-09-06T00:05:00.000Z",
+              "old_lease_tip_event_id": "lease-event-test",
+              "old_lease_tip_event_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "old_receipt_tip_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f",
+              "old_receipt_tip_sequence": 1,
+              "old_receipt_tip_digest": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f",
+              "old_receipt_chain_digest": "2aa632007f429bb8f9cdd89e1ccc84ac2b2234556af1ccdf31cd63e810ac853f",
+              "zero_operation_count": 0,
+              "zero_operation_event_count": 0,
+              "zero_operation_inventory_digest": "a28f004fbdcc8b41eb6b718d920ac16e249d33a4fca3fd346449b199b4072c80",
+              "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+              "source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "start_digest": "965bad60090917b8d2456edba5203f0d363c9136196b9139605ef8a293cd6587",
+              "old_holder_classification": "ORPHAN_NONADOPTABLE",
+              "old_holder_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "old_holder_attestation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "recovery_peer_platform": "linux",
+              "recovery_peer_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "recovery_peer_process_incarnation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "broker_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+              "broker_key_id": "22222222222222222222222222222222",
+              "observed_at": "2026-09-06T00:00:00.000Z",
+              "authority_observed_at": "2026-09-06T00:00:00.000Z",
+              "source_observed_at": "2026-09-06T00:00:00.000Z",
+              "start_observed_at": "2026-09-06T00:00:00.000Z",
+              "store_observed_at": "2026-09-06T00:00:00.000Z",
+              "holder_observed_at": "2026-09-06T00:00:00.000Z"
+            },
+            "pre_recovery_evidence_digest": "cde50b95656859c5ed9cdf1783e13475f42256dab3ab719232c4c1b6a5cd2e2d",
+            "terminal_receipt_id": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41",
+            "terminal_receipt_digest": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41",
+            "release_event_id": "release-test",
+            "release_event_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "replacement_allocation_id": "allocation-replacement",
+            "replacement_allocation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "replacement_run_id": "run-replacement",
+            "replacement_run_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "replacement_lease_id": "lease-replacement",
+            "replacement_fence_id": "fence-replacement",
+            "replacement_fence_sequence": 2,
+            "replacement_holder_attestation_id": "holder-new",
+            "replacement_holder_attestation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "new_high_water": 2,
+            "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+            "source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "start_digest": "965bad60090917b8d2456edba5203f0d363c9136196b9139605ef8a293cd6587",
+            "committed_at": "2026-09-06T00:00:00.000Z",
+            "recovery_record_digest": "d943efda28fd165d29d9d04a850304c7e0b6d2a9a92980e4a7ca4609bc5b5cb7"
+          },
+          "replacement_allocation": {
+            "allocation_id": "allocation-replacement",
+            "run_id": "run-replacement",
+            "lock": "lock-test",
+            "lease": {
+              "lease_id": "lease-replacement",
+              "fence_id": "fence-replacement",
+              "fence_sequence": 2,
+              "issued_at": "2026-09-06T00:00:00.000Z",
+              "expires_at": "2026-09-06T00:05:00.000Z"
+            }
+          }
+        },
+        "result_digest": "9622d075fcf0831384bd514046f1c78450b745b629c3e8dead13088906520a27"
+      },
+      "error": null
+    },
+    {
+      "schema": "toolkit.github-program.broker-ipc.v1",
+      "request_id": "0123456789abcdef0123456789abcdef",
+      "ok": true,
+      "result": {
+        "operation": "MIGRATE_V2_TO_V3",
+        "value": {
+          "kind": "MIGRATE_V2_TO_V3",
+          "status": "MIGRATED",
+          "source_schema_fingerprint": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "destination_schema_fingerprint": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6",
+          "store_binding_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+        },
+        "result_digest": "681082e757e6c1bd3238399ce638baa052649285c2d7a3a99b91d1eaa22e3fd9"
+      },
+      "error": null
+    }
+  ],
+  "readbacks": [
+    {
+      "kind": "NAMESPACE",
+      "namespace": {
+        "repository": "example/toolkit",
+        "parent_issue": 1,
+        "child_issue": 2
+      },
+      "namespace_digest": "d56216f3d93fa8e1e0994afe4d17efcb5a37b1f811d7181c549d8eeb594689e6"
+    },
+    {
+      "kind": "RUN",
+      "allocation": {
+        "allocation_id": "allocation-test",
+        "run_id": "run-test",
+        "lock": "lock-test",
+        "lease": {
+          "lease_id": "lease-test",
+          "fence_id": "fence-test",
+          "fence_sequence": 1,
+          "issued_at": "2026-09-06T00:00:00.000Z",
+          "expires_at": "2026-09-06T00:05:00.000Z"
+        }
+      },
+      "started": true,
+      "run_started_receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f"
+    },
+    {
+      "kind": "RECEIPT_CHAIN",
+      "run_id": "run-test",
+      "receipts": [
+        {
+          "schema": "toolkit.github-program.run-receipt.v1",
+          "receipt_type": "RUN_STARTED",
+          "sequence": 1,
+          "prior_receipt_id": null,
+          "run_id": "run-test",
+          "allocation_id": "allocation-test",
+          "repository": "example/toolkit",
+          "parent_issue": 1,
+          "child_issue": 2,
+          "lock": "lock-test",
+          "authority": {
+            "child_comment_id": 3,
+            "parent_comment_id": 4,
+            "node_id": "comment-synthetic",
+            "author_login": "example",
+            "author_association": "OWNER",
+            "body_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "updated_at": "2026-09-06T00:00:00.000Z",
+            "update_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "scope_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+          },
+          "start": {
+            "base_sha": "1111111111111111111111111111111111111111",
+            "head_sha": "1111111111111111111111111111111111111111",
+            "tree_sha": "1111111111111111111111111111111111111111",
+            "status_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "clean_worktree": true,
+            "ref": {
+              "detached": false,
+              "name": "example/repair"
+            }
+          },
+          "candidate": null,
+          "lease": {
+            "lease_id": "lease-test",
+            "fence_id": "fence-test",
+            "fence_sequence": 1,
+            "issued_at": "2026-09-06T00:00:00.000Z",
+            "expires_at": "2026-09-06T00:05:00.000Z"
+          },
+          "payload": {
+            "classification": "RUN_STARTED"
+          },
+          "created_at": "2026-09-06T00:00:00.000Z",
+          "receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f"
+        },
+        {
+          "schema": "toolkit.github-program.run-receipt.v1",
+          "receipt_type": "RUN_INTERRUPTED",
+          "sequence": 2,
+          "prior_receipt_id": "7216b3974bf31fa5f9a17f7a7533434f8a528433b19316eef89dee50d2a3543f",
+          "run_id": "run-test",
+          "allocation_id": "allocation-test",
+          "repository": "example/toolkit",
+          "parent_issue": 1,
+          "child_issue": 2,
+          "lock": "lock-test",
+          "authority": {
+            "child_comment_id": 3,
+            "parent_comment_id": 4,
+            "node_id": "comment-synthetic",
+            "author_login": "example",
+            "author_association": "OWNER",
+            "body_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "updated_at": "2026-09-06T00:00:00.000Z",
+            "update_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "scope_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea"
+          },
+          "start": {
+            "base_sha": "1111111111111111111111111111111111111111",
+            "head_sha": "1111111111111111111111111111111111111111",
+            "tree_sha": "1111111111111111111111111111111111111111",
+            "status_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+            "clean_worktree": true,
+            "ref": {
+              "detached": false,
+              "name": "example/repair"
+            }
+          },
+          "candidate": null,
+          "lease": {
+            "lease_id": "lease-test",
+            "fence_id": "fence-test",
+            "fence_sequence": 1,
+            "issued_at": "2026-09-06T00:00:00.000Z",
+            "expires_at": "2026-09-06T00:05:00.000Z"
+          },
+          "payload": {
+            "classification": "RUN_INTERRUPTED"
+          },
+          "created_at": "2026-09-06T00:00:00.000Z",
+          "receipt_id": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41"
+        }
+      ],
+      "chain_digest": "0a2f72a1f704a802155ed0106bbc22cc370a25c2a63a0a6dbd309764d049da31"
+    },
+    {
+      "kind": "MUTATION",
+      "operation": {
+        "operation_id": "operation-test",
+        "logical_operation_digest": "e36e21481adca1681cbe7bc60bf56489b5a1629c7fb8055cec7cf5d52c9469dc",
+        "run_id": "run-test",
+        "allocation_id": "allocation-test",
+        "lock": "lock-test",
+        "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+        "lease_id": "lease-test",
+        "fence_id": "fence-test",
+        "fence_sequence": 1,
+        "operation_kind": "IDEMPOTENT_SET",
+        "safety_class": "IDEMPOTENT",
+        "target_identity": {
+          "resource_type": "provider_resource",
+          "resource_id": "resource-test"
+        },
+        "target_digest": "82799e1ad619e017782c4f7a2829be033408dddfb3b651e5dde27627e747c0fc",
+        "expected_source_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+        "cas_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+        "expected_post_state_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+        "adapter_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+        "retry_of_operation_id": null,
+        "provider_operation_key": "gpr:operation-test",
+        "created_at": "2026-09-06T00:00:00.000Z",
+        "operation_digest": "6e4b9a162ba5dd89a9f522d20d1d532cf6e4cba75cf0476cdb021f76c0fa1ee7"
+      },
+      "state": "IN_FLIGHT",
+      "events": [
+        {
+          "event_id": "event-1",
+          "operation_id": "operation-test",
+          "sequence": 1,
+          "prior_event_id": null,
+          "event_type": "PREPARED",
+          "state": "PREPARED",
+          "event_at": "2026-09-06T00:00:00.000Z",
+          "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+          "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "readback_digest": null,
+          "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "event_digest": "a23702f63fa719b85149cfd39643ca841e5768d7bea91f4ff31cbf241aadefa9"
+        },
+        {
+          "event_id": "event-2",
+          "operation_id": "operation-test",
+          "sequence": 2,
+          "prior_event_id": "event-1",
+          "event_type": "IN_FLIGHT",
+          "state": "IN_FLIGHT",
+          "event_at": "2026-09-06T00:00:00.000Z",
+          "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+          "provider_evidence_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "readback_digest": null,
+          "detail_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+          "event_digest": "6e3f4a79092c749a784e5643c1e955bec317419f02ba2a686b8647b4fc77b03a"
+        }
+      ]
+    },
+    {
+      "kind": "RECOVERY",
+      "run_id": "run-test",
+      "status": "TERMINAL",
+      "receipt_id": "1c717156bdcfe6d299d545b032839fdb60d43bb630804669e0cec05083202f41"
+    }
+  ],
+  "holder": {
+    "schema": "toolkit.github-program.holder-attestation.v1",
+    "attestation_id": "holder-test",
+    "algorithm": "HMAC-SHA-256",
+    "key_id": "22222222222222222222222222222222",
+    "platform": "linux",
+    "repository": "example/toolkit",
+    "parent_issue": 1,
+    "child_issue": 2,
+    "lock": "lock-test",
+    "allocation_id": "allocation-test",
+    "allocation_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "run_id": "run-test",
+    "run_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "lease_id": "lease-test",
+    "fence_id": "fence-test",
+    "fence_sequence": 1,
+    "authority_digest": "44e163a991ec32db5f64e24f8a9a0f9437da90a8ac01cc3a3526a7c8238f574e",
+    "start_digest": "965bad60090917b8d2456edba5203f0d363c9136196b9139605ef8a293cd6587",
+    "broker_identity_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "process_id_digest": "38a45685f4f880035431242d9dbb53736f6f95512cc91951b6642437a7c81669",
+    "process_start_digest": "a8c8b3a346c38b5e415f8ed193db0461bc5cf84f8876d32782b9154e1840f17f",
+    "boot_id_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "pid_namespace_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "process_incarnation_digest": "a2cf1e95227edcbd6dbd3835518e6b167da4e95fe2fecdfcf9b186c3f12247bf",
+    "lease_issued_at": "2026-09-06T00:00:00.000Z",
+    "lease_expires_at": "2026-09-06T00:05:00.000Z",
+    "attestation_tag": "a71aa60abc4687698a185c273539efb05fc2857db4f58851a59a4cf402f2950a",
+    "attestation_digest": "f3ccec56513d44c2fcbdfb25e3835919fc624dfff5e2213f24a4d83dc1175264"
+  },
+  "incarnation": {
+    "platform": "linux",
+    "principal_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "process_id_digest": "38a45685f4f880035431242d9dbb53736f6f95512cc91951b6642437a7c81669",
+    "process_start_digest": "a8c8b3a346c38b5e415f8ed193db0461bc5cf84f8876d32782b9154e1840f17f",
+    "boot_id_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "pid_namespace_digest": "dd0879bd90a02e1b3eecb709e1cdd8475407e4e10a4b96eb35dcf3e84a3cdcea",
+    "session_peer_scope": "session-test"
+  },
+  "scalar_cases": [
+    "621984972275886.2",
+    "\"\"",
+    "\"\""
+  ]
 }

@@ -71,3 +71,36 @@ test('result digest is exactly over operation and value and excludes request con
   };
   assert.notEqual(digestValue(withRequestContext), fixture.result_digest);
 });
+
+
+test('exact dependency, build profile and release proof wiring is retained', () => {
+  const read = p => fs.readFileSync(path.join(repositoryRoot, p), 'utf8');
+  const cargo = read('repo/scripts/github-program-broker/Cargo.toml');
+  for (const [name, version] of Object.entries({ serde:'1.0.229', serde_json:'1.0.151', hmac:'0.13.0', sha2:'0.11.0', getrandom:'0.4.3', zeroize:'1.9.0' })) {
+    assert.ok(cargo.split('\n').some(line => line.startsWith(name+' = ') && line.includes('"='+version+'"')), name);
+  }
+  for (const text of ['opt-level = 3', 'lto = "thin"', 'codegen-units = 1', 'panic = "abort"', 'debug = true']) assert.ok(cargo.includes(text), text);
+  const workflow = read('.github/workflows/github-program-broker-release-proof.yml');
+  assert.equal((workflow.match(/uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/g)||[]).length, 4);
+  assert.equal((workflow.match(/persist-credentials: false/g)||[]).length, 4);
+  for (const text of ['windows-2022','ubuntu-24.04','x86_64-pc-windows-msvc','x86_64-unknown-linux-gnu','--locked','--all-targets --all-features','-- -D warnings','BINARY_SHA256=','BINARY_BYTES=','TREE_SHA=','CARGO_LOCK_SHA256=','STARTED_AT=','FINISHED_AT=','BINARY_UPLOAD=none','upload: never','npm run validate:all']) assert.ok(workflow.includes(text), text);
+  assert.ok(!workflow.includes('upload-artifact'));
+  assert.ok(!workflow.includes('security-events: write'));
+});
+
+test('the exact inline hosted SARIF adjudicator self-tests locally', () => {
+  const workflow = fs.readFileSync(path.join(repositoryRoot, '.github/workflows/github-program-broker-release-proof.yml'), 'utf8');
+  const code = workflow.replace(/\r\n/g, '\n').split("          python - <<'PY'\n")[1].split('\n          PY')[0].split('\n').map(line => line.replace(/^          /, '')).join('\n');
+  const result = require('node:child_process').spawnSync(process.env.BROKER_SCHEMA_PYTHON || 'python', ['-c', code], {encoding:'utf8',windowsHide:true,env:{...process.env,BROKER_SARIF_SELFTEST_ONLY:'1'}});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /RUST_CODEQL_ADJUDICATOR_SELFTEST=PASS_ZERO_SECURITY_FAIL_ONE_SECURITY_CLASSIFY_DIAGNOSTICS/);
+});
+
+
+test('production result validator uses the validated constant-time digest path', () => {
+  const source = fs.readFileSync(path.join(repositoryRoot, 'repo/scripts/github-program-broker/src/protocol.rs'), 'utf8');
+  const check = source.split('pub fn check_digest(')[1].split('fn check_hash(')[0];
+  assert.match(check, /validate_digest\(actual\)\?;[\s\S]*validate_digest\(expected\)\?;[\s\S]*constant_time_eq\(actual.as_bytes\(\), expected.as_bytes\(\)\)/);
+  const result = source.split('impl ResponseResult {')[1].split('pub struct ResponseError')[0];
+  assert.match(result, /check_digest\([\s\S]*&self.result_digest,[\s\S]*&result_digest\(self.operation, &self.value\)\?/);
+});

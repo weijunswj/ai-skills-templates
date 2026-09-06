@@ -12,10 +12,7 @@ fn main() -> io::Result<()> {
     let request = match decode_request_frame(&frame) {
         Ok(request) => request,
         Err(error) => {
-            let Some(request_id) = error.request_id() else {
-                return Ok(());
-            };
-            let response = Response::failure(request_id.to_owned(), error.code());
+            let response = Response::failure(error.request_id().map(str::to_owned), error.code());
             let encoded = encode_response(&response)
                 .map_err(|_| io::Error::other("response encoding failed"))?;
             return io::stdout().write_all(&encoded);
@@ -23,7 +20,7 @@ fn main() -> io::Result<()> {
     };
 
     // Slice 1 validates the wire contract only; it does not perform provider or store work.
-    let response = Response::failure(request.request_id, "BROKER_VALIDATION_ONLY");
+    let response = Response::failure(Some(request.request_id), "BROKER_UNVERIFIABLE_IDENTITY");
     let encoded =
         encode_response(&response).map_err(|_| io::Error::other("response encoding failed"))?;
     io::stdout().write_all(&encoded)

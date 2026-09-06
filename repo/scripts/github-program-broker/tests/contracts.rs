@@ -1,315 +1,323 @@
+use github_program_broker::{canonical::*, crypto::*, protocol::*};
+use serde_json::{Value, json};
 use std::io::Write;
 use std::process::{Command, Stdio};
-
-use github_program_broker::canonical::{
-    canonical_bytes, canonical_serde_bytes, parse, parse_canonical, to_serde,
-};
-use github_program_broker::crypto::{
-    constant_time_eq, domain_separated_digest, hmac_sha256_hex, sha256_hex, verify_hmac_sha256_hex,
-};
-use github_program_broker::{
-    BrokerError, DecodeErrorKind, OperationKind, Request, RequestOperation, Response, SCHEMA_ID,
-    SuccessValue, decode_request_frame, decode_response_frame, encode_frame, result_digest,
-};
-use serde_json::Value;
-
-const REQUEST_ID: &str = "0123456789abcdef0123456789abcdef";
-const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const D800_HEX: &str = "225c756438303022";
-const D800_DIGEST: &str = "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5";
-const DC00_HEX: &str = "225c756463303022";
-const DC00_DIGEST: &str = "353c7370beca95e64c258c908edac60c2ab30d355ca1b5b7fc31c5bce4a4c65a";
-
-fn request(kind: OperationKind) -> Request {
-    Request {
-        schema: SCHEMA_ID.to_owned(),
-        request_id: REQUEST_ID.to_owned(),
-        operation: RequestOperation { kind },
-    }
+fn fixture() -> Value {
+    serde_json::from_str(include_str!("fixtures/source-slice-1-vectors.json")).unwrap()
 }
-
-fn value(kind: OperationKind) -> SuccessValue {
-    match kind {
-        OperationKind::ReadbackInspection => SuccessValue::ReadbackInspection {
-            state_digest: DIGEST.to_owned(),
-        },
-        OperationKind::AllocateRun => SuccessValue::AllocateRun {
-            allocation_id: "allocation-test".to_owned(),
-            allocation_digest: DIGEST.to_owned(),
-        },
-        OperationKind::StartRun => SuccessValue::StartRun {
-            run_id: "run-test".to_owned(),
-            start_digest: DIGEST.to_owned(),
-        },
-        OperationKind::AppendReceipt => SuccessValue::AppendReceipt {
-            receipt_id: DIGEST.to_owned(),
-            sequence: 1,
-        },
-        OperationKind::InterruptRun => SuccessValue::InterruptRun {
-            interrupt_id: "interrupt-test".to_owned(),
-        },
-        OperationKind::MutationAdmit => SuccessValue::MutationAdmit {
-            operation_id: "operation-test".to_owned(),
-            operation_digest: DIGEST.to_owned(),
-        },
-        OperationKind::MutationDispatch => SuccessValue::MutationDispatch {
-            operation_id: "operation-test".to_owned(),
-            dispatch_digest: DIGEST.to_owned(),
-        },
-        OperationKind::MutationOutcome => SuccessValue::MutationOutcome {
-            operation_id: "operation-test".to_owned(),
-            outcome_digest: DIGEST.to_owned(),
-        },
-        OperationKind::MutationReconcile => SuccessValue::MutationReconcile {
-            operation_id: "operation-test".to_owned(),
-            reconciliation_digest: DIGEST.to_owned(),
-        },
-        OperationKind::OrphanRecovery => SuccessValue::OrphanRecovery {
-            recovery_id: "recovery-test".to_owned(),
-            evidence_digest: DIGEST.to_owned(),
-        },
-        OperationKind::MigrateV2ToV3 => SuccessValue::MigrateV2ToV3 {
-            migration_id: "migration-test".to_owned(),
-            migration_digest: DIGEST.to_owned(),
-        },
-    }
+fn framed(v: &Value) -> Vec<u8> {
+    encode_frame(&canonical_serde_bytes(v).unwrap()).unwrap()
 }
-
-fn success(kind: OperationKind) -> Response {
-    Response::success(REQUEST_ID.to_owned(), kind, value(kind)).expect("valid success")
+fn rehash(v: &mut Value) {
+    let r = &mut v["result"];
+    r["result_digest"] =
+        json!(digest_value(&json!({"operation":r["operation"],"value":r["value"]})).unwrap());
 }
-
-fn canonical_request_payload(kind: OperationKind) -> Vec<u8> {
-    let request = request(kind);
-    let json = serde_json::to_value(request).expect("request serializes");
-    github_program_broker::canonical_serde_bytes(&json).expect("request canonicalizes")
-}
-
-fn frame_with_payload(payload: &[u8]) -> Vec<u8> {
-    encode_frame(payload).expect("frame encodes")
-}
-
 #[test]
-fn operation_matrix_has_eleven_diagonal_and_all_ordered_off_diagonal_cases() {
-    assert_eq!(OperationKind::ALL.len(), 11);
-    let mut diagonal = 0;
-    let mut off_diagonal = 0;
-    for request_kind in OperationKind::ALL {
-        for response_kind in OperationKind::ALL {
-            let response = success(response_kind);
-            let validation = response.validate_for_request(&request(request_kind));
-            if request_kind == response_kind {
-                diagonal += 1;
-                assert!(validation.is_ok(), "diagonal {:?}", request_kind);
-            } else {
-                off_diagonal += 1;
-                assert_eq!(validation, Err(BrokerError::ResultOperationMismatch));
-            }
+fn eleven_operations_and_110_request_bound_off_diagonals() {
+    let f = fixture();
+    for (i, r) in f["requests"].as_array().unwrap().iter().enumerate() {
+        let req = decode_request_frame(&framed(r)).unwrap();
+        for (j, s) in f["responses"].as_array().unwrap().iter().enumerate() {
+            assert!(decode_response_frame(&framed(s)).is_ok(), "response {j}");
+            assert_eq!(
+                decode_response_for_request(&framed(s), &req).is_ok(),
+                i == j,
+                "{i}/{j}"
+            );
         }
     }
-    assert_eq!(diagonal, 11);
-    assert_eq!(off_diagonal, 110);
 }
-
 #[test]
-fn request_id_and_operation_binding_are_checked_at_the_request_bound_validator() {
-    let request = request(OperationKind::ReadbackInspection);
-    let mut wrong_id = success(OperationKind::ReadbackInspection);
-    wrong_id.request_id = "fedcba9876543210fedcba9876543210".to_owned();
-    assert_eq!(
-        wrong_id.validate_for_request(&request),
-        Err(BrokerError::RequestIdMismatch)
-    );
-
-    let internally_consistent_wrong_operation = success(OperationKind::AllocateRun);
-    assert_eq!(
-        internally_consistent_wrong_operation.validate_for_request(&request),
-        Err(BrokerError::ResultOperationMismatch)
-    );
+fn old_stub_and_required_fields_fail_with_correct_result_hashes() {
+    let f = fixture();
+    for response in f["responses"].as_array().unwrap() {
+        let mut stub = response.clone();
+        stub["result"]["value"] =
+            json!({"kind":response["result"]["operation"],"state_digest":"a".repeat(64)});
+        rehash(&mut stub);
+        assert!(decode_response_frame(&framed(&stub)).is_err());
+        for key in response["result"]["value"].as_object().unwrap().keys() {
+            let mut bad = response.clone();
+            bad["result"]["value"].as_object_mut().unwrap().remove(key);
+            rehash(&mut bad);
+            assert!(
+                decode_response_frame(&framed(&bad)).is_err(),
+                "missing {key}"
+            );
+        }
+        let mut bad = response.clone();
+        bad["result"]["value"]["unexpected"] = json!(0);
+        rehash(&mut bad);
+        assert!(decode_response_frame(&framed(&bad)).is_err());
+    }
 }
-
 #[test]
-fn result_digest_only_covers_operation_and_value() {
-    let response = success(OperationKind::ReadbackInspection);
-    let result = response.result.as_ref().expect("success result");
-    let expected = result_digest(result.operation, &result.value).expect("digest");
-    assert_eq!(result.result_digest, expected);
-    assert_eq!(
-        result.result_digest,
-        "07236f4c066f161280f77bd5807c4e6c6bf6297b59597a419e1c60b2d5475f27"
-    );
-}
-
-#[test]
-fn canonical_surrogate_vectors_are_independent_and_exact() {
-    for (payload, expected_hex, expected_digest) in [
-        (b"\"\\ud800\"".as_slice(), D800_HEX, D800_DIGEST),
-        (b"\"\\udc00\"".as_slice(), DC00_HEX, DC00_DIGEST),
-    ] {
-        let parsed = parse_canonical(payload).expect("lone surrogate is canonical wire data");
-        assert_eq!(hex(payload), expected_hex);
-        assert_eq!(sha256_hex(&canonical_bytes(&parsed)), expected_digest);
+fn raw_envelope_required_null_and_id_ownership() {
+    let f = fixture();
+    let request = &f["requests"][0];
+    let id = request["request_id"].as_str().unwrap();
+    for value in [json!({}), json!({"request_id":"bad"})] {
         assert!(
-            to_serde(&parsed).is_err(),
-            "serde conversion must reject lone surrogate"
+            decode_request_frame(&framed(&value))
+                .unwrap_err()
+                .request_id()
+                .is_none()
         );
     }
-}
-
-#[test]
-fn canonical_parser_rejects_duplicates_noncanonical_bytes_and_preserves_pairs() {
-    assert!(parse(b"{\"a\":1,\"a\":2}").is_err());
-    assert!(parse_canonical(b"{ \"a\":1}").is_err());
-    let pair = parse(b"\"\\ud83d\\ude00\"").expect("surrogate pair parses");
-    assert_eq!(canonical_bytes(&pair), "\"\u{1f600}\"".as_bytes());
-    assert_eq!(
-        to_serde(&pair).expect("pair converts"),
-        Value::String("\u{1f600}".to_owned())
-    );
-}
-
-#[test]
-fn canonical_numbers_follow_the_node_json_number_spelling() {
-    for canonical in [
-        b"1".as_slice(),
-        b"0.000001".as_slice(),
-        b"1e-7".as_slice(),
-        b"1e+21".as_slice(),
+    for (key, value) in [
+        ("operation", json!({"kind":"WRONG"})),
+        ("namespace", json!({"repository":false})),
+        ("expected", Value::Null),
     ] {
-        assert!(parse_canonical(canonical).is_ok(), "{canonical:?}");
-    }
-    for noncanonical in [
-        b"-0".as_slice(),
-        b"1.0".as_slice(),
-        b"1e21".as_slice(),
-        b"0.0000001".as_slice(),
-    ] {
-        assert!(parse_canonical(noncanonical).is_err(), "{noncanonical:?}");
-    }
-}
-
-#[test]
-fn serde_numbers_are_normalized_to_the_node_json_number_spelling() {
-    for (raw, canonical) in [
-        ("-0", "0"),
-        ("1.0", "1"),
-        ("1e-7", "1e-7"),
-        ("1e21", "1e+21"),
-    ] {
-        let value: Value = serde_json::from_str(raw).expect("number parses");
+        let mut bad = request.clone();
+        bad[key] = value;
         assert_eq!(
-            canonical_serde_bytes(&value).expect("number canonicalizes"),
-            canonical.as_bytes()
+            decode_request_frame(&framed(&bad))
+                .unwrap_err()
+                .request_id(),
+            Some(id)
         );
     }
-}
-
-#[test]
-fn request_id_is_owned_only_after_all_raw_wire_prerequisites() {
-    let valid = frame_with_payload(&canonical_request_payload(OperationKind::StartRun));
-    assert_eq!(
-        decode_request_frame(&valid)
-            .expect("valid request")
-            .request_id,
-        REQUEST_ID
-    );
-
-    for invalid in [
-        vec![0, 0, 0],
-        vec![0, 1, 0, 0],
-        vec![0, 0, 0, 1, b'{'],
-        vec![0, 0, 0, 1, 0xff],
-    ] {
-        let error = decode_request_frame(&invalid).expect_err("invalid frame");
-        assert_eq!(error.request_id(), None);
-    }
-
-    let mut duplicate = canonical_request_payload(OperationKind::StartRun);
-    duplicate.pop();
-    duplicate.extend_from_slice(b",\"request_id\":\"0123456789abcdef0123456789abcdef\"}");
-    let error = decode_request_frame(&frame_with_payload(&duplicate)).expect_err("duplicate key");
-    assert_eq!(error.kind, DecodeErrorKind::DuplicateKey);
-    assert_eq!(error.request_id(), None);
-
-    let mut noncanonical = canonical_request_payload(OperationKind::StartRun);
-    noncanonical.insert(0, b' ');
-    let error = decode_request_frame(&frame_with_payload(&noncanonical)).expect_err("noncanonical");
-    assert_eq!(error.kind, DecodeErrorKind::NonCanonicalJson);
-    assert_eq!(error.request_id(), None);
-}
-
-#[test]
-fn valid_request_id_survives_nested_semantic_and_lone_surrogate_failures() {
-    let mut nested = canonical_request_payload(OperationKind::StartRun);
-    let operation_start = nested
-        .iter()
-        .position(|byte| *byte == b'{')
-        .expect("operation object");
-    nested.splice(operation_start.., b"{\"operation\":{\"kind\":1},\"request_id\":\"0123456789abcdef0123456789abcdef\",\"schema\":\"toolkit.github-program.broker-ipc.v1\"}".iter().copied());
-    let nested_error =
-        decode_request_frame(&frame_with_payload(&nested)).expect_err("nested failure");
-    assert_eq!(nested_error.request_id(), Some(REQUEST_ID));
-
-    let semantic_payload = b"{\"operation\":{\"kind\":\"START_RUN\"},\"request_id\":\"0123456789abcdef0123456789abcdef\",\"schema\":\"wrong\"}";
-    let semantic_error =
-        decode_request_frame(&frame_with_payload(semantic_payload)).expect_err("schema failure");
-    assert_eq!(semantic_error.request_id(), Some(REQUEST_ID));
-
     for surrogate in ["\\ud800", "\\udc00"] {
-        let payload = format!(
-            "{{\"operation\":{{\"kind\":\"START_RUN\"}},\"request_id\":\"{REQUEST_ID}\",\"schema\":\"{SCHEMA_ID}\",\"{surrogate}\":null}}"
+        let raw = String::from_utf8(canonical_serde_bytes(request).unwrap())
+            .unwrap()
+            .replace("NAMESPACE", surrogate);
+        assert_eq!(
+            decode_request_frame(&encode_frame(raw.as_bytes()).unwrap())
+                .unwrap_err()
+                .request_id(),
+            Some(id)
         );
-        let value = parse(payload.as_bytes()).expect("surrogate payload parses");
-        let canonical = canonical_bytes(&value);
-        let error = decode_request_frame(&frame_with_payload(&canonical))
-            .expect_err("surrogate conversion failure");
-        assert_eq!(error.kind, DecodeErrorKind::ConversionFailed);
-        assert_eq!(error.request_id(), Some(REQUEST_ID));
     }
+    let failure = json!({"schema":SCHEMA_ID,"request_id":null,"ok":false,"result":null,"error":{"code":"BROKER_MALFORMED_REQUEST"}});
+    assert!(decode_response_frame(&framed(&failure)).is_ok());
+    for original in [&failure, &f["responses"][0]] {
+        for key in original.as_object().unwrap().keys() {
+            let mut v = original.clone();
+            v.as_object_mut().unwrap().remove(key);
+            assert!(decode_response_frame(&framed(&v)).is_err(), "{key}");
+        }
+    }
+    let mut v = f["responses"][0].clone();
+    v["result"] = Value::Null;
+    assert!(decode_response_frame(&framed(&v)).is_err());
 }
-
 #[test]
-fn executable_echoes_owned_request_id_on_later_failure() {
-    let payload = b"{\"operation\":{\"kind\":\"START_RUN\"},\"request_id\":\"0123456789abcdef0123456789abcdef\",\"schema\":\"toolkit.github-program.broker-ipc.v1\",\"\\ud800\":null}";
-    let canonical = canonical_bytes(&parse(payload).expect("surrogate payload parses"));
-    let frame = frame_with_payload(&canonical);
+fn independent_surrogate_and_scalar_anchors() {
+    for (raw, hex, hash) in [
+        (
+            "\"\\ud800\"",
+            "225c756438303022",
+            "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5",
+        ),
+        (
+            "\"\\udc00\"",
+            "225c756463303022",
+            "353c7370beca95e64c258c908edac60c2ab30d355ca1b5b7fc31c5bce4a4c65a",
+        ),
+    ] {
+        let p = parse_canonical(raw.as_bytes()).unwrap();
+        assert_eq!(hex_encode(&canonical_bytes(&p)), hex);
+        assert_eq!(sha256_hex(&canonical_bytes(&p)), hash);
+        assert!(to_serde(&p).is_err());
+    }
+    for raw in [
+        "621984972275886.2",
+        "\"\u{7f}\"",
+        "\"\u{85}\"",
+        "1e+21",
+        "1e-7",
+        "0.000001",
+    ] {
+        assert!(parse_canonical(raw.as_bytes()).is_ok(), "{raw:?}");
+    }
+    assert!(parse(b"{\"a\":0,\"\\u0061\":1}").is_err());
+    assert!(parse_canonical(b" {\"a\":0}").is_err());
+    assert_eq!(canonical_bytes(&parse(b"-0").unwrap()), b"0");
+    assert_eq!(
+        canonical_bytes(&parse("{\"\u{e000}\":1,\"\u{10000}\":2}".as_bytes()).unwrap()),
+        "{\"\u{10000}\":2,\"\u{e000}\":1}".as_bytes()
+    );
+}
+fn executable(frame: &[u8]) -> Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_github-program-broker"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .expect("broker starts");
-    child
-        .stdin
-        .take()
-        .expect("broker stdin")
-        .write_all(&frame)
-        .expect("request writes");
-    let output = child.wait_with_output().expect("broker exits");
-    assert!(output.status.success());
-    let response = decode_response_frame(&output.stdout).expect("failure response decodes");
-    assert_eq!(response.request_id, REQUEST_ID);
-    assert_eq!(response.result, None);
+        .unwrap();
+    child.stdin.take().unwrap().write_all(frame).unwrap();
+    let o = child.wait_with_output().unwrap();
+    assert!(o.status.success(), "executable aborted");
+    assert!(o.stderr.is_empty());
+    let response = decode_response_frame(&o.stdout).unwrap();
+    serde_json::to_value(response).unwrap()
+}
+#[test]
+fn hostile_nesting_debug_and_release_executable() {
+    for n in [15, 16, 17, 10_000] {
+        for shape in 0..3 {
+            let mut raw = String::new();
+            for i in 0..n {
+                raw.push_str(if shape == 0 || shape == 2 && i % 2 == 0 {
+                    "["
+                } else {
+                    "{\"a\":"
+                });
+            }
+            raw.push('0');
+            for i in (0..n).rev() {
+                raw.push_str(if shape == 0 || shape == 2 && i % 2 == 0 {
+                    "]"
+                } else {
+                    "}"
+                });
+            }
+            assert_eq!(parse(raw.as_bytes()).is_ok(), n <= 16);
+            let out = executable(&encode_frame(raw.as_bytes()).unwrap());
+            assert_eq!(out["ok"], false);
+            assert!(out["request_id"].is_null());
+            raw.pop();
+            let out = executable(&encode_frame(raw.as_bytes()).unwrap());
+            assert_eq!(out["ok"], false);
+        }
+    }
+}
+#[test]
+fn framing_limits_and_pre_id_responses() {
+    for frame in [
+        vec![],
+        vec![0, 0, 0],
+        vec![0, 1, 0, 1],
+        vec![0, 0, 0, 2, b'{'],
+        vec![0, 0, 0, 1, 255],
+    ] {
+        assert_eq!(executable(&frame)["request_id"], Value::Null);
+    }
+    for n in [65536, 65537] {
+        let mut frame = (n as u32).to_be_bytes().to_vec();
+        frame.extend(vec![b' '; n]);
+        assert_eq!(executable(&frame)["ok"], false);
+    }
+    let mut duplicate =
+        String::from_utf8(canonical_serde_bytes(&fixture()["requests"][0]).unwrap()).unwrap();
+    duplicate.insert_str(1, "\"request_id\":\"0123456789abcdef0123456789abcdef\",");
+    assert!(executable(&encode_frame(duplicate.as_bytes()).unwrap())["request_id"].is_null());
+}
+#[test]
+fn holder_hmac_identity_and_digest_mutations() {
+    let f = fixture();
+    let a: HolderAttestation = serde_json::from_value(f["holder"].clone()).unwrap();
+    let key = HolderKey::from_bytes([11; 32]);
+    assert!(verify_holder_attestation(&a, &key).is_ok());
+    assert!(verify_holder_attestation(&a, &HolderKey::from_bytes([12; 32])).is_err());
+    for at in [0, 1, 63] {
+        let mut a = a.clone();
+        let replacement = if &a.attestation_tag[at..at + 1] == "0" {
+            "1"
+        } else {
+            "0"
+        };
+        a.attestation_tag.replace_range(at..at + 1, replacement);
+        a.attestation_digest = holder_attestation_digest(&a).unwrap();
+        assert!(verify_holder_attestation(&a, &key).is_err());
+    }
+    assert!(!verify_hmac_sha256_hex(&[11; 32], b"x", &"A".repeat(64)).unwrap());
+    assert!(hmac_sha256(&[0; 31], b"x").is_err());
+    for at in [0, 1, 63] {
+        let a = "a".repeat(64);
+        let mut b = a.clone();
+        b.replace_range(at..at + 1, "b");
+        assert!(check_digest(&a, &b).is_err());
+    }
+    assert!(check_digest(&"a".repeat(64), &"a".repeat(64)).is_ok());
+    assert!(check_digest("aa", &"a".repeat(64)).is_err());
+    for bad in ["a".repeat(63), "A".repeat(64), "g".repeat(64)] {
+        let mut response = f["responses"][0].clone();
+        response["result"]["result_digest"] = json!(bad);
+        assert!(decode_response_frame(&framed(&response)).is_err());
+    }
+    for at in [0, 1, 63] {
+        let mut response = f["responses"][0].clone();
+        let mut digest = response["result"]["result_digest"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let replacement = if &digest[at..at + 1] == "0" { "1" } else { "0" };
+        digest.replace_range(at..at + 1, replacement);
+        response["result"]["result_digest"] = json!(digest);
+        assert!(decode_response_frame(&framed(&response)).is_err());
+    }
+
+    let id = process_identity_digest("linux", 1234).unwrap();
+    assert_eq!(id, a.process_id_digest);
     assert_eq!(
-        response.error.expect("failure error").code,
-        "BROKER_CONVERSION_FAILED"
+        process_start_identity_digest("linux", &id, 5678).unwrap(),
+        a.process_start_digest
+    );
+    let inc: ProcessIncarnation = serde_json::from_value(f["incarnation"].clone()).unwrap();
+    assert_eq!(
+        process_incarnation_digest(&inc).unwrap(),
+        a.process_incarnation_digest
     );
 }
-
+// Test-only batched bridge. Node supplies raw bytes and independent expectations.
 #[test]
-fn crypto_helpers_use_bounded_keys_domains_and_constant_time_comparison() {
-    let message = b"broker-test";
-    let key = b"test-key";
-    let mac = hmac_sha256_hex(key, message).expect("mac");
-    assert!(verify_hmac_sha256_hex(key, message, &mac).expect("verify"));
-    assert!(!verify_hmac_sha256_hex(key, b"different", &mac).expect("verify"));
-    assert!(!constant_time_eq(b"a", b"b"));
-    assert!(constant_time_eq(b"same", b"same"));
-    assert!(!constant_time_eq(&[0u8; 256], &[]));
-    assert!(domain_separated_digest("request", message).is_ok());
-    assert!(domain_separated_digest("request/forbidden", message).is_err());
-    assert!(hmac_sha256_hex(&[0u8; 129], message).is_err());
-}
-
-fn hex(value: &[u8]) -> String {
-    value.iter().map(|byte| format!("{byte:02x}")).collect()
+#[ignore = "invoked by the independent Node differential and raw-schema suite"]
+fn external_oracle() {
+    let path = std::env::var_os("BROKER_ORACLE_INPUT").unwrap();
+    let rows: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let out: Vec<Value> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let raw = row["raw"].as_str().unwrap().as_bytes();
+            match row["mode"].as_str().unwrap() {
+                "identity" => {
+                    let v: Value = serde_json::from_slice(raw).unwrap();
+                    let text = |k: &str| v[k].as_str().unwrap();
+                    let result = match text("kind") {
+                        "broker" => broker_identity_digest(
+                            text("platform"),
+                            text("executable"),
+                            text("service"),
+                        ),
+                        "windows_principal" => windows_principal_digest(text("sid")),
+                        "linux_principal" => {
+                            linux_principal_digest(text("machine_id"), v["uid"].as_u64().unwrap())
+                        }
+                        "boot" => boot_identity_digest(text("platform"), text("identity")),
+                        "pid_namespace" => {
+                            pid_namespace_identity_digest(text("platform"), text("identity"))
+                        }
+                        "store" => store_binding_identity_digest(text("namespace"), text("store")),
+                        "path" => path_binding_identity_digest(text("store"), text("path")),
+                        _ => panic!("unknown identity test"),
+                    };
+                    json!({"digest":result.unwrap()})
+                }
+                "scalar" => match parse(raw) {
+                    Ok(v) => json!({"canonical":String::from_utf8(canonical_bytes(&v)).unwrap()}),
+                    Err(_) => json!({"error":true}),
+                },
+                "request" => match decode_request_frame(&encode_frame(raw).unwrap()) {
+                    Ok(_) => json!({"valid":true}),
+                    Err(e) => json!({"valid":false,"request_id":e.request_id()}),
+                },
+                "response" => {
+                    let frame = encode_frame(raw).unwrap();
+                    let decoded = decode_response_frame(&frame);
+                    let bound = row.get("request").is_none_or(|r| {
+                        decode_request_frame(&framed(r))
+                            .is_ok_and(|r| decode_response_for_request(&frame, &r).is_ok())
+                    });
+                    json!({"valid":decoded.is_ok(),"bound":bound})
+                }
+                _ => panic!("invalid oracle mode"),
+            }
+        })
+        .collect();
+    println!("ORACLE_JSON={}", serde_json::to_string(&out).unwrap());
 }

@@ -1,10 +1,13 @@
+use crate::error::{BrokerError, CryptoError};
+use crate::protocol::{
+    SCHEMA_ID, check_digest, digest_value, digest_without, valid_timestamp, validate_digest,
+    validate_request_id, validate_tree,
+};
+use hmac::{Hmac, KeyInit, Mac};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sha2::{Digest, Sha256};
-
-use crate::error::CryptoError;
-
-pub const MAX_HMAC_KEY_BYTES: usize = 128;
-pub const MAX_DOMAIN_BYTES: usize = 64;
-
+use zeroize::Zeroize;
 pub fn sha256_digest(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -36,85 +39,294 @@ pub fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     difference == 0
 }
 
+pub struct HolderKey([u8; 32]);
+impl HolderKey {
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+impl std::fmt::Debug for HolderKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HolderKey([REDACTED])")
+    }
+}
+impl Drop for HolderKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+// A source-only client primitive; entropy is not authorization evidence.
+pub fn new_request_id() -> Result<String, CryptoError> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|_| CryptoError::InvalidKey)?;
+    Ok(hex_encode(&bytes))
+}
 pub fn hmac_sha256(key: &[u8], message: &[u8]) -> Result<[u8; 32], CryptoError> {
-    if key.is_empty() || key.len() > MAX_HMAC_KEY_BYTES {
+    if key.len() != 32 {
         return Err(CryptoError::InvalidKey);
     }
-
-    let mut block = [0u8; 64];
-    if key.len() > block.len() {
-        block[..32].copy_from_slice(&sha256_digest(key));
-    } else {
-        block[..key.len()].copy_from_slice(key);
-    }
-
-    let mut inner = [0u8; 64];
-    let mut outer = [0u8; 64];
-    for index in 0..64 {
-        inner[index] = block[index] ^ 0x36;
-        outer[index] = block[index] ^ 0x5c;
-    }
-
-    let mut inner_hasher = Sha256::new();
-    inner_hasher.update(inner);
-    inner_hasher.update(message);
-    let inner_digest = inner_hasher.finalize();
-
-    let mut outer_hasher = Sha256::new();
-    outer_hasher.update(outer);
-    outer_hasher.update(inner_digest);
-    Ok(outer_hasher.finalize().into())
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
+    mac.update(message);
+    Ok(mac.finalize().into_bytes().into())
 }
-
 pub fn hmac_sha256_hex(key: &[u8], message: &[u8]) -> Result<String, CryptoError> {
     Ok(hex_encode(&hmac_sha256(key, message)?))
 }
-
 pub fn verify_hmac_sha256_hex(
     key: &[u8],
     message: &[u8],
-    expected_hex: &str,
+    expected: &str,
 ) -> Result<bool, CryptoError> {
-    let expected = decode_hex(expected_hex);
-    if expected.len() != 32 {
+    if key.len() != 32 {
+        return Err(CryptoError::InvalidKey);
+    }
+    let Some(bytes) = decode_digest(expected) else {
         return Ok(false);
-    }
-    Ok(constant_time_eq(&hmac_sha256(key, message)?, &expected))
+    };
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
+    mac.update(message);
+    Ok(mac.verify_slice(&bytes).is_ok())
 }
-
-pub fn domain_separated_digest(domain: &str, payload: &[u8]) -> Result<String, CryptoError> {
-    if domain.is_empty()
-        || domain.len() > MAX_DOMAIN_BYTES
-        || !domain
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
-    {
-        return Err(CryptoError::InvalidDomain);
+fn decode_digest(s: &str) -> Option<[u8; 32]> {
+    if validate_digest(s).is_err() {
+        return None;
     }
-    let mut input = Vec::with_capacity(32 + domain.len() + payload.len() + 2);
-    input.extend_from_slice(b"toolkit.github-program.broker.v1\0");
-    input.extend_from_slice(domain.as_bytes());
-    input.push(0);
-    input.extend_from_slice(payload);
-    Ok(sha256_hex(&input))
+    let digit = |b: u8| if b <= b'9' { b - b'0' } else { b - b'a' + 10 };
+    let mut out = [0u8; 32];
+    for (i, pair) in s.as_bytes().as_chunks::<2>().0.iter().enumerate() {
+        out[i] = digit(pair[0]) * 16 + digit(pair[1]);
+    }
+    Some(out)
 }
-
-fn decode_hex(value: &str) -> Vec<u8> {
-    if !value.len().is_multiple_of(2) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Vec::new();
-    }
-    value
-        .as_bytes()
-        .chunks(2)
-        .map(|pair| (hex_value(pair[0]) << 4) | hex_value(pair[1]))
-        .collect()
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HolderAttestation {
+    pub schema: String,
+    pub attestation_id: String,
+    pub algorithm: String,
+    pub key_id: String,
+    pub platform: String,
+    pub repository: String,
+    pub parent_issue: u64,
+    pub child_issue: u64,
+    pub lock: String,
+    pub allocation_id: String,
+    pub allocation_digest: String,
+    pub run_id: String,
+    pub run_digest: String,
+    pub lease_id: String,
+    pub fence_id: String,
+    pub fence_sequence: u64,
+    pub authority_digest: String,
+    pub start_digest: String,
+    pub broker_identity_digest: String,
+    pub process_id_digest: String,
+    pub process_start_digest: String,
+    pub boot_id_digest: String,
+    pub pid_namespace_digest: String,
+    pub process_incarnation_digest: String,
+    pub lease_issued_at: String,
+    pub lease_expires_at: String,
+    pub attestation_digest: String,
+    pub attestation_tag: String,
 }
-
-fn hex_value(byte: u8) -> u8 {
-    match byte {
-        b'0'..=b'9' => byte - b'0',
-        b'a'..=b'f' => byte - b'a' + 10,
-        b'A'..=b'F' => byte - b'A' + 10,
-        _ => 0,
+fn invalid() -> BrokerError {
+    BrokerError::InvalidValue
+}
+fn ensure(b: bool) -> Result<(), BrokerError> {
+    if b { Ok(()) } else { Err(invalid()) }
+}
+fn platform(s: &str) -> Result<(), BrokerError> {
+    ensure(matches!(s, "windows" | "linux"))
+}
+fn identity_text(s: &str) -> Result<(), BrokerError> {
+    ensure(!s.is_empty() && s.len() <= 4096 && !s.chars().any(char::is_control))
+}
+impl HolderAttestation {
+    pub fn validate(&self) -> Result<(), BrokerError> {
+        platform(&self.platform)?;
+        validate_request_id(&self.key_id)?;
+        ensure(
+            self.schema == "toolkit.github-program.holder-attestation.v1"
+                && self.algorithm == "HMAC-SHA-256",
+        )?;
+        ensure(
+            valid_timestamp(&self.lease_issued_at)
+                && valid_timestamp(&self.lease_expires_at)
+                && self.lease_expires_at > self.lease_issued_at,
+        )?;
+        for s in [
+            &self.attestation_id,
+            &self.lock,
+            &self.allocation_id,
+            &self.run_id,
+            &self.lease_id,
+            &self.fence_id,
+        ] {
+            ensure(
+                s.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
+                    && !s.contains('/')
+                    && !s.contains(".."),
+            )?;
+        }
+        validate_tree(&serde_json::to_value(self).map_err(|_| invalid())?)
     }
+}
+fn holder_payload(a: &HolderAttestation) -> Result<Vec<u8>, BrokerError> {
+    a.validate()?;
+    let mut v = serde_json::to_value(a).map_err(|_| invalid())?;
+    let o = v.as_object_mut().ok_or_else(invalid)?;
+    o.remove("attestation_tag");
+    o.remove("attestation_digest");
+    let mut bytes = b"toolkit.github-program.holder-attestation-tag.v1\0".to_vec();
+    bytes.extend(crate::canonical::canonical_serde_bytes(&v).map_err(|_| invalid())?);
+    Ok(bytes)
+}
+pub fn holder_tag(a: &HolderAttestation, key: &HolderKey) -> Result<String, BrokerError> {
+    hmac_sha256_hex(&key.0, &holder_payload(a)?).map_err(|_| invalid())
+}
+pub fn holder_attestation_digest(a: &HolderAttestation) -> Result<String, BrokerError> {
+    a.validate()?;
+    digest_without(
+        &serde_json::to_value(a).map_err(|_| invalid())?,
+        &["attestation_digest"],
+    )
+}
+pub fn sign_holder_attestation(
+    mut a: HolderAttestation,
+    key: &HolderKey,
+) -> Result<HolderAttestation, BrokerError> {
+    a.attestation_tag = holder_tag(&a, key)?;
+    a.attestation_digest = holder_attestation_digest(&a)?;
+    Ok(a)
+}
+pub fn verify_holder_attestation(
+    a: &HolderAttestation,
+    key: &HolderKey,
+) -> Result<(), BrokerError> {
+    ensure(
+        verify_hmac_sha256_hex(&key.0, &holder_payload(a)?, &a.attestation_tag)
+            .map_err(|_| invalid())?,
+    )?;
+    check_digest(&a.attestation_digest, &holder_attestation_digest(a)?)
+}
+pub fn broker_identity_digest(
+    p: &str,
+    executable_sha256: &str,
+    service_identity: &str,
+) -> Result<String, BrokerError> {
+    platform(p)?;
+    validate_digest(executable_sha256)?;
+    identity_text(service_identity)?;
+    digest_value(
+        &json!({"schema":"toolkit.github-program.broker-identity.v1","platform":p,"protocol":SCHEMA_ID,"executable_sha256":executable_sha256,"service_identity":service_identity}),
+    )
+}
+pub fn windows_principal_digest(sid: &str) -> Result<String, BrokerError> {
+    let parts: Vec<_> = sid.split('-').collect();
+    ensure(
+        parts.len() >= 4
+            && parts[0] == "S"
+            && parts[1] == "1"
+            && parts[2..].iter().all(|p| {
+                !p.is_empty()
+                    && p.bytes().all(|b| b.is_ascii_digit())
+                    && (p.len() == 1 || !p.starts_with('0'))
+            }),
+    )?;
+    digest_value(&json!([
+        "toolkit.github-program.principal.v1",
+        "windows",
+        sid
+    ]))
+}
+pub fn linux_principal_digest(machine_id: &str, uid: u64) -> Result<String, BrokerError> {
+    validate_request_id(machine_id)?;
+    // UID is a bounded kernel uid_t; canonical native counters elsewhere use strings.
+    ensure(uid <= u32::MAX as u64)?;
+    digest_value(
+        &json!(["toolkit.github-program.principal.v1","linux",{"machine_id":machine_id,"uid":uid.to_string()}]),
+    )
+}
+pub fn process_identity_digest(p: &str, pid: u64) -> Result<String, BrokerError> {
+    platform(p)?;
+    ensure(pid > 0)?;
+    digest_value(&json!([
+        "toolkit.github-program.process-id.v1",
+        p,
+        pid.to_string()
+    ]))
+}
+pub fn process_start_identity_digest(
+    p: &str,
+    process_id_digest: &str,
+    start: u64,
+) -> Result<String, BrokerError> {
+    platform(p)?;
+    validate_digest(process_id_digest)?;
+    digest_value(
+        &json!({"schema":"toolkit.github-program.process-start-identity.v1","platform":p,"process_id_digest":process_id_digest,"process_start":start.to_string()}),
+    )
+}
+pub fn boot_identity_digest(p: &str, boot: &str) -> Result<String, BrokerError> {
+    platform(p)?;
+    identity_text(boot)?;
+    digest_value(&json!(["toolkit.github-program.boot-identity.v1", p, boot]))
+}
+pub fn pid_namespace_identity_digest(p: &str, ns: &str) -> Result<String, BrokerError> {
+    platform(p)?;
+    identity_text(ns)?;
+    digest_value(&json!([
+        "toolkit.github-program.pid-namespace-identity.v1",
+        p,
+        ns
+    ]))
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessIncarnation {
+    pub platform: String,
+    pub principal_digest: String,
+    pub process_id_digest: String,
+    pub process_start_digest: String,
+    pub boot_id_digest: String,
+    pub pid_namespace_digest: String,
+    pub session_peer_scope: String,
+}
+pub fn process_incarnation_digest(v: &ProcessIncarnation) -> Result<String, BrokerError> {
+    platform(&v.platform)?;
+    identity_text(&v.session_peer_scope)?;
+    for d in [
+        &v.principal_digest,
+        &v.process_id_digest,
+        &v.process_start_digest,
+        &v.boot_id_digest,
+        &v.pid_namespace_digest,
+    ] {
+        validate_digest(d)?;
+    }
+    let mut out = serde_json::to_value(v).map_err(|_| invalid())?;
+    out.as_object_mut().ok_or_else(invalid)?.insert(
+        "schema".into(),
+        json!("toolkit.github-program.process-incarnation.v1"),
+    );
+    digest_value(&out)
+}
+pub fn store_binding_identity_digest(namespace: &str, store: &str) -> Result<String, BrokerError> {
+    validate_digest(namespace)?;
+    validate_digest(store)?;
+    digest_value(&json!([
+        "toolkit.github-program.store-binding.v1",
+        namespace,
+        store
+    ]))
+}
+pub fn path_binding_identity_digest(store: &str, path: &str) -> Result<String, BrokerError> {
+    validate_digest(store)?;
+    validate_digest(path)?;
+    digest_value(&json!([
+        "toolkit.github-program.path-binding.v1",
+        store,
+        path
+    ]))
 }

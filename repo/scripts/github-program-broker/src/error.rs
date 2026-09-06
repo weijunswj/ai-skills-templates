@@ -23,22 +23,22 @@ pub enum BrokerError {
 impl BrokerError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::InvalidSchema => "BROKER_SCHEMA_INVALID",
-            Self::InvalidRequestId => "BROKER_REQUEST_ID_INVALID",
-            Self::InvalidOperation => "BROKER_OPERATION_INVALID",
-            Self::InvalidRequest => "BROKER_REQUEST_INVALID",
-            Self::InvalidResponse => "BROKER_RESPONSE_INVALID",
-            Self::RequestIdMismatch => "BROKER_REQUEST_ID_MISMATCH",
-            Self::ResultOperationMismatch => "BROKER_RESULT_OPERATION_MISMATCH",
-            Self::ResultValueKindMismatch => "BROKER_RESULT_VALUE_KIND_MISMATCH",
-            Self::ResultDigestMismatch => "BROKER_RESULT_DIGEST_MISMATCH",
-            Self::InvalidValue => "BROKER_VALUE_INVALID",
-            Self::InvalidDigest => "BROKER_DIGEST_INVALID",
-            Self::InvalidIdentifier => "BROKER_IDENTIFIER_INVALID",
-            Self::InvalidKey => "BROKER_KEY_INVALID",
-            Self::InvalidTarget => "BROKER_TARGET_INVALID",
-            Self::InvalidDomain => "BROKER_DOMAIN_INVALID",
-            Self::InvalidMac => "BROKER_MAC_INVALID",
+            Self::InvalidSchema => "BROKER_UNSUPPORTED_SCHEMA",
+            Self::InvalidRequestId => "BROKER_INVALID_FIELD",
+            Self::InvalidOperation => "BROKER_UNSUPPORTED_OPERATION",
+            Self::InvalidRequest => "BROKER_INVALID_FIELD",
+            Self::InvalidResponse => "BROKER_INVALID_FIELD",
+            Self::RequestIdMismatch => "BROKER_INVALID_FIELD",
+            Self::ResultOperationMismatch => "BROKER_INVALID_FIELD",
+            Self::ResultValueKindMismatch => "BROKER_INVALID_FIELD",
+            Self::ResultDigestMismatch => "BROKER_INVALID_FIELD",
+            Self::InvalidValue => "BROKER_INVALID_FIELD",
+            Self::InvalidDigest => "BROKER_INVALID_FIELD",
+            Self::InvalidIdentifier => "BROKER_INVALID_FIELD",
+            Self::InvalidKey => "BROKER_INVALID_FIELD",
+            Self::InvalidTarget => "BROKER_INVALID_FIELD",
+            Self::InvalidDomain => "BROKER_INVALID_FIELD",
+            Self::InvalidMac => "BROKER_INVALID_FIELD",
         }
     }
 }
@@ -65,23 +65,29 @@ pub enum DecodeErrorKind {
     ConversionFailed,
     NestedDecodeFailed,
     SemanticInvalid,
+    LimitViolation,
+    UnsupportedSchema,
+    UnsupportedOperation,
 }
 
 impl DecodeErrorKind {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::FrameTooShort => "BROKER_FRAME_TOO_SHORT",
-            Self::FrameOversized => "BROKER_FRAME_OVERSIZED",
-            Self::FrameTruncated => "BROKER_FRAME_TRUNCATED",
-            Self::InvalidUtf8 => "BROKER_UTF8_INVALID",
-            Self::MalformedJson => "BROKER_JSON_INVALID",
-            Self::DuplicateKey => "BROKER_DUPLICATE_KEY",
-            Self::NonCanonicalJson => "BROKER_JSON_NONCANONICAL",
-            Self::MissingRequestId => "BROKER_REQUEST_ID_MISSING",
-            Self::InvalidRequestId => "BROKER_REQUEST_ID_INVALID",
-            Self::ConversionFailed => "BROKER_CONVERSION_FAILED",
-            Self::NestedDecodeFailed => "BROKER_NESTED_DECODE_FAILED",
-            Self::SemanticInvalid => "BROKER_SEMANTIC_INVALID",
+            Self::FrameTooShort => "BROKER_MALFORMED_FRAME",
+            Self::FrameOversized => "BROKER_LIMIT_VIOLATION",
+            Self::FrameTruncated => "BROKER_MALFORMED_FRAME",
+            Self::InvalidUtf8 => "BROKER_MALFORMED_REQUEST",
+            Self::MalformedJson => "BROKER_MALFORMED_REQUEST",
+            Self::DuplicateKey => "BROKER_MALFORMED_REQUEST",
+            Self::NonCanonicalJson => "BROKER_MALFORMED_REQUEST",
+            Self::MissingRequestId => "BROKER_INVALID_FIELD",
+            Self::InvalidRequestId => "BROKER_INVALID_FIELD",
+            Self::ConversionFailed => "BROKER_INVALID_FIELD",
+            Self::NestedDecodeFailed => "BROKER_INVALID_FIELD",
+            Self::SemanticInvalid => "BROKER_INVALID_FIELD",
+            Self::LimitViolation => "BROKER_LIMIT_VIOLATION",
+            Self::UnsupportedSchema => "BROKER_UNSUPPORTED_SCHEMA",
+            Self::UnsupportedOperation => "BROKER_UNSUPPORTED_OPERATION",
         }
     }
 }
@@ -133,18 +139,20 @@ pub enum CanonicalError {
     LoneSurrogate,
     NumberInvalid,
     ValueInvalid,
+    LimitViolation,
 }
 
 impl CanonicalError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::InvalidUtf8 => "BROKER_UTF8_INVALID",
-            Self::Malformed => "BROKER_JSON_INVALID",
-            Self::DuplicateKey => "BROKER_DUPLICATE_KEY",
-            Self::NonCanonical => "BROKER_JSON_NONCANONICAL",
-            Self::LoneSurrogate => "BROKER_SURROGATE_INVALID",
-            Self::NumberInvalid => "BROKER_NUMBER_INVALID",
-            Self::ValueInvalid => "BROKER_VALUE_INVALID",
+            Self::InvalidUtf8 => "BROKER_MALFORMED_REQUEST",
+            Self::Malformed => "BROKER_MALFORMED_REQUEST",
+            Self::DuplicateKey => "BROKER_MALFORMED_REQUEST",
+            Self::NonCanonical => "BROKER_MALFORMED_REQUEST",
+            Self::LoneSurrogate => "BROKER_INVALID_FIELD",
+            Self::NumberInvalid => "BROKER_INVALID_FIELD",
+            Self::ValueInvalid => "BROKER_INVALID_FIELD",
+            Self::LimitViolation => "BROKER_LIMIT_VIOLATION",
         }
     }
 }
@@ -166,8 +174,8 @@ pub enum CryptoError {
 impl fmt::Display for CryptoError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::InvalidKey => "BROKER_KEY_INVALID",
-            Self::InvalidDomain => "BROKER_DOMAIN_INVALID",
+            Self::InvalidKey => "BROKER_INVALID_FIELD",
+            Self::InvalidDomain => "BROKER_INVALID_FIELD",
         })
     }
 }
