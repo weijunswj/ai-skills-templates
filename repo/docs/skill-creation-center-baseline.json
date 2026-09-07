@@ -74,11 +74,11 @@
     "github-program-reconciler": {
       "public_id": "github-program-reconciler",
       "public_name": "GitHub Program Reconciler",
-      "existing_skill_review": "Reviewed github-program-reconciler against current governance, capability, execution-loop, assurance, GitHub, review, and publication surfaces; no other current product owns the combined current-main N5 parent-state and truthful PR-review reconciliation contract.",
+      "existing_skill_review": "Reviewed github-program-reconciler against current governance, capability, execution-loop, assurance, GitHub, review, publication, and accepted v5 bootstrap-recovery surfaces; no other current product owns the combined canonical programme controller boundary.",
       "native_capability_review": "GitHub APIs and CLI expose issues, relationships, reviews, and comments but do not enforce the Toolkit's repository binding, deterministic queue, byte-preservation, exact-head evidence, or controller-owned disposition rules.",
-      "trigger": "Use only when the user explicitly requests governed GitHub parent/direct-child inspection, preview, validation, reconciliation, review inventory, finding disposition evidence, or Deferred Findings handling for a repository-scoped current-main task.",
+      "trigger": "Use only when the user explicitly requests governed GitHub parent/direct-child inspection, accepted v5 canonical programme/bootstrap recovery, preview, validation, reconciliation, review inventory, finding disposition evidence, or Deferred Findings handling for a repository-scoped current-main task.",
       "positive_routing_examples": [
-        "Inspect and preview reconciliation of this repository's N5 programme parent and direct children.",
+        "Inspect and preview recovery of this repository's v5 canonical programme and bootstrap.",
         "Validate the exact-head PR review inventory and Deferred Findings evidence without mutating GitHub.",
         "Reconcile current-main programme state against its governed parent, direct children, and exact-head review evidence."
       ],
@@ -87,23 +87,23 @@
         "Mark a pull request Ready, resolve review threads, or merge it as part of ordinary implementation.",
         "Read one pull request's checks and comments without any governed parent-child programme or Deferred Findings scope."
       ],
-      "overlap_boundary": "Use ordinary GitHub inspection tools for ungoverned metadata reads and Web/controller authority for finality; this product owns only the explicit N5 governance and truthful-review contract.",
+      "overlap_boundary": "Use ordinary GitHub inspection tools for ungoverned metadata reads and Web/controller authority for finality; this product owns only the explicit v5 canonical programme/bootstrap and N5 compatibility contract.",
       "invocation_mode": "explicit",
       "invocation_mode_reason": "Packaged metadata keeps this product explicit-only because its broad or externally sensitive work requires deliberate routing and separate action authority.",
       "decision": "new_product",
       "decision_reason": "The deterministic current-main programme and review-evidence boundary is distinct from generic GitHub inspection or executor implementation.",
-      "unique_value": "Prevents Markdown improvisation, duplicate queues, empty review inventories, executor-owned review mutation, and silent Deferred Findings promotion.",
-      "runtime_footprint": "One local deterministic runtime, compact policy/schema/grammar, three templates, focused tests, and no provider client, workflow, credential, or live-service dependency.",
-      "local_assets": "Canonical skill plus first-party contracts, templates, policy, grammar, local runtime, and focused boundary and regression tests.",
-      "output_contract": "Return inspect, preview, validate, reconcile, show, or remove evidence with repository binding, lifecycle uniqueness, byte preservation, exact identity, truthful review inventory, finding status, failures, and one next action.",
-      "anti_bloat_review": "Rejects generic Web-controller stages, timer history, automatic issue creation, competing queues, model reconstruction of bodies, review-thread mutation by executors, and unrelated authority redesign.",
-      "safety_boundary": "Inspection and preview are read-only. GitHub mutation requires repository identity, governance consent, accepted preview, and mutation authority; review-thread disposition, Ready, merge, cleanup, and finality remain controller-owned.",
+      "unique_value": "Prevents Markdown improvisation, duplicate queues and receipt runtimes, bootstrap drift, empty review inventories, executor-owned review mutation, and silent Deferred Findings promotion.",
+      "runtime_footprint": "One shared public facade with allowlisted v4 predecessor and v5 state modules, compact contracts and focused tests, and no provider client, workflow, credential, or live-service dependency.",
+      "local_assets": "Canonical skill plus first-party v4/v5 contracts, bootstrap contract, policy, grammar, shared facade, state runtimes, and focused recovery tests.",
+      "output_contract": "Return inspect, preview, validate, reconcile, show, or remove evidence with repository and parent binding, lifecycle uniqueness, byte preservation, exact candidate identity, trusted scopes, receipt separation, truthful review inventory, finding status, and one next action.",
+      "anti_bloat_review": "Rejects a second programme facade or receipt runtime, generic Web-controller stages, timer history, automatic issue creation, competing queues, model reconstruction of bodies, review-thread mutation by executors, and unrelated authority redesign.",
+      "safety_boundary": "Inspection and preview are read-only. Programme Apply, bootstrap-file Apply, managed body/label/relationship writes, and receipt persistence require separate authority; review-thread disposition, Ready, merge, cleanup, and finality remain controller-owned.",
       "canonical_ownership": "Direct-canonical maintenance: skills/github-program-reconciler/ owns the portable product; coupled contracts, policy, provenance, validation, and tests are maintained under canonical repo/** paths.",
       "source_provenance": "first_party",
       "third_party_audit": "Not applicable first-party material; no provider documentation, workflow JSON, MCP instruction, third-party skill text, or code is copied.",
       "validation": [
         "node repo/scripts/validate-toolkit.cjs",
-        "node --test repo/tests/toolkit-github-governance-review-reconciler.test.cjs repo/tests/toolkit-github-governance-review-reconciler.boundaries.test.cjs repo/tests/skill-routing.test.cjs"
+        "node --test repo/tests/toolkit-github-program-state-v4.test.cjs repo/tests/toolkit-github-program-state-v5.test.cjs repo/tests/toolkit-github-programme-bootstrap-recovery.test.cjs repo/tests/toolkit-github-program-reconciler.predecessor-coverage.test.cjs"
       ]
     },
     "local-ai-safety": {

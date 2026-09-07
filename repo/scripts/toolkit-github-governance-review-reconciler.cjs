@@ -3,6 +3,8 @@
 const crypto = require('node:crypto');
 const a1 = require('./toolkit-control-plane/control-plane-kernel.cjs');
 const canonicalA2 = require('./toolkit-capability-registry.cjs');
+const programmeV4 = require('./toolkit-github-program-state-v4.cjs');
+const programmeV5 = require('./toolkit-github-program-state-v5.cjs');
 
 const CONTRACT_VERSION = 'toolkit.n5.github-governance-review-reconciler.v3';
 const REVIEW_INVENTORY_VERSION = 'toolkit.n5.review-inventory.v1';
@@ -1521,6 +1523,22 @@ module.exports = Object.freeze({
   buildReviewInventory, evaluateMateriality, classifyFinding, normalizeFindingEvidence, authorizeReviewMutation, resolveFinding,
   registerDeferredFinding, validateDeferredFindingRecord, revalidateDeferredFinding, projectA4Review, codexReviewState, autoCodeReadiness, adjudicateHistoricalPr310,
   findingEvidenceDigest, deferredRootDigest, reviewEvidenceDigest, durableEvidenceDigest, normalizeDurableEvidence, parseLegacyParent, rejectHistoricalRevival, nextAction, createRuntime,
+  programmeV4, programmeV5,
+  validateCanonicalStateV4: programmeV4.validateCanonicalStateV4,
+  validateCanonicalStateV5: programmeV5.validateCanonicalStateV5,
+  deriveProjectionV5: programmeV5.deriveProjectionV5,
+  renderProgrammeV5: programmeV5.renderProgrammeV5,
+  buildBootstrap: programmeV5.buildBootstrap,
+  validateControllerBootstrap: programmeV5.validateControllerBootstrap,
+  migrateV4ToV5: programmeV5.migrateV4ToV5,
+  buildMigrationPreviewV5: programmeV5.buildMigrationPreviewV5,
+  buildConvergencePreviewV5: programmeV5.buildConvergencePreviewV5,
+  buildPreviewV5: programmeV5.buildPreviewV5,
+  validateManagedEventV3: programmeV5.validateManagedEventV3,
+  validateManagedEventInventoryV5: programmeV5.validateManagedEventInventoryV5,
+  validateProgrammeOperations: programmeV5.validateProgrammeOperations,
+  validateReceiptObject: programmeV5.validateReceiptObject,
+  createProgrammeRuntimeV5: programmeV5.createProgrammeRuntimeV5,
 });
 function representedPrNumbers(state) {
   const values = [];

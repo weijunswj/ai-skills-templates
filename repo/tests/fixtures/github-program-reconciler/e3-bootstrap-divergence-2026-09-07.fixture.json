@@ -1,0 +1,10 @@
+{
+  "repository": "weijunswj/ai-agent-toolkit",
+  "parent_issue": 240,
+  "version": "2.11.0",
+  "unknown_major": "3.0.0",
+  "wrong_repository": "weijunswj/other-repository",
+  "wrong_parent_issue": 359,
+  "stale_revision": "1111111111111111111111111111111111111111",
+  "wrong_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}
