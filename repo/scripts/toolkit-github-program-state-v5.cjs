@@ -287,6 +287,11 @@ function validateCanonicalStateV5(state) {
       || child.finality.authority_ref !== null && !evidenceIds.has(child.finality.authority_ref)
       || !validateEpochs(child, state) || !validateChildHolds(child, evidenceIds)) return fail('canonical-child-shape', { child: child?.issue });
     if (child.finality.authority_ref !== null && !evidenceIsWeb(state, child.finality.authority_ref)) return fail('finality-web-authority-required', { child: child.issue });
+    const epochsTerminal = child.epochs.every((epoch) => ['ACCEPTED', 'RETIRED'].includes(epoch.terminal_disposition));
+    if (child.lifecycle === 'COMPLETED' && (!epochsTerminal || blockingHolds(child).length
+      || child.finality.state === 'HELD' || child.finality.authority_ref === null)) {
+      return fail('completed-child-finality-incomplete', { child: child.issue });
+    }
     const epochIds = new Set(child.epochs.map((epoch) => epoch.id));
     if (!validateRegistry(child, evidenceIds, epochIds, activeRegistryPrs)) return fail('canonical-registry-shape', { child: child.issue });
     childIssues.add(child.issue);
@@ -900,6 +905,11 @@ function validateTrustedPrInspectionV5(state, grant, inspection) {
       if (fact.lifecycle === 'OPEN_DRAFT') {
         if (entry.role !== 'INTERMEDIATE' && !(entry.role === 'TERMINAL' && !entry.completes_child)) return fail('active-draft-role-invalid', { pr: fact.number });
       } else if (fact.lifecycle === 'OPEN_READY') {
+        const intermediatePresentation = entry.role === 'INTERMEDIATE' && entry.completes_child === false;
+        if (intermediatePresentation) {
+          if (binding.child.finality.state !== 'HELD' || binding.child.finality.authority_ref !== null) return fail('intermediate-ready-finality-forbidden', { pr: fact.number });
+          continue;
+        }
         const allEpochsAccepted = binding.child.epochs.every((epoch) => epoch.terminal_disposition === 'ACCEPTED');
         if (entry.role !== 'TERMINAL' || !entry.completes_child || !allEpochsAccepted
           || blockingHolds(binding.child).length || binding.child.finality.state !== 'READY_AUTHORIZED'
@@ -1087,6 +1097,7 @@ function validateReceiptObject(receipt, expected = {}) {
   } catch (error) {
     return receiptFailure(error);
   }
+  if (receipt.receipt_type === 'RUN_STARTED' && receipt.payload.classification !== 'RUN_STARTED_VERIFIED') return fail('canonical-started-receipt-required');
   const mismatches = [
     ['repository', expected.repository, receipt.repository, 'receipt-repository-binding-mismatch'],
     ['parent_issue', expected.parent_issue, receipt.parent_issue, 'receipt-parent-binding-mismatch'],
@@ -1114,6 +1125,14 @@ function validateRunReceiptChain(receiptList, expected = {}) {
   for (const receipt of receiptList) {
     const valid = validateReceiptObject(receipt, expected);
     if (!valid.ok) return valid;
+  }
+  const started = receiptList[0];
+  if (started.receipt_type !== 'RUN_STARTED' || started.sequence !== 1 || started.prior_receipt_id !== null
+    || started.candidate !== null || started.payload.classification !== 'RUN_STARTED_VERIFIED') return fail('canonical-started-receipt-required');
+  for (let index = 1; index < receiptList.length; index += 1) {
+    if (receiptList[index].run_id !== started.run_id || receiptList[index].allocation_id !== started.allocation_id
+      || receiptList[index].sequence !== receiptList[index - 1].sequence + 1
+      || receiptList[index].prior_receipt_id !== receiptList[index - 1].receipt_id) return fail('run-receipt-chain-invalid');
   }
   try {
     const chain = receipts.validateReceiptChain(receiptList);
@@ -1151,9 +1170,29 @@ function validateReceiptConsumption(event, receiptList, expected = {}) {
   });
 }
 
+function validateRetainedReceiptBindings(events, receiptList, expected = {}) {
+  const claimed = (events || []).filter((event) => event?.schema === MANAGED_EVENT_SCHEMA
+    && Array.isArray(event.consumed_receipt_ids) && event.consumed_receipt_ids.length);
+  if (!claimed.length) return ok('RETAINED_RECEIPT_BINDINGS_NOT_CLAIMED');
+  if (!Array.isArray(receiptList)) return fail('receipt-inventory-not-durable');
+  for (const event of claimed) {
+    const receipt = receiptList.find((entry) => entry.receipt_id === event.receipt_id);
+    if (!receipt) return fail('receipt-not-persisted', { receipt_id: event.receipt_id });
+    const runChain = receiptList.filter((entry) => entry.run_id === receipt.run_id);
+    const chain = validateRunReceiptChain(runChain, { repository: expected.repository, parent_issue: expected.parent_issue });
+    if (!chain.ok) return chain;
+    const consumption = validateReceiptConsumption(event, chain.receipts, {
+      repository: expected.repository, parent_issue: expected.parent_issue,
+    });
+    if (!consumption.ok) return consumption;
+  }
+  return ok('RETAINED_RECEIPT_BINDINGS_VALID', { receipt_inventory_digest: receiptInventoryDigest(receiptList.map((receipt) => receipt.receipt_id)) });
+}
+
 function validateManagedEventInventoryV5(events, repository, options = {}) {
   if (!Array.isArray(events) || events.length > 500) return fail('managed-event-inventory-invalid');
   const normalized = [];
+  const legacyPrefix = [];
   const ids = new Set();
   let v3Started = false;
   for (const supplied of events) {
@@ -1162,21 +1201,30 @@ function validateManagedEventInventoryV5(events, repository, options = {}) {
       result = validateManagedEventV3(supplied, { repository });
       v3Started = true;
     } else if (supplied?.schema === 'toolkit.github-program.managed-event.v2' || supplied?.schema === 'toolkit.github-program.managed-event.v1') {
-      const legacy = v4.validateManagedEventInventoryV4([supplied], repository);
-      result = legacy.ok ? ok('LEGACY_MANAGED_EVENT_RETAINED', { event: legacy.events[0] }) : legacy;
+      if (v3Started) return fail('managed-event-order-invalid');
+      legacyPrefix.push(clone(supplied));
+      const legacy = v4.validateManagedEventInventoryV4(legacyPrefix, repository);
+      result = legacy.ok ? ok('LEGACY_MANAGED_EVENT_RETAINED', { event: clone(supplied) }) : legacy;
     } else {
       return fail('managed-event-inventory-invalid');
     }
     if (!result.ok || result.event.repository !== repository || ids.has(result.event.event_id)) return fail('managed-event-inventory-invalid');
+    const retained = supplied?.schema === MANAGED_EVENT_SCHEMA ? clone(result.event) : clone(supplied);
     const prior = normalized.at(-1)?.event_id || null;
-    if (result.event.schema === MANAGED_EVENT_SCHEMA) {
-      if (result.event.prior_event_id !== prior) return fail('managed-event-chain-invalid');
-    } else if (v3Started) {
-      return fail('managed-event-order-invalid');
+    if (retained.schema === MANAGED_EVENT_SCHEMA) {
+      if (retained.prior_event_id !== prior) return fail('managed-event-chain-invalid');
     }
-    ids.add(result.event.event_id);
-    normalized.push(result.event);
+    ids.add(retained.event_id);
+    normalized.push(retained);
   }
+  if (legacyPrefix.length) {
+    const legacy = v4.validateManagedEventInventoryV4(legacyPrefix, repository);
+    if (!legacy.ok) return legacy;
+    if (!legacyPrefix.every((event, index) => event.event_id === legacy.events[index].event_id)) return fail('managed-event-history-rewrite');
+  }
+  const receiptsCheck = options.skip_receipt_bindings === true ? ok('RETAINED_RECEIPT_BINDINGS_SKIPPED')
+    : validateRetainedReceiptBindings(normalized, options.receipts, { repository, parent_issue: options.parent_issue });
+  if (!receiptsCheck.ok) return receiptsCheck;
   return ok('MANAGED_EVENT_INVENTORY_V5_VALID', {
     events: normalized,
     ids,
@@ -1273,6 +1321,41 @@ function validateProgrammeOperations(operations) {
   return ok('PROGRAMME_OPERATION_INVENTORY_VALID', { operation_count: operations.length });
 }
 
+function validateProgrammeOperationIntegrity(operations) {
+  const inventory = validateProgrammeOperations(operations);
+  if (!inventory.ok) return inventory;
+  const allowedBindings = new Set(['required_relationship_operations', 'relationship_capability_digest', 'receipt_inventory_digest']);
+  for (const operation of operations) {
+    if (!isRecord(operation) || !exactKeys(operation, ['kind', 'target', 'before_digest', 'after', 'after_digest', 'operation_id'],
+      ['required_relationship_operations', 'relationship_capability_digest', 'receipt_inventory_digest'])) {
+      return fail('programme-operation-shape-invalid', { operation_id: operation?.operation_id || null });
+    }
+    if (!sha256(operation.before_digest) || !sha256(operation.after_digest) || !sha256(operation.operation_id)
+      || operation.after_digest !== digest(operation.after)) return fail('programme-operation-digest-invalid', { operation_id: operation.operation_id });
+    const unsigned = clone(operation);
+    delete unsigned.operation_id;
+    if (digest(unsigned) !== operation.operation_id) return fail('programme-operation-id-invalid', { operation_id: operation.operation_id });
+    for (const key of Object.keys(operation)) if (['kind', 'target', 'before_digest', 'after', 'after_digest', 'operation_id'].includes(key) === false && !allowedBindings.has(key)) {
+      return fail('programme-operation-binding-invalid', { operation_id: operation.operation_id, key });
+    }
+    if (operation.required_relationship_operations !== undefined
+      && (!arrayOf(operation.required_relationship_operations, safeId, 20)
+        || new Set(operation.required_relationship_operations).size !== operation.required_relationship_operations.length)) {
+      return fail('programme-operation-binding-invalid', { operation_id: operation.operation_id });
+    }
+    if (operation.relationship_capability_digest !== undefined && !sha256(operation.relationship_capability_digest)
+      || operation.receipt_inventory_digest !== undefined && !sha256(operation.receipt_inventory_digest)) {
+      return fail('programme-operation-binding-invalid', { operation_id: operation.operation_id });
+    }
+  }
+  return ok('PROGRAMME_OPERATION_INTEGRITY_VALID', {
+    operation_count: operations.length,
+    operations_digest: digest(operations),
+    operation_binding_digest: operationBindingDigest(operations),
+    ordered_operation_ids: operations.map((operation) => operation.operation_id),
+  });
+}
+
 function validContractPath(value) {
   return typeof value === 'string' && /^(?:repo|\.github)\/[A-Za-z0-9._/-]+$/.test(value) && !value.includes('..');
 }
@@ -1284,9 +1367,20 @@ function validateResolvedToolkitContract(bootstrap, expected = {}) {
       if (requested[key] !== undefined && requested[key] !== pin[key]) return fail('toolkit-contract-' + key + '-mismatch');
     }
   }
-  const supplied = expected.contract_bytes !== undefined ? expected.contract_bytes
-    : expected.toolkit_contract_bytes !== undefined ? expected.toolkit_contract_bytes
-      : expected.resolved_contract;
+  const supplied = expected.resolved_contract !== undefined ? expected.resolved_contract
+    : expected.contract_bytes !== undefined ? expected.contract_bytes
+      : expected.toolkit_contract_bytes;
+  const strict = expected.require_pinned_resolution === true;
+  if (strict && bootstrap.toolkit_contract.revision === BOOTSTRAP_REVISION) return fail('toolkit-contract-resolution-required');
+  const verifyMetadata = (resolved) => {
+    if (!strict) return ok('TOOLKIT_CONTRACT_METADATA_UNCHECKED');
+    if (!isRecord(resolved) || resolved.repository !== bootstrap.toolkit_contract.repository
+      || resolved.revision !== bootstrap.toolkit_contract.revision || resolved.path !== bootstrap.toolkit_contract.path) {
+      return fail('toolkit-contract-resolution-mismatch');
+    }
+    if (resolved.sha256 !== undefined && resolved.sha256 !== bootstrap.toolkit_contract.sha256) return fail('toolkit-contract-digest-mismatch');
+    return ok('TOOLKIT_CONTRACT_METADATA_VERIFIED');
+  };
   const verifyContent = (content) => {
     let actual;
     try {
@@ -1304,16 +1398,23 @@ function validateResolvedToolkitContract(bootstrap, expected = {}) {
     return actual === pin.sha256 ? ok('PINNED_TOOLKIT_CONTRACT_VERIFIED', { contract_digest: actual }) : fail('toolkit-contract-digest-mismatch', { expected: pin.sha256, actual });
   };
   if (supplied !== undefined) {
-    const content = supplied?.bytes === undefined ? supplied?.content === undefined ? supplied : supplied.content : supplied.bytes;
+    const metadata = verifyMetadata(supplied);
+    if (!metadata.ok) return metadata;
+    if (strict && !isRecord(supplied)) return fail('toolkit-contract-resolution-required');
+    const content = !strict
+      ? isRecord(supplied) && (supplied.bytes !== undefined || supplied.content !== undefined || supplied.contract !== undefined)
+        ? supplied.bytes === undefined ? supplied.content === undefined ? supplied.contract : supplied.content : supplied.bytes
+        : supplied
+      : supplied.bytes === undefined ? supplied.content === undefined ? supplied.contract : supplied.content : supplied.bytes;
+    if (content === undefined) return fail('toolkit-contract-resolution-required');
     return verifyContent(content);
   }
   if (typeof expected.resolve_contract === 'function') {
     let resolved;
     try { resolved = expected.resolve_contract(clone(pin)); } catch (_error) { return fail('toolkit-contract-resolution-failed'); }
     if (!resolved) return fail('toolkit-contract-resolution-failed');
-    if (isRecord(resolved) && (resolved.repository !== undefined && resolved.repository !== pin.repository
-      || resolved.revision !== undefined && resolved.revision !== pin.revision
-      || resolved.path !== undefined && resolved.path !== pin.path)) return fail('toolkit-contract-resolution-mismatch');
+    const metadata = verifyMetadata(resolved);
+    if (!metadata.ok) return metadata;
     const content = resolved?.bytes === undefined ? resolved?.content === undefined ? resolved?.contract === undefined ? resolved : resolved.contract : resolved.content : resolved.bytes;
     if (content === undefined) return fail('toolkit-contract-resolution-failed');
     return verifyContent(content);
@@ -1354,6 +1455,7 @@ function resolvePinnedContract(bootstrap, expected = {}) {
   const valid = validateControllerBootstrap(bootstrap, { ...expected, require_pinned_resolution: true });
   if (!valid.ok) return valid;
   return ok('PINNED_CONTRACT_RESOLVED', {
+    bootstrap: clone(bootstrap),
     repository: bootstrap.repository, parent_issue: bootstrap.parent_issue, version: bootstrap.toolkit_package_version,
     profile: bootstrap.profile, toolkit_contract: clone(bootstrap.toolkit_contract),
     contract_digest: bootstrap.toolkit_contract.sha256, programme_state_schema: bootstrap.programme_state_schema,
@@ -1468,6 +1570,22 @@ function materializeBody(currentBody, kind, renderedBody, expected) {
   return ok('MANAGED_BODY_MIGRATED', { body: currentV4.prefix + renderedBody + currentV4.suffix });
 }
 
+function validateMaterializedBodies(bodies) {
+  if (!isRecord(bodies) || typeof bodies.parent !== 'string' || !isRecord(bodies.children) || !isRecord(bodies.prs)) return fail('materialized-body-inventory-invalid');
+  const entries = [['parent', String(0), bodies.parent]];
+  for (const [number, body] of Object.entries(bodies.children)) entries.push(['child', number, body]);
+  for (const [number, body] of Object.entries(bodies.prs)) entries.push(['pr', number, body]);
+  let total = 0;
+  for (const [kind, number, body] of entries) {
+    if (typeof body !== 'string') return fail('materialized-body-inventory-invalid', { kind, number: Number(number) || number });
+    const actual = bytes(body);
+    total += actual;
+    if (actual > BODY_BUDGET_BYTES) return fail('materialized-body-byte-budget-exceeded', { kind, number: Number(number) || number, limit: BODY_BUDGET_BYTES, actual });
+  }
+  if (total > TOTAL_PROJECTION_BUDGET_BYTES) return fail('materialized-body-total-byte-budget-exceeded', { limit: TOTAL_PROJECTION_BUDGET_BYTES, actual: total });
+  return ok('MATERIALIZED_BODY_BUDGETS_VALID', { total_materialized_body_bytes: total });
+}
+
 function expectedNativeRelationshipsV5(state, before = {}) {
   const associations = derivePrAssociationsV5(state);
   if (!associations.ok) return associations;
@@ -1491,61 +1609,94 @@ function validateMigrationInput(snapshot) {
     || !safeLine(snapshot.revision, 256) || !isRecord(snapshot.bodies)
     || !isRecord(snapshot.bodies.children) || !isRecord(snapshot.bodies.prs)
     || !isRecord(snapshot.labels) || !Array.isArray(snapshot.managed_events)
-    || !isRecord(snapshot.native)) return fail('migration-input-incomplete');
+    || !isRecord(snapshot.native) || snapshot.receipts !== undefined && !Array.isArray(snapshot.receipts)) return fail('migration-input-incomplete');
   return ok('MIGRATION_INPUT_VALID');
 }
 
 function receiptContext(input, state, candidate, operationDigestValue, detailDigestValue) {
   const context = input.receipt_context || input;
-  const required = ['authority', 'start', 'lease', 'run_id', 'allocation_id', 'authority_ref'];
-  if (!required.every((key) => context[key] !== undefined && context[key] !== null)) return fail('transition-receipt-context-required');
+  const suppliedChain = context.canonical_started_chain || context.started_chain || context.receipt_chain;
+  if (!Array.isArray(suppliedChain) || suppliedChain.length < 1) return fail('canonical-started-chain-required');
   if (!safeLine(context.authority_ref, 512)) return fail('transition-authority-ref-invalid');
-  const child = state.children.find((entry) => entry.issue === (context.child_issue || state.active_lanes[0]?.child_issue)) || state.children[0];
-  const lane = state.active_lanes.find((entry) => entry.child_issue === child.issue) || state.active_lanes[0] || null;
-  const epoch = child.epochs.find((entry) => entry.id === (context.epoch_id || lane?.epoch_id)) || child.epochs[0];
-  const timestamp = context.created_at || context.receipt_created_at || context.start?.status_at || '2026-09-07T00:00:00.000Z';
-  const common = {
-    run_id: context.run_id,
-    allocation_id: context.allocation_id,
-    repository: state.repository,
-    parent_issue: state.parent.issue,
-    child_issue: context.child_issue || child.issue,
-    lock: context.lock || epoch.lock,
-    authority: clone(context.authority),
-    start: clone(context.start),
-    lease: clone(context.lease),
-    authority_digest: context.authority_digest || digest(context.authority),
-    authority_ref: context.authority_ref,
-    created_at: timestamp,
-  };
-  const started = createRunReceipt({
-    ...common,
-    receipt_type: 'RUN_STARTED',
-    sequence: 1,
-    prior_receipt_id: null,
-    candidate: null,
-    payload: { classification: 'RUN_STARTED', mutation_outcome: 'KNOWN' },
-  });
-  const transition = createRunReceipt({
-    ...common,
-    receipt_type: 'TRANSITION_PREVIEW',
-    sequence: 2,
-    prior_receipt_id: started.receipt_id,
-    candidate,
-    payload: {
-      classification: 'TRANSITION_PREVIEW',
-      detail_digest: detailDigestValue,
-      operation_digest: operationDigestValue,
-      mutation_outcome: 'KNOWN',
-    },
-  });
-  const chain = validateRunReceiptChain([started, transition], {
-    repository: state.repository,
-    parent_issue: state.parent.issue,
+  const chain = validateRunReceiptChain(suppliedChain, {
+    repository: state.repository, parent_issue: state.parent.issue,
   });
   if (!chain.ok) return chain;
+  const started = chain.receipts[0];
+  const prior = chain.receipts.at(-1);
+  if (context.run_id !== undefined && context.run_id !== started.run_id
+    || context.allocation_id !== undefined && context.allocation_id !== started.allocation_id
+    || context.authority !== undefined && !same(context.authority, started.authority)
+    || context.start !== undefined && !same(context.start, started.start)
+    || context.lease !== undefined && !same(context.lease, prior.lease)
+    || context.lock !== undefined && context.lock !== prior.lock) return fail('canonical-started-chain-binding-mismatch');
+  if (TERMINAL_RECEIPT_TYPES.includes(prior.receipt_type)) return fail('canonical-started-chain-terminal');
+  const child = state.children.find((entry) => entry.issue === (context.child_issue || state.active_lanes[0]?.child_issue)) || state.children[0];
+  if (!child || started.child_issue !== child.issue) return fail('canonical-started-chain-child-mismatch');
+  const lane = state.active_lanes.find((entry) => entry.child_issue === child.issue) || state.active_lanes[0] || null;
+  const epoch = child.epochs.find((entry) => entry.id === (context.epoch_id || lane?.epoch_id)) || child.epochs[0];
+  const transitionInput = context.transition_receipt || context.transition;
+  let transition;
+  if (transitionInput !== undefined) {
+    const transitionCheck = validateReceiptObject(transitionInput, {
+      repository: state.repository, parent_issue: state.parent.issue,
+      run_id: started.run_id, allocation_id: started.allocation_id,
+      child_issue: started.child_issue, receipt_type: 'TRANSITION_PREVIEW',
+      sequence: prior.sequence + 1, prior_receipt_id: prior.receipt_id,
+      detail_digest: detailDigestValue, operation_digest: operationDigestValue,
+      candidate,
+    });
+    if (!transitionCheck.ok) return transitionCheck;
+    transition = clone(transitionInput);
+  } else {
+    const timestamp = context.transition_created_at || context.created_at || new Date().toISOString();
+    if (!isoTimestamp(timestamp) || Date.parse(timestamp) < Date.parse(prior.created_at)) return fail('transition-receipt-chronology-invalid');
+    transition = createRunReceipt({
+      receipt_type: 'TRANSITION_PREVIEW', sequence: prior.sequence + 1, prior_receipt_id: prior.receipt_id,
+      run_id: started.run_id, allocation_id: started.allocation_id,
+      repository: state.repository, parent_issue: state.parent.issue, child_issue: started.child_issue,
+      lock: prior.lock, authority: prior.authority, start: prior.start, candidate,
+      lease: prior.lease,
+      payload: {
+        classification: 'TRANSITION_PREVIEW', detail_digest: detailDigestValue,
+        operation_digest: operationDigestValue, mutation_outcome: 'KNOWN',
+      },
+      created_at: timestamp,
+    });
+    const transitionCheck = validateReceiptObject(transition, {
+      repository: state.repository, parent_issue: state.parent.issue,
+      run_id: started.run_id, allocation_id: started.allocation_id,
+      child_issue: started.child_issue, receipt_type: 'TRANSITION_PREVIEW',
+      sequence: prior.sequence + 1, prior_receipt_id: prior.receipt_id,
+      detail_digest: detailDigestValue, operation_digest: operationDigestValue,
+      candidate,
+    });
+    if (!transitionCheck.ok) return transitionCheck;
+  }
+  const fullChain = prior.receipt_id === transition.prior_receipt_id && chain.receipts.at(-1).receipt_id === transition.prior_receipt_id
+    ? [...chain.receipts, transition]
+    : chain.receipts.some((receipt) => receipt.receipt_id === transition.receipt_id)
+      ? chain.receipts
+      : [...chain.receipts, transition];
+  const fullChainCheck = validateRunReceiptChain(fullChain, {
+    repository: state.repository, parent_issue: state.parent.issue,
+  });
+  if (!fullChainCheck.ok) return fullChainCheck;
+  const common = {
+    run_id: started.run_id,
+    allocation_id: started.allocation_id,
+    repository: state.repository,
+    parent_issue: state.parent.issue,
+    child_issue: started.child_issue,
+    lock: prior.lock || epoch.lock,
+    authority: clone(started.authority),
+    start: clone(started.start),
+    lease: clone(prior.lease),
+    authority_digest: context.authority_digest || digest(started.authority),
+    authority_ref: context.authority_ref,
+  };
   return ok('TRANSITION_RECEIPTS_BUILT', {
-    receipts: [started, transition],
+    receipts: fullChainCheck.receipts,
     started,
     transition,
     child_issue: common.child_issue,
@@ -1593,7 +1744,9 @@ function buildMigrationPreviewV5(input = {}) {
   if (!source.ok) return source;
   const bodyCheck = parseV4Bodies(snapshot, source.state);
   if (!bodyCheck.ok) return fail('v4-body-inventory-invalid', { detail: bodyCheck.reason });
-  const currentEvents = v4.validateManagedEventInventoryV4(snapshot.managed_events, snapshot.repository);
+  const currentEvents = validateManagedEventInventoryV5(snapshot.managed_events, snapshot.repository, {
+    parent_issue: parentIssue, receipts: snapshot.receipts,
+  });
   if (!currentEvents.ok) return currentEvents;
   const migrated = migrateV4ToV5(source.state, {
     authority_ref: input.authority_ref,
@@ -1631,6 +1784,8 @@ function buildMigrationPreviewV5(input = {}) {
     if (!materialized.ok) return materialized;
     bodies.prs[String(pr.number)] = materialized.body;
   }
+  const materializedBodies = validateMaterializedBodies(bodies);
+  if (!materializedBodies.ok) return materializedBodies;
   const native = expectedNativeRelationshipsV5(target, snapshot.native);
   if (!native.ok) return native;
   const relationshipDelta = classifyRelationshipDeltaV5(snapshot.native, native.native);
@@ -1644,7 +1799,12 @@ function buildMigrationPreviewV5(input = {}) {
     revision: input.bootstrap_revision,
     toolkit_contract: input.toolkit_contract,
   });
-  const bootstrapCheck = validateBootstrapForProgramme(bootstrapAfter, target.repository, target.parent.issue, input.toolkit_version || '2.11.0');
+  const bootstrapCheck = resolvePinnedContract(bootstrapAfter, {
+    repository: target.repository, parent_issue: target.parent.issue,
+    version: input.toolkit_version || '2.11.0', revision: bootstrapAfter.toolkit_contract.revision,
+    contract_bytes: input.contract_bytes, toolkit_contract_bytes: input.toolkit_contract_bytes,
+    resolved_contract: input.resolved_contract, resolve_contract: input.resolve_contract,
+  });
   if (!bootstrapCheck.ok) return bootstrapCheck;
   const operations = [];
   addOperation(operations, 'migrate-parent-body', target.parent.issue, snapshot.bodies.parent, bodies.parent);
@@ -1692,10 +1852,10 @@ function buildMigrationPreviewV5(input = {}) {
   addOperation(operations, 'managed-event', target.parent.issue, null, event, {
     receipt_inventory_digest: event.receipt_inventory_digest,
   });
-  const operationCheck = validateProgrammeOperations(operations);
+  const operationCheck = validateProgrammeOperationIntegrity(operations);
   if (!operationCheck.ok) return operationCheck;
   const targetEvents = [...snapshot.managed_events.map(clone), event];
-  const targetEventInventory = validateManagedEventInventoryV5(targetEvents, target.repository);
+  const targetEventInventory = validateManagedEventInventoryV5(targetEvents, target.repository, { skip_receipt_bindings: true });
   if (!targetEventInventory.ok) return targetEventInventory;
   const expectedSnapshot = {
     repository: target.repository, revision: snapshot.revision, complete: true, canonical_state: clone(target),
@@ -1720,6 +1880,7 @@ function buildMigrationPreviewV5(input = {}) {
     authority_ref: input.authority_ref, authority_digest: event.authority_digest,
     source_state_schema: 'toolkit.github-program.state.v4', target_state_schema: STATE_SCHEMA,
     expected_revision: snapshot.revision, source_snapshot_digest: snapshotDigest(snapshot),
+    source_event_inventory_digest: currentEvents.inventory_digest,
     source_canonical_digest: sourceCanonicalDigest, source_body_digests: sourceBodyDigests,
     target_canonical_digest: targetValid.canonical_digest, target_managed_body_digests: rendered.body_digests,
     target_body_digests: targetBodyDigests, candidate_binding_digest: candidateBindingDigest(target),
@@ -1734,6 +1895,8 @@ function buildMigrationPreviewV5(input = {}) {
     managed_event_delta: managedEventDelta,
     required_receipt_delta: {
       receipt_type: receiptBuilt.transition.receipt_type, receipt_id: receiptBuilt.transition.receipt_id,
+      started_receipt_id: receiptBuilt.started.receipt_id, started_sequence: receiptBuilt.started.sequence,
+      started_classification: receiptBuilt.started.payload.classification,
       receipt: clone(receiptBuilt.transition), chain: clone(receiptBuilt.receipts), durable_required: true,
       persisted_in_preview: false, persist_before_apply: true, readback_required: true,
       receipt_inventory_digest: receiptInventoryDigest(consumedIds),
@@ -1774,13 +1937,22 @@ function validateCurrentSnapshot(snapshot, desired, input = {}) {
     resolved_contract: input.resolved_contract,
     resolve_contract: input.resolve_contract,
   };
-  const bootstrap = validateControllerBootstrap(snapshot.bootstrap, bootstrapExpected);
+  const bootstrap = resolvePinnedContract(snapshot.bootstrap, {
+    ...bootstrapExpected,
+    revision: snapshot.bootstrap?.toolkit_contract?.revision,
+  });
   if (!bootstrap.ok) return fail('v5-bootstrap-invalid-or-missing', { detail: bootstrap.reason });
   const bodies = requireBodyInventory(snapshot, desired);
   if (!bodies.ok) return bodies;
-  const events = validateManagedEventInventoryV5(snapshot.managed_events, desired.repository);
+  const events = validateManagedEventInventoryV5(snapshot.managed_events, desired.repository, {
+    parent_issue: desired.parent.issue,
+    receipts: input.receipts !== undefined ? input.receipts : snapshot.receipts,
+  });
   if (!events.ok) return events;
-  return ok('CURRENT_V5_SNAPSHOT_VALID', { state: snapshot.canonical_state, bootstrap: bootstrap.bootstrap, events: events.events });
+  return ok('CURRENT_V5_SNAPSHOT_VALID', {
+    state: snapshot.canonical_state, bootstrap: bootstrap.bootstrap, events: events.events,
+    event_inventory_digest: events.inventory_digest,
+  });
 }
 
 function buildConvergencePreviewV5(input = {}) {
@@ -1815,6 +1987,8 @@ function buildConvergencePreviewV5(input = {}) {
     if (!result.ok) return result;
     bodies.prs[String(pr.number)] = result.body;
   }
+  const materializedBodies = validateMaterializedBodies(bodies);
+  if (!materializedBodies.ok) return materializedBodies;
   const labels = expectedLabelsV5(input.desired, snapshot.labels);
   const native = expectedNativeRelationshipsV5(input.desired, snapshot.native);
   if (!native.ok) return native;
@@ -1838,6 +2012,7 @@ function buildConvergencePreviewV5(input = {}) {
     required_relationship_operations: relationshipDelta.required_relationship_operations,
     relationship_capability_digest: relationshipCapability.relationship_capability_digest,
   });
+  if (existingEvent && operations.length > 0) return fail('existing-transition-receipt-required');
   let event = existingEvent;
   let receiptBuilt = null;
   if (!event) {
@@ -1879,10 +2054,10 @@ function buildConvergencePreviewV5(input = {}) {
       receipt_inventory_digest: event.receipt_inventory_digest,
     });
   }
-  const operationCheck = validateProgrammeOperations(operations);
+  const operationCheck = validateProgrammeOperationIntegrity(operations);
   if (!operationCheck.ok) return operationCheck;
   const targetEvents = existingEvent ? targetEventsBefore : [...targetEventsBefore, event];
-  const eventInventory = validateManagedEventInventoryV5(targetEvents, input.desired.repository);
+  const eventInventory = validateManagedEventInventoryV5(targetEvents, input.desired.repository, { skip_receipt_bindings: true });
   if (!eventInventory.ok) return eventInventory;
   const expectedSnapshot = {
     repository: input.desired.repository,
@@ -1901,8 +2076,11 @@ function buildConvergencePreviewV5(input = {}) {
     preview_kind: 'RECONCILIATION',
     repository: input.desired.repository,
     parent_issue: input.desired.parent.issue,
+    authority_ref: input.authority_ref || 'runtime:v5',
+    authority_digest: input.authority_digest || digest(input.authority_ref || 'runtime:v5'),
     current_revision: snapshot.revision,
     current_snapshot_digest: snapshotDigest(snapshot),
+    source_event_inventory_digest: snapshotCheck.event_inventory_digest,
     canonical_digest: valid.canonical_digest,
     candidate_binding_digest: candidateBindingDigest(input.desired),
     trusted_pr_inspection_digest: trust.trusted_pr_inspection_digest,
@@ -1912,10 +2090,16 @@ function buildConvergencePreviewV5(input = {}) {
     target_body_digests: bodyDigestInventory(bodies),
     target_projection_digests: rendered.body_digests,
     expected_event_inventory_digest: eventInventory.inventory_digest,
-    managed_event_delta: { retained_count: targetEventsBefore.length, new_events: existingEvent ? [] : [event] },
+    managed_event_delta: {
+      retained_count: targetEventsBefore.length, new_events: existingEvent ? [] : [event],
+      retained_history_digest: digest(targetEventsBefore), target_inventory_digest: eventInventory.inventory_digest,
+    },
     required_receipt_delta: receiptBuilt ? {
       receipt_type: receiptBuilt.transition.receipt_type,
       receipt_id: receiptBuilt.transition.receipt_id,
+      started_receipt_id: receiptBuilt.started.receipt_id,
+      started_sequence: receiptBuilt.started.sequence,
+      started_classification: receiptBuilt.started.payload.classification,
       receipt: clone(receiptBuilt.transition),
       chain: clone(receiptBuilt.receipts),
       durable_required: true,
@@ -1978,6 +2162,7 @@ function createMemoryDurableStore(initial = {}) {
     readReceiptChain(runId) {
       return receiptList.filter((entry) => !runId || entry.run_id === runId).map(clone);
     },
+    readAllReceipts() { return receiptList.map(clone); },
     writePreview(preview) {
       const existing = previews.find((entry) => entry.preview_id === preview.preview_id);
       if (existing && !same(existing, preview)) return { conflict: true };
@@ -2004,6 +2189,7 @@ function previewAuthorityBinding(preview) {
     parent_issue: preview.parent_issue,
     expected_revision: preview.expected_revision || preview.current_revision,
     source_snapshot_digest: preview.source_snapshot_digest || preview.current_snapshot_digest,
+    source_event_inventory_digest: preview.source_event_inventory_digest || null,
     target_canonical_digest: preview.target_canonical_digest || preview.canonical_digest,
     target_projection_digests: clone(preview.target_managed_body_digests || preview.target_projection_digests || null),
     candidate_binding_digest: preview.candidate_binding_digest || null,
@@ -2015,6 +2201,166 @@ function previewAuthorityBinding(preview) {
     operation_binding_digest: preview.operation_binding_digest,
     operation_ids: preview.operations.map((operation) => operation.operation_id),
   };
+}
+
+function previewWithoutEnvelope(preview) {
+  const value = clone(preview);
+  delete value.ok;
+  delete value.code;
+  return value;
+}
+
+function validatePreviewIdentity(preview) {
+  if (!sha256(preview?.preview_id)) return fail('programme-preview-identity-invalid');
+  const value = previewWithoutEnvelope(preview);
+  delete value.preview_id;
+  return digest(value) === preview.preview_id ? ok('PROGRAMME_PREVIEW_ID_VALID') : fail('programme-preview-identity-invalid');
+}
+
+function previewBootstrapResolution(preview, options = {}, input = {}) {
+  const bootstrap = preview.expected_snapshot?.bootstrap || preview.bootstrap?.after;
+  if (!isRecord(bootstrap)) return fail('v5-bootstrap-invalid-or-missing');
+  const resolved = input.resolved_contract !== undefined ? input.resolved_contract : options.resolved_contract;
+  return resolvePinnedContract(bootstrap, {
+    repository: preview.repository,
+    parent_issue: preview.parent_issue,
+    version: bootstrap.toolkit_package_version,
+    revision: bootstrap.toolkit_contract?.revision,
+    contract_bytes: input.contract_bytes !== undefined ? input.contract_bytes : options.contract_bytes,
+    toolkit_contract_bytes: input.toolkit_contract_bytes !== undefined ? input.toolkit_contract_bytes : options.toolkit_contract_bytes,
+    resolved_contract: resolved,
+    resolve_contract: input.resolve_contract || options.resolve_contract,
+  });
+}
+
+function expectedApplyOperations(preview, sourceSnapshot, sourceEvents, expectedSnapshot, desired, scopeGrant) {
+  const operations = [];
+  const migration = preview.schema === MIGRATION_SCHEMA;
+  const bodyKinds = migration
+    ? ['migrate-parent-body', 'migrate-child-body', 'migrate-pr-body']
+    : ['parent-body', 'child-body', 'pr-body'];
+  addOperation(operations, bodyKinds[0], desired.parent.issue, sourceSnapshot.bodies.parent, expectedSnapshot.bodies.parent);
+  for (const child of desired.children) {
+    addOperation(operations, bodyKinds[1], child.issue,
+      sourceSnapshot.bodies.children[String(child.issue)], expectedSnapshot.bodies.children[String(child.issue)]);
+  }
+  for (const pr of desired.prs) {
+    addOperation(operations, bodyKinds[2], pr.number,
+      sourceSnapshot.bodies.prs[String(pr.number)], expectedSnapshot.bodies.prs[String(pr.number)]);
+  }
+  const labels = expectedLabelsV5(desired, sourceSnapshot.labels);
+  if (!same(labels, expectedSnapshot.labels)) return fail('expected-target-binding-invalid');
+  addOperation(operations, 'labels', desired.parent.issue, sourceSnapshot.labels, expectedSnapshot.labels);
+  const native = expectedNativeRelationshipsV5(desired, sourceSnapshot.native);
+  if (!native.ok || !same(native.native, expectedSnapshot.native)) return fail('expected-target-binding-invalid');
+  const relationshipDelta = classifyRelationshipDeltaV5(sourceSnapshot.native, native.native);
+  if (!relationshipDelta.ok) return relationshipDelta;
+  const relationshipCapability = requireRelationshipCapabilitiesV5(scopeGrant, relationshipDelta.required_relationship_operations);
+  if (!relationshipCapability.ok) return relationshipCapability;
+  addOperation(operations, 'native-relationships', desired.parent.issue, sourceSnapshot.native, expectedSnapshot.native, {
+    required_relationship_operations: relationshipDelta.required_relationship_operations,
+    relationship_capability_digest: relationshipCapability.relationship_capability_digest,
+  });
+  const retained = Array.isArray(sourceEvents) ? sourceEvents : [];
+  const targetEvents = expectedSnapshot.managed_events;
+  if (!Array.isArray(targetEvents)) return fail('expected-target-binding-invalid');
+  const eventChanged = !same(retained, targetEvents);
+  if (eventChanged) {
+    if (targetEvents.length !== retained.length + 1
+      || !retained.every((event, index) => same(event, targetEvents[index]))) return fail('managed-event-history-invalid');
+    const event = targetEvents.at(-1);
+    if (event?.schema !== MANAGED_EVENT_SCHEMA) return fail('managed-event-history-invalid');
+    addOperation(operations, 'managed-event', desired.parent.issue, null, event, {
+      receipt_inventory_digest: event.receipt_inventory_digest,
+    });
+  }
+  return ok('EXPECTED_PROGRAMME_OPERATIONS_REBUILT', { operations, event_changed: eventChanged });
+}
+
+function validateApplyFacts(preview, snapshot, desired, options = {}, receiptsForValidation) {
+  if (!isRecord(desired)) return fail('programme-preview-desired-state-missing');
+  const bootstrap = previewBootstrapResolution(preview, options, options);
+  if (!bootstrap.ok) return bootstrap;
+  let sourceEventInventoryDigest;
+  let sourceEvents;
+  if (preview.schema === MIGRATION_SCHEMA) {
+    const migration = validateMigrationInput(snapshot);
+    if (!migration.ok) return migration;
+    const source = parseV4CanonicalSnapshot(snapshot, snapshot.repository, preview.parent_issue);
+    if (!source.ok) return source;
+    const bodies = parseV4Bodies(snapshot, source.state);
+    if (!bodies.ok) return fail('v4-body-inventory-invalid', { detail: bodies.reason });
+    const events = validateManagedEventInventoryV5(snapshot.managed_events, snapshot.repository, {
+      parent_issue: preview.parent_issue, receipts: receiptsForValidation,
+    });
+    if (!events.ok) return events;
+    sourceEventInventoryDigest = events.inventory_digest;
+    sourceEvents = events.events;
+    if (preview.source_canonical_digest !== source.canonical_digest) return fail('stale-preview');
+  } else {
+    const current = validateCurrentSnapshot(snapshot, desired, {
+      ...options, receipts: receiptsForValidation,
+      contract_bytes: options.contract_bytes, toolkit_contract_bytes: options.toolkit_contract_bytes,
+      resolved_contract: options.resolved_contract, resolve_contract: options.resolve_contract,
+    });
+    if (!current.ok) return current;
+    sourceEventInventoryDigest = current.event_inventory_digest;
+    sourceEvents = current.events;
+  }
+  const expectedSourceDigest = preview.source_snapshot_digest || preview.current_snapshot_digest;
+  if (!expectedSourceDigest || snapshotDigest(snapshot) !== expectedSourceDigest) return fail('stale-preview');
+  if (preview.source_event_inventory_digest !== undefined && preview.source_event_inventory_digest !== sourceEventInventoryDigest) return fail('stale-preview');
+  if (!safeLine(preview.authority_ref, 512) || !sha256(preview.authority_digest)) return fail('trusted-authority-binding-invalid');
+  const trust = inspectTrustBindingsV5(desired, options.scope_grant, options.broker);
+  if (!trust.ok) return trust;
+  const candidateDigest = candidateBindingDigest(desired);
+  if (preview.candidate_binding_digest !== candidateDigest
+    || preview.trusted_pr_inspection_digest !== trust.trusted_pr_inspection_digest
+    || preview.trusted_relationship_inspection_digest !== trust.trusted_relationship_inspection_digest
+    || preview.relationship_capability_digest !== trust.relationship_capability_digest) return fail('trusted-programme-binding-stale');
+  if (!same(preview.expected_snapshot?.bootstrap, bootstrap.bootstrap)) return fail('bootstrap-binding-stale');
+  const expectedSnapshot = preview.expected_snapshot;
+  if (!isRecord(expectedSnapshot) || expectedSnapshot.repository !== preview.repository
+    || expectedSnapshot.revision !== snapshot.revision || expectedSnapshot.complete !== true
+    || !same(expectedSnapshot.canonical_state, desired)
+    || snapshotDigest(expectedSnapshot) !== preview.expected_snapshot_digest) return fail('expected-target-binding-invalid');
+  const expectedState = validateCanonicalStateV5(expectedSnapshot.canonical_state);
+  if (!expectedState.ok) return fail('expected-target-state-invalid', { detail: expectedState.reason });
+  const expectedBodies = requireBodyInventory(expectedSnapshot, desired);
+  if (!expectedBodies.ok) return expectedBodies;
+  const expectedBodyBudgets = validateMaterializedBodies(expectedSnapshot.bodies);
+  if (!expectedBodyBudgets.ok) return expectedBodyBudgets;
+  const expectedEvents = validateManagedEventInventoryV5(expectedSnapshot.managed_events, preview.repository, {
+    parent_issue: preview.parent_issue, receipts: receiptsForValidation,
+  });
+  if (!expectedEvents.ok) return expectedEvents;
+  if (expectedEvents.inventory_digest !== preview.expected_event_inventory_digest
+    && expectedEvents.inventory_digest !== preview.managed_event_delta?.target_inventory_digest) return fail('expected-target-binding-invalid');
+  if (preview.managed_event_delta?.retained_history_digest !== undefined
+    && preview.managed_event_delta.retained_history_digest !== digest(sourceEvents)) return fail('managed-event-history-invalid');
+  const rebuilt = expectedApplyOperations(preview, snapshot, sourceEvents, expectedSnapshot, desired, options.scope_grant);
+  if (!rebuilt.ok) return rebuilt;
+  if (rebuilt.event_changed !== (preview.operations.length > 0)) return fail('transition-receipt-required');
+  if (!same(rebuilt.operations, preview.operations)) return fail('programme-operation-binding-invalid');
+  const operations = validateProgrammeOperationIntegrity(preview.operations);
+  if (!operations.ok) return operations;
+  const preconditions = {
+    expected_revision: preview.expected_revision || preview.current_revision,
+    source_snapshot_digest: expectedSourceDigest,
+    source_event_inventory_digest: sourceEventInventoryDigest,
+    candidate_binding_digest: candidateDigest,
+    trusted_pr_inspection_digest: trust.trusted_pr_inspection_digest,
+    trusted_relationship_inspection_digest: trust.trusted_relationship_inspection_digest,
+    relationship_capability_digest: trust.relationship_capability_digest,
+    authority_ref: preview.authority_ref || null,
+    authority_digest: preview.authority_digest || null,
+    bootstrap_digest: digest(bootstrap.bootstrap),
+    expected_snapshot_digest: preview.expected_snapshot_digest,
+    operations_digest: operations.operations_digest,
+    operation_binding_digest: operations.operation_binding_digest,
+    ordered_operation_ids: operations.ordered_operation_ids,
+  };
+  return ok('PROGRAMME_APPLY_FACTS_VALID', { bootstrap: bootstrap.bootstrap, trust, source_event_inventory_digest: sourceEventInventoryDigest, operations, preconditions });
 }
 
 function createProgrammeRuntimeV5(options = {}) {
@@ -2044,7 +2390,8 @@ function createProgrammeRuntimeV5(options = {}) {
   }
   function recordReceipt(input = {}) {
     if (!store) return fail('durable-receipt-store-required');
-    const receipt = input.schema === RUN_RECEIPT_SCHEMA ? input : createRunReceipt(input);
+    if (input.schema !== RUN_RECEIPT_SCHEMA) return fail('canonical-receipt-required');
+    const receipt = input;
     return appendRunReceipt(store, receipt);
   }
   function recover(input = {}) {
@@ -2059,72 +2406,140 @@ function createProgrammeRuntimeV5(options = {}) {
     const preview = input.preview || store.readPreview(input.preview_id);
     if (!isRecord(preview) || !preview.preview_id || ![PREVIEW_SCHEMA, MIGRATION_SCHEMA].includes(preview.schema)
       || !Array.isArray(preview.operations) || !same(preview, store.readPreview(preview.preview_id))) return fail('durable-preview-required');
-    const operationCheck = validateProgrammeOperations(preview.operations);
+    const identity = validatePreviewIdentity(preview);
+    if (!identity.ok) return identity;
+    const operationCheck = validateProgrammeOperationIntegrity(preview.operations);
     if (!operationCheck.ok) return operationCheck;
-    const orderedOperationIds = preview.operations.map((operation) => operation.operation_id);
-    if (preview.operations_digest !== digest(preview.operations)
-      || preview.operation_binding_digest !== operationBindingDigest(preview.operations)
+    if (preview.operations_digest !== operationCheck.operations_digest
+      || preview.operation_binding_digest !== operationCheck.operation_binding_digest
       || !Array.isArray(preview.ordered_operation_ids)
-      || !same(preview.ordered_operation_ids, orderedOperationIds)
-      || new Set(orderedOperationIds).size !== orderedOperationIds.length) return fail('programme-operation-binding-invalid');
+      || !same(preview.ordered_operation_ids, operationCheck.ordered_operation_ids)
+      || new Set(operationCheck.ordered_operation_ids).size !== operationCheck.ordered_operation_ids.length) return fail('programme-operation-binding-invalid');
     const required = preview.required_receipt_delta;
     const consumedEvent = preview.managed_event_delta?.new_events?.find((event) => event?.schema === MANAGED_EVENT_SCHEMA) || null;
+    if (preview.operations.length > 0 && (!required || !consumedEvent)) return fail('transition-receipt-required');
+    let durableReceipts;
     if (required) {
       if (typeof store.readReceiptChain !== 'function') return fail('durable-receipt-store-required');
       let chain;
       try { chain = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
       if (!Array.isArray(chain)) return fail('run-receipt-readback-invalid');
-      if (!required.chain?.every((expectedReceipt) => {
-        const actual = chain.find((entry) => entry.receipt_id === expectedReceipt.receipt_id);
-        return actual && same(actual, expectedReceipt);
-      })) return fail('receipt-not-persisted', { receipt_id: required.receipt_id });
+      durableReceipts = chain;
+      if (!required.chain || !same(chain, required.chain) || chain.at(-1)?.receipt_id !== required.receipt_id
+        || !same(required.receipt, chain.at(-1))) return fail('receipt-not-persisted', { receipt_id: required.receipt_id });
       const requiredCheck = validateReceiptObject(required.receipt, {
         repository: preview.repository, parent_issue: preview.parent_issue,
+        receipt_type: 'TRANSITION_PREVIEW', sequence: chain.at(-1)?.sequence,
+        prior_receipt_id: chain.at(-2)?.receipt_id || null,
       });
       if (!requiredCheck.ok) return requiredCheck;
       const chainCheck = validateRunReceiptChain(chain, { repository: preview.repository, parent_issue: preview.parent_issue });
       if (!chainCheck.ok) return chainCheck;
+      if (required.receipt.payload.operation_digest !== operationCheck.operation_binding_digest) return fail('preview-operation-binding-mismatch');
       if (consumedEvent) {
         const consumption = validateReceiptConsumption(consumedEvent, chain, {
           repository: preview.repository, parent_issue: preview.parent_issue,
-          operation_digest: required.receipt.payload.operation_digest, require_readback: true,
+          operation_digest: operationCheck.operation_binding_digest, require_readback: true,
         });
         if (!consumption.ok) return consumption;
       }
-    } else if (consumedEvent?.consumed_receipt_ids?.length) return fail('receipt-consumption-without-durable-receipt');
+    } else {
+      const claimed = preview.expected_snapshot?.managed_events || [];
+      if (consumedEvent?.consumed_receipt_ids?.length || claimed.some((event) => event?.schema === MANAGED_EVENT_SCHEMA && event.consumed_receipt_ids?.length)) {
+        if (typeof store.readAllReceipts !== 'function') return fail('receipt-consumption-without-durable-receipt');
+        try { durableReceipts = store.readAllReceipts(); } catch (_error) { return fail('run-receipt-readback-failed'); }
+        if (!Array.isArray(durableReceipts)) return fail('run-receipt-readback-invalid');
+        const retained = validateRetainedReceiptBindings(claimed, durableReceipts, {
+          repository: preview.repository, parent_issue: preview.parent_issue,
+        });
+        if (!retained.ok) return retained;
+      }
+    }
+    const preflight = inspect();
+    if (!preflight.ok) return preflight;
+    const desired = preview.expected_snapshot?.canonical_state;
+    if (!options.scope_grant || !options.broker) return fail('trusted-rerun-adapters-required');
+    const applyOptions = {
+      ...options,
+      contract_bytes: input.contract_bytes !== undefined ? input.contract_bytes : options.contract_bytes,
+      toolkit_contract_bytes: input.toolkit_contract_bytes !== undefined ? input.toolkit_contract_bytes : options.toolkit_contract_bytes,
+      resolved_contract: input.resolved_contract !== undefined ? input.resolved_contract : options.resolved_contract,
+      resolve_contract: input.resolve_contract || options.resolve_contract,
+    };
+    const preflightFacts = validateApplyFacts(preview, preflight.snapshot, desired, applyOptions, durableReceipts || preflight.snapshot.receipts);
+    if (!preflightFacts.ok) return preflightFacts;
     if (preview.operations.length === 0) {
-      const inspected = inspect();
-      if (!inspected.ok) return inspected;
-      const expectedDigest = preview.expected_snapshot_digest;
-      if (snapshotDigest(inspected.snapshot) !== expectedDigest) return fail('stale-preview');
+      if (snapshotDigest(preflight.snapshot) !== preview.expected_snapshot_digest) return fail('stale-preview');
       return ok('PROGRAMME_ZERO_DELTA', { mutation_count: 0, readback_verified: true, immediate_rerun: 'ZERO_DELTA' });
     }
     if (typeof options.verify_authority !== 'function' || typeof options.apply_operations !== 'function') return fail('mutation-adapters-required');
-    const preflight = inspect();
-    if (!preflight.ok) return preflight;
-    const expectedSourceDigest = preview.source_snapshot_digest || preview.current_snapshot_digest;
-    if (!expectedSourceDigest || snapshotDigest(preflight.snapshot) !== expectedSourceDigest) return fail('stale-preview');
     const binding = previewAuthorityBinding(preview);
+    const writerBinding = {
+      ...binding,
+      ...preflightFacts.preconditions,
+      precondition_digest: digest(preflightFacts.preconditions),
+    };
     let authority;
-    try { authority = options.verify_authority({ assertion: clone(input.authority), binding: clone(binding) }); } catch (_error) { return fail('trusted-authority-verification-failed'); }
+    try {
+      authority = options.verify_authority({ assertion: clone(input.authority), binding: clone(binding), preconditions: clone(writerBinding) });
+    } catch (_error) { return fail('trusted-authority-verification-failed'); }
     if (!authority?.ok) return fail('trusted-authority-required');
+    if (authority.binding !== undefined && !same(authority.binding, binding)) return fail('trusted-authority-binding-changed');
+    if (authority.preconditions !== undefined && !same(authority.preconditions, writerBinding)) return fail('trusted-authority-preconditions-changed');
+    if (authority.authority_ref !== undefined && authority.authority_ref !== writerBinding.authority_ref) return fail('trusted-authority-binding-changed');
+    if (authority.authority_digest !== undefined && authority.authority_digest !== writerBinding.authority_digest) return fail('trusted-authority-binding-changed');
+    if (required && typeof store.readReceiptChain === 'function') {
+      let reboundReceipts;
+      try { reboundReceipts = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
+      if (!Array.isArray(reboundReceipts)) return fail('run-receipt-readback-invalid');
+      if (!same(reboundReceipts, durableReceipts)) return fail('receipt-freshness-changed');
+      durableReceipts = reboundReceipts;
+    } else if (durableReceipts && typeof store.readAllReceipts === 'function') {
+      let reboundReceipts;
+      try { reboundReceipts = store.readAllReceipts(); } catch (_error) { return fail('run-receipt-readback-failed'); }
+      if (!Array.isArray(reboundReceipts)) return fail('run-receipt-readback-invalid');
+      if (!same(reboundReceipts, durableReceipts)) return fail('receipt-freshness-changed');
+      durableReceipts = reboundReceipts;
+    }
+    const rebound = inspect();
+    if (!rebound.ok) return rebound;
+    const reboundFacts = validateApplyFacts(preview, rebound.snapshot, desired, applyOptions, durableReceipts || rebound.snapshot.receipts);
+    if (!reboundFacts.ok) return reboundFacts;
+    if (!same(reboundFacts.preconditions, preflightFacts.preconditions)) return fail('prewrite-freshness-changed');
     let applied;
-    try { applied = options.apply_operations({ operations: clone(preview.operations), repository: preview.repository, parent_issue: preview.parent_issue }); } catch (_error) { return fail('apply-failed'); }
+    try {
+      applied = options.apply_operations({
+        operations: clone(preview.operations), repository: preview.repository, parent_issue: preview.parent_issue,
+        binding: clone(binding), expected: clone(writerBinding), preconditions: clone(writerBinding),
+        operations_digest: operationCheck.operations_digest,
+        operation_binding_digest: operationCheck.operation_binding_digest,
+        ordered_operation_ids: clone(operationCheck.ordered_operation_ids),
+      });
+    } catch (_error) { return fail('apply-failed'); }
     if (!applied?.ok) return fail('apply-failed');
+    if (applied.preconditions_verified !== true || applied.precondition_digest !== writerBinding.precondition_digest
+      || applied.operation_binding_digest !== operationCheck.operation_binding_digest) return fail('writer-preconditions-unverified');
     const appliedCount = applied.applied_count ?? preview.operations.length;
     if (!Number.isSafeInteger(appliedCount) || appliedCount !== preview.operations.length) return fail('applied-count-mismatch');
     const inspected = inspect();
     if (!inspected.ok) return inspected;
     const readback = verifyConvergenceReadbackV5(inspected.snapshot, preview);
     if (!readback.ok) return readback;
-    if (!options.scope_grant || !options.broker) return fail('trusted-rerun-adapters-required');
-    const desired = preview.expected_snapshot?.canonical_state;
+    let rerunReceipts = durableReceipts;
+    if (required && typeof store.readReceiptChain === 'function') {
+      try { rerunReceipts = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
+    }
     const rerun = buildConvergencePreviewV5({
       desired,
-      snapshot: inspected.snapshot,
+      snapshot: { ...inspected.snapshot, ...(rerunReceipts ? { receipts: rerunReceipts } : {}) },
       scope_grant: options.scope_grant,
       broker: options.broker,
       authority_ref: preview.authority_ref || 'runtime:v5',
+      authority_digest: preview.authority_digest,
+      contract_bytes: applyOptions.contract_bytes,
+      toolkit_contract_bytes: applyOptions.toolkit_contract_bytes,
+      resolved_contract: applyOptions.resolved_contract,
+      resolve_contract: applyOptions.resolve_contract,
     });
     if (!rerun.ok || rerun.code !== 'PROGRAMME_ZERO_DELTA' || rerun.operations.length !== 0) return fail('immediate-rerun-not-zero-delta');
     return ok('PROGRAMME_V5_APPLIED', {
@@ -2142,6 +2557,7 @@ function appendRunReceipt(store, receipt) {
   const valid = validateReceiptObject(receipt);
   if (!valid.ok) return valid;
   if (!store || typeof store.appendReceipt !== 'function') return fail('durable-receipt-store-required');
+  if (receipt.sequence === 1 || receipt.receipt_type === 'RUN_STARTED') return fail('canonical-started-receipt-required');
   let prior = [];
   if (typeof store.readReceiptChain === 'function') {
     try { prior = store.readReceiptChain(receipt.run_id) || []; } catch (_error) { return fail('run-receipt-readback-failed'); }
@@ -2187,7 +2603,8 @@ module.exports = Object.freeze({
   validateReceiptConsumption, createRunReceipt, validateRunReceipt, validateReceiptObject,
   evidenceDigest, receiptInventoryDigest, validateRunReceiptChain, appendRunReceipt,
   canAdvanceFromTerminal, consumeTerminalEvidence, classifyRecovery, recoverRun,
-  validateWriterAction, validateProgrammeOperations,
+  validateWriterAction, validateProgrammeOperations, validateProgrammeOperationIntegrity,
+  validateMaterializedBodies,
   validateTrustedPrInspectionV5, validatePrBindingsV5, validateTrustedRelationshipInspectionV5,
   validateRelationshipInspectionV5, inspectTrustBindingsV5, relationshipCapabilityDigestV5,
   buildBootstrap, validateControllerBootstrap, resolvePinnedContract, detectManagedRepository,

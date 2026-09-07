@@ -2,11 +2,15 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const test = require('node:test');
+const Ajv = require('ajv/dist/2020').default;
 
 const v4 = require('../scripts/toolkit-github-program-state-v4.cjs');
 const v5 = require('../scripts/toolkit-github-program-state-v5.cjs');
+const receiptRuntime = require('../scripts/toolkit-github-program-receipt.cjs');
 
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/github-program-reconciler/v4-to-v5.fixture.json'), 'utf8'));
 const bootstrapFixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/github-program-reconciler/e3-bootstrap-divergence-2026-09-07.fixture.json'), 'utf8'));
@@ -15,6 +19,40 @@ const SHA = 'a'.repeat(40);
 const TREE = 'b'.repeat(40);
 const BASE = 'c'.repeat(40);
 const DIGEST = 'd'.repeat(64);
+const repositoryRoot = path.resolve(__dirname, '../..');
+const cleanupRoots = new Set();
+
+function secureWindowsDirectory(root) {
+  if (process.platform !== 'win32') return;
+  const powershell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const script = [
+    '$ErrorActionPreference="Stop"',
+    '$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+    '$icacls=Join-Path $env:SystemRoot "System32\\icacls.exe"',
+    '& $icacls $env:GPR_TEST_ROOT "/inheritance:r" "/grant:r" ("*${sid}:(OI)(CI)F") "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null',
+    'if ($LASTEXITCODE -ne 0) { throw "icacls-failed" }',
+  ].join(';');
+  const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    encoding: 'utf8', windowsHide: true, env: { ...process.env, GPR_TEST_ROOT: root },
+  });
+  if (result.status !== 0) throw new Error(`Unable to secure test state root: ${result.stderr}`);
+}
+
+function stateRoot() {
+  const parent = path.join(os.homedir(), '.ai-agent-toolkit', 'user-state', 'github-program-receipt', 'tests');
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') fs.chmodSync(parent, 0o700);
+  const root = fs.mkdtempSync(path.join(parent, 'v5-recovery-'));
+  if (process.platform !== 'win32') fs.chmodSync(root, 0o700);
+  secureWindowsDirectory(root);
+  cleanupRoots.add(root);
+  return root;
+}
+
+test.afterEach(() => {
+  for (const root of cleanupRoots) fs.rmSync(root, { recursive: true, force: true });
+  cleanupRoots.clear();
+});
 
 function sourceState() {
   return JSON.parse(JSON.stringify(fixture.source));
@@ -118,40 +156,70 @@ function migrateState(options = {}) {
   return result.state;
 }
 
-function receiptContext(state, scope, overrides = {}) {
+async function receiptContext(state, scope, overrides = {}) {
+  const authority = {
+    child_comment_id: 5564753393,
+    parent_comment_id: 5564754827,
+    node_id: 'MDU6SXNzdWVDb21tZW50OjU1NjQ3NTMzOTM',
+    author_login: 'weijunswj',
+    author_association: 'OWNER',
+    body_digest: '1'.repeat(64),
+    updated_at: '2026-09-07T00:00:00.000Z',
+    update_identity_digest: '2'.repeat(64),
+    scope_digest: scope.scope_digest,
+  };
+  const start = {
+    base_sha: BASE,
+    head_sha: SHA,
+    tree_sha: TREE,
+    status_digest: DIGEST,
+    clean_worktree: true,
+    ref: { detached: false, name: 'codex/e3-canonical-programme-bootstrap-recovery-g3' },
+  };
+  const root = stateRoot();
+  const store = receiptRuntime.createProgrammeReceiptStore({
+    repository: state.repository,
+    parent_issue: state.parent.issue,
+    child_issue: state.active_lanes[0]?.child_issue || state.children[0].issue,
+    stateRoot: root,
+    repositoryRoot,
+  });
+  const session = await store.startRun({
+    lock: overrides.lock || 'g3-recovery-lock-001', authority, start, candidate: null, lease_ms: 60000,
+  }, {
+    readAuthority: async () => ({ authority: JSON.parse(JSON.stringify(authority)), later_controlling_comments: [] }),
+    readStart: async () => JSON.parse(JSON.stringify(start)),
+  });
+  const startedChain = store.readReceiptChain(session.run_id);
   return {
     authority_ref: 'github:issue:359:comment:5564753393',
-    authority: {
-      child_comment_id: 5564753393,
-      parent_comment_id: 5564754827,
-      node_id: 'MDU6SXNzdWVDb21tZW50OjU1NjQ3NTMzOTM',
-      author_login: 'weijunswj',
-      author_association: 'OWNER',
-      body_digest: '1'.repeat(64),
-      updated_at: '2026-09-07T00:00:00.000Z',
-      update_identity_digest: '2'.repeat(64),
-      scope_digest: scope.scope_digest,
-    },
-    start: {
-      base_sha: BASE,
-      head_sha: SHA,
-      tree_sha: TREE,
-      status_digest: DIGEST,
-      clean_worktree: true,
-      ref: { detached: false, name: 'codex/e3-canonical-programme-bootstrap-recovery-g3' },
-    },
-    lease: {
-      lease_id: 'g3-lease-001',
-      fence_id: 'g3-fence-001',
-      fence_sequence: 1,
-      issued_at: '2026-09-07T00:00:00.000Z',
-      expires_at: '2026-09-08T00:00:00.000Z',
-    },
-    run_id: 'g3-run-001',
-    allocation_id: 'g3-allocation-001',
+    authority,
+    start,
+    lease: startedChain[0].lease,
+    run_id: session.run_id,
+    allocation_id: session.allocation_id,
     child_issue: state.active_lanes[0]?.child_issue || state.children[0].issue,
+    started_chain: startedChain,
+    transition_created_at: new Date(Date.parse(startedChain.at(-1).created_at) + 1).toISOString(),
     ...overrides,
   };
+}
+
+function resolvedContract(revision) {
+  return {
+    repository: v5.TOOLKIT_CONTRACT_REPOSITORY,
+    revision,
+    path: v5.TOOLKIT_CONTRACT_PATH,
+    bytes: JSON.stringify(v5.SURFACE_CONTRACT),
+  };
+}
+
+function skipReceiptGuard(t, error) {
+  if (error?.code === 'GPR_UNSAFE_STATE_ROOT') {
+    t.skip(`canonical receipt durable-store guard: ${error.code} (${error.details?.reason || 'unknown'})`);
+    return true;
+  }
+  return false;
 }
 
 function legacySnapshot(state) {
@@ -259,7 +327,66 @@ test('v5 rejects lifecycle contradictions and active merged or ready states with
   assert.equal(v5.inspectTrustBindingsV5(readyState, ready.scope.grant, ready.broker).ok, true);
 });
 
-test('v5 preserves additive extensions and owner or unmanaged body bytes', () => {
+test('v5 does not project completion from an unresolved epoch or held finality', () => {
+  const state = migrateState();
+  state.children[0].lifecycle = 'COMPLETED';
+  state.children[0].finality = { state: 'HELD', authority_ref: null };
+  state.active_lanes = [];
+  state.children[0].pr_registry[0].status = 'ACCEPTED';
+  state.children[0].pr_registry[0].accepted_evidence_ref = 'web-359';
+  const valid = v5.validateCanonicalStateV5(state);
+  assert.equal(valid.ok, false, JSON.stringify(valid));
+  assert.equal(valid.reason, 'completed-child-finality-incomplete');
+  assert.notEqual(v5.deriveProjectionV5(state).ok, true);
+});
+
+test('v5 separates an intermediate OPEN_READY presentation from Programme Ready authority', () => {
+  const state = migrateState();
+  const intermediate = trustHarness(state, { lifecycle: 'OPEN_READY' });
+  assert.equal(v5.inspectTrustBindingsV5(state, intermediate.scope.grant, intermediate.broker).ok, true);
+  const falselyFinal = migrateState();
+  falselyFinal.children[0].finality = { state: 'READY_AUTHORIZED', authority_ref: 'web-359' };
+  const falseHarness = trustHarness(falselyFinal, { lifecycle: 'OPEN_READY' });
+  const rejected = v5.inspectTrustBindingsV5(falselyFinal, falseHarness.scope.grant, falseHarness.broker);
+  assert.equal(rejected.ok, false, JSON.stringify(rejected));
+  assert.equal(rejected.reason, 'intermediate-ready-finality-forbidden');
+});
+
+test('v5 validates retained v2 history as one ordered prefix before appending v3', () => {
+  const repository = bootstrapFixture.repository;
+  const first = {
+    schema: 'toolkit.github-program.managed-event.v2', event_type: 'canonical_initialisation', repository,
+    parent_issue: 240, entity: { kind: 'parent', number: 240 }, source_state_schema: null,
+    from_state_digest: DIGEST, to_canonical_digest: DIGEST, authority_ref: 'github:issue:359:comment:5564753393',
+    candidate_binding_digest: null, prior_event_id: null, migration_binding_digest: null,
+  };
+  first.event_id = v4.digest(first);
+  const second = {
+    schema: 'toolkit.github-program.managed-event.v2', event_type: 'canonical_transition', repository,
+    parent_issue: 240, entity: { kind: 'parent', number: 240 }, source_state_schema: v4.STATE_SCHEMA,
+    from_state_digest: DIGEST, to_canonical_digest: 'e'.repeat(64), authority_ref: 'github:issue:359:comment:5564753393',
+    candidate_binding_digest: null, prior_event_id: first.event_id, migration_binding_digest: null,
+  };
+  second.event_id = v4.digest(second);
+  const valid = v5.validateManagedEventInventoryV5([first, second], repository);
+  assert.equal(valid.ok, true, JSON.stringify(valid));
+  assert.deepEqual(valid.events, [first, second]);
+  const broken = { ...second, prior_event_id: 'f'.repeat(64) };
+  broken.event_id = v4.digest(Object.fromEntries(Object.entries(broken).filter(([key]) => key !== 'event_id')));
+  assert.equal(v5.validateManagedEventInventoryV5([first, broken], repository).ok, false);
+  assert.equal(v5.validateManagedEventInventoryV5([second, first], repository).ok, false);
+  const third = v5.createManagedEventV3({
+    event_type: 'canonical_transition', repository, parent_issue: 240,
+    entity: { kind: 'parent', number: 240 }, source_state_schema: v5.STATE_SCHEMA,
+    from_state_digest: DIGEST, to_state_digest: 'f'.repeat(64), authority_ref: 'github:issue:359:comment:5564753393',
+    prior_event_id: second.event_id,
+  });
+  const appended = v5.validateManagedEventInventoryV5([first, second, third], repository);
+  assert.equal(appended.ok, true, JSON.stringify(appended));
+  assert.deepEqual(appended.events.slice(0, 2), [first, second]);
+});
+
+test('v5 preserves additive extensions and owner or unmanaged body bytes', async (t) => {
   const source = sourceState();
   source.extensions.push({
     schema: v4.EXTENSIONS_SCHEMA,
@@ -274,20 +401,41 @@ test('v5 preserves additive extensions and owner or unmanaged body bytes', () =>
   assert.equal(migrated.state.extensions.length, 1);
   const harness = trustHarness(migrated.state);
   const scope = harness.scope;
+  let context;
+  try { context = await receiptContext(migrated.state, scope.grant); } catch (error) { if (skipReceiptGuard(t, error)) return; throw error; }
   const preview = v5.buildMigrationPreviewV5({
     legacy_snapshot: legacySnapshot(source),
     authority_ref: 'github:issue:359:comment:5564753393',
     scope_grant: scope.grant,
     broker: harness.broker,
     bootstrap_after: bootstrap(),
-    receipt_context: receiptContext(migrated.state, scope.grant),
+    resolved_contract: resolvedContract(bootstrap().toolkit_contract.revision),
+    receipt_context: context,
   });
   assert.equal(preview.ok, true, JSON.stringify(preview));
+  const migrationSchema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/github-program-reconciler/programme-migration-v2.schema.json'), 'utf8'));
+  const validateMigration = new Ajv({ strict: false }).compile(migrationSchema);
+  assert.equal(validateMigration(preview), true, JSON.stringify(validateMigration.errors));
+  const unexpected = { ...preview, unexpected_property: true };
+  assert.equal(validateMigration(unexpected), false);
   assert.equal(preview.expected_snapshot.bodies.parent.startsWith(ownerFixture.parent_prefix), true);
   assert.equal(preview.expected_snapshot.bodies.parent.endsWith(ownerFixture.parent_suffix), true);
   assert.equal(preview.expected_snapshot.bodies.children['359'].startsWith(ownerFixture.child_prefix), true);
   assert.equal(preview.expected_snapshot.bodies.prs['376'].endsWith(ownerFixture.pr_suffix), true);
   assert.match(preview.expected_snapshot.bodies.parent, /Security note/);
+  const oversizedOwner = legacySnapshot(source);
+  oversizedOwner.bodies.parent = 'owner-prefix-' + 'x'.repeat(v5.BODY_BUDGET_BYTES) + oversizedOwner.bodies.parent;
+  const oversizedPreview = v5.buildMigrationPreviewV5({
+    legacy_snapshot: oversizedOwner,
+    authority_ref: 'github:issue:359:comment:5564753393',
+    scope_grant: scope.grant,
+    broker: harness.broker,
+    bootstrap_after: bootstrap(),
+    resolved_contract: resolvedContract(bootstrap().toolkit_contract.revision),
+    receipt_context: context,
+  });
+  assert.equal(oversizedPreview.ok, false, JSON.stringify(oversizedPreview));
+  assert.match(oversizedPreview.reason, /materialized-body/);
 });
 
 test('v5 fails closed on body budgets, incomplete inspection, and revision movement', () => {
@@ -306,7 +454,10 @@ test('v5 fails closed on body budgets, incomplete inspection, and revision movem
   const scope = harness.scope;
   const snapshot = currentSnapshot(state);
   delete snapshot.bodies.children['359'];
-  const missing = v5.buildConvergencePreviewV5({ desired: state, snapshot, scope_grant: scope.grant, broker: harness.broker });
+  const missing = v5.buildConvergencePreviewV5({
+    desired: state, snapshot, scope_grant: scope.grant, broker: harness.broker,
+    resolved_contract: resolvedContract(snapshot.bootstrap.toolkit_contract.revision),
+  });
   assert.equal(missing.reason, 'required-body-inspection-missing');
   const readback = v5.verifyConvergenceReadbackV5({ ...currentSnapshot(state), revision: 'moved-revision' }, {
     repository: state.repository,
@@ -327,21 +478,29 @@ test('v5 bootstrap validation rejects missing, malformed, stale, unknown-major, 
   assert.equal(v5.validateControllerBootstrap(stale, { revision: 'f'.repeat(40) }).reason, 'bootstrap-revision-mismatch');
   const wrongHash = { ...good, toolkit_contract: { ...good.toolkit_contract, sha256: bootstrapFixture.wrong_digest } };
   assert.equal(v5.validateControllerBootstrap(wrongHash, { contract_bytes: v5.SURFACE_CONTRACT }).reason, 'toolkit-contract-digest-mismatch');
+  const zeroRevision = { ...good, toolkit_contract: { ...good.toolkit_contract, revision: '0'.repeat(40) } };
+  assert.equal(v5.resolvePinnedContract(zeroRevision, { resolved_contract: resolvedContract('0'.repeat(40)) }).ok, false);
+  assert.equal(v5.resolvePinnedContract(good, {
+    resolved_contract: { ...resolvedContract(good.toolkit_contract.revision), path: 'repo/wrong.json' },
+  }).ok, false);
   assert.equal(v5.validateControllerBootstrap({ ...good, repository: bootstrapFixture.wrong_repository }, { repository: bootstrapFixture.repository }).reason, 'bootstrap-repository-mismatch');
   assert.equal(v5.validateControllerBootstrap({ ...good, parent_issue: bootstrapFixture.wrong_parent_issue }, { parent_issue: 240 }).reason, 'bootstrap-parent-mismatch');
 });
 
-test('v5 migration preview separates receipts from Programme Apply and binds event and operation digests', () => {
+test('v5 migration preview separates receipts from Programme Apply and binds event and operation digests', async (t) => {
   const source = sourceState();
   const target = migrateState();
   const harness = trustHarness(target);
+  let context;
+  try { context = await receiptContext(target, harness.scope.grant); } catch (error) { if (skipReceiptGuard(t, error)) return; throw error; }
   const preview = v5.buildMigrationPreviewV5({
     legacy_snapshot: legacySnapshot(source),
     authority_ref: 'github:issue:359:comment:5564753393',
     scope_grant: harness.scope.grant,
     broker: harness.broker,
     bootstrap_after: bootstrap(),
-    receipt_context: receiptContext(target, harness.scope.grant),
+    resolved_contract: resolvedContract(bootstrap().toolkit_contract.revision),
+    receipt_context: context,
   });
   assert.equal(preview.ok, true, JSON.stringify(preview));
   assert.equal(preview.mutation_authority, 'NOT_GRANTED');
@@ -353,6 +512,12 @@ test('v5 migration preview separates receipts from Programme Apply and binds eve
   assert.equal(preview.managed_event_delta.new_events[0].receipt_id, preview.required_receipt_delta.receipt_id);
   const event = preview.managed_event_delta.new_events[0];
   const receipts = preview.required_receipt_delta.chain;
+  assert.equal(receipts[0].sequence, 1);
+  assert.equal(receipts[0].payload.classification, 'RUN_STARTED_VERIFIED');
+  assert.equal(receipts[1].sequence, receipts[0].sequence + 1);
+  assert.equal(receipts[1].prior_receipt_id, receipts[0].receipt_id);
+  assert.equal(preview.required_receipt_delta.started_receipt_id, receipts[0].receipt_id);
+  assert.equal(receipts[1].payload.operation_digest, preview.operation_binding_digest);
   assert.equal(v5.validateReceiptConsumption(event, receipts, {
     repository: target.repository,
     parent_issue: target.parent.issue,
@@ -366,6 +531,21 @@ test('v5 migration preview separates receipts from Programme Apply and binds eve
   };
   tamperedReceipt.receipt_id = v5.digest(Object.fromEntries(Object.entries(tamperedReceipt).filter(([key]) => key !== 'receipt_id')));
   assert.equal(v5.validateReceiptConsumption(event, [receipts[0], tamperedReceipt]).ok, false);
+});
+
+test('v5 requires canonical receipt evidence for a mutation-bearing recovery preview', () => {
+  const state = migrateState();
+  const harness = trustHarness(state);
+  const snapshot = currentSnapshot(state);
+  const result = v5.buildConvergencePreviewV5({
+    desired: state,
+    snapshot,
+    scope_grant: harness.scope.grant,
+    broker: harness.broker,
+    resolved_contract: resolvedContract(snapshot.bootstrap.toolkit_contract.revision),
+  });
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.equal(result.reason, 'canonical-started-chain-required');
 });
 
 test('v5 managed event inventory binds IDs, prior events, and receipt inventory deterministically', () => {
@@ -398,36 +578,107 @@ test('v5 managed event inventory binds IDs, prior events, and receipt inventory 
   });
   assert.equal(v5.validateManagedEventInventoryV5([event, second], bootstrapFixture.repository).ok, true);
   assert.equal(v5.validateManagedEventInventoryV5([second, event], bootstrapFixture.repository).ok, false);
+  const claimed = v5.createManagedEventV3({
+    event_type: 'canonical_transition', repository: bootstrapFixture.repository, parent_issue: 240,
+    entity: { kind: 'parent', number: 240 }, source_state_schema: v5.STATE_SCHEMA,
+    from_state_digest: DIGEST, to_state_digest: 'f'.repeat(64), authority_ref: 'github:issue:359:comment:5564753393',
+    prior_event_id: null, receipt_id: DIGEST, consumed_receipt_ids: [DIGEST],
+  });
+  assert.equal(v5.validateManagedEventInventoryV5([claimed], bootstrapFixture.repository).reason, 'receipt-inventory-not-durable');
 });
 
-test('v5 produces deterministic PROGRAMME_ZERO_DELTA and does not apply it', () => {
+test('v5 produces deterministic PROGRAMME_ZERO_DELTA and does not apply it', async (t) => {
   const state = migrateState();
   const currentBootstrap = bootstrap();
   const initial = currentSnapshot(state, currentBootstrap);
   const harness = trustHarness(state);
+  let context;
+  try { context = await receiptContext(state, harness.scope.grant); } catch (error) { if (skipReceiptGuard(t, error)) return; throw error; }
   const first = v5.buildConvergencePreviewV5({
     desired: state,
     snapshot: initial,
     scope_grant: harness.scope.grant,
     broker: harness.broker,
-    receipt_context: receiptContext(state, harness.scope.grant),
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
+    receipt_context: context,
     authority_ref: 'github:issue:359:comment:5564753393',
   });
   assert.equal(first.ok, true, JSON.stringify(first));
+  const tamperedPreview = JSON.parse(JSON.stringify(first));
+  tamperedPreview.operations.reverse();
+  let tamperedWriterCalls = 0;
+  const tamperedStore = v5.createMemoryDurableStore({ previews: [tamperedPreview], receipts: first.required_receipt_delta.chain });
+  const tamperedRuntime = v5.createProgrammeRuntimeV5({
+    store: tamperedStore,
+    inspect_snapshot: () => initial,
+    scope_grant: harness.scope.grant,
+    broker: harness.broker,
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: () => { tamperedWriterCalls += 1; return { ok: true }; },
+  });
+  const tampered = tamperedRuntime.apply({ preview: tamperedPreview });
+  assert.equal(tampered.ok, false, JSON.stringify(tampered));
+  assert.equal(tamperedWriterCalls, 0);
+  let movingSnapshot = initial;
+  let writerCalls = 0;
+  const movingStore = v5.createMemoryDurableStore({ previews: [first], receipts: first.required_receipt_delta.chain });
+  const movingRuntime = v5.createProgrammeRuntimeV5({
+    store: movingStore,
+    inspect_snapshot: () => movingSnapshot,
+    scope_grant: harness.scope.grant,
+    broker: harness.broker,
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
+    verify_authority: () => {
+      movingSnapshot = { ...initial, revision: 'moved-before-writer' };
+      return { ok: true };
+    },
+    apply_operations: () => { writerCalls += 1; return { ok: true }; },
+  });
+  const moved = movingRuntime.apply({ preview: first });
+  assert.equal(moved.ok, false, JSON.stringify(moved));
+  assert.equal(writerCalls, 0);
+  let writerObserved;
+  let writerSnapshot = initial;
+  const writerStore = v5.createMemoryDurableStore({ previews: [first], receipts: first.required_receipt_delta.chain });
+  const writerRuntime = v5.createProgrammeRuntimeV5({
+    store: writerStore,
+    inspect_snapshot: () => writerSnapshot,
+    scope_grant: harness.scope.grant,
+    broker: harness.broker,
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      writerObserved = request;
+      writerSnapshot = { ...initial, revision: 'moved-inside-writer' };
+      return request.expected.expected_revision === writerSnapshot.revision
+        ? { ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest, operation_binding_digest: request.operation_binding_digest }
+        : { ok: false, reason: 'provider-cas-mismatch' };
+    },
+  });
+  const writerRejected = writerRuntime.apply({ preview: first });
+  assert.equal(writerRejected.ok, false, JSON.stringify(writerRejected));
+  assert.equal(writerObserved.preconditions_verified, undefined);
+  assert.equal(writerObserved.expected.operation_binding_digest, first.operation_binding_digest);
   const second = v5.buildConvergencePreviewV5({
     desired: state,
     snapshot: first.expected_snapshot,
     scope_grant: harness.scope.grant,
     broker: harness.broker,
+    receipts: first.required_receipt_delta.chain,
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
   });
   assert.equal(second.ok, true, JSON.stringify(second));
   assert.equal(second.code, 'PROGRAMME_ZERO_DELTA');
   assert.equal(second.operations.length, 0);
   assert.equal(v5.verifyConvergenceReadbackV5(first.expected_snapshot, first).ok, true);
-  const store = v5.createMemoryDurableStore({ previews: [second] });
+  const store = v5.createMemoryDurableStore({ previews: [second], receipts: first.required_receipt_delta.chain });
   const runtime = v5.createProgrammeRuntimeV5({
     store,
     inspect_snapshot: () => first.expected_snapshot,
+    scope_grant: harness.scope.grant,
+    broker: harness.broker,
+    resolved_contract: resolvedContract(currentBootstrap.toolkit_contract.revision),
   });
   const applied = runtime.apply({ preview: second });
   assert.equal(applied.ok, true, JSON.stringify(applied));

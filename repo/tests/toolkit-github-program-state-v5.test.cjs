@@ -44,7 +44,15 @@ test('v5 bootstrap pins the canonical contract by revision and canonical digest'
     contract_bytes: contractBytes,
   });
   assert.equal(valid.ok, true, JSON.stringify(valid));
-  assert.equal(v5.resolvePinnedContract(bootstrap, { contract_bytes: contractBytes }).ok, true);
+  assert.equal(v5.resolvePinnedContract(bootstrap, {
+    resolved_contract: {
+      repository: bootstrap.toolkit_contract.repository,
+      revision: bootstrap.toolkit_contract.revision,
+      path: bootstrap.toolkit_contract.path,
+      bytes: contractBytes,
+    },
+  }).ok, true);
+  assert.equal(v5.resolvePinnedContract(bootstrap, { contract_bytes: contractBytes }).ok, false);
   assert.equal(v5.validateControllerBootstrap({
     ...bootstrap,
     toolkit_contract: { ...bootstrap.toolkit_contract, repository: 'other-owner/other-repo' },
@@ -64,4 +72,23 @@ test('v5 bootstrap discovery fails closed when a v5 repository has no bootstrap'
   assert.equal(result.classification, 'DRIFTED_MANAGED');
   assert.equal(result.fail_closed, true);
   assert.equal(result.reason, 'v5-bootstrap-missing');
+});
+
+test('v5 operation integrity rejects tampered operation payloads and preserves order in the digest', () => {
+  const makeOperation = (target, after) => {
+    const operation = {
+      kind: 'labels', target, before_digest: v5.digest({}), after,
+      after_digest: v5.digest(after),
+    };
+    operation.operation_id = v5.digest(operation);
+    return operation;
+  };
+  const operations = [makeOperation(240, { '359': ['current'] }), makeOperation(359, { '359': ['current'] })];
+  const valid = v5.validateProgrammeOperationIntegrity(operations);
+  assert.equal(valid.ok, true, JSON.stringify(valid));
+  const tampered = JSON.parse(JSON.stringify(operations));
+  tampered[0].after['359'] = ['queued'];
+  assert.equal(v5.validateProgrammeOperationIntegrity(tampered).ok, false);
+  assert.notEqual(v5.digest(operations), v5.digest([...operations].reverse()));
+  assert.notDeepEqual(valid.ordered_operation_ids, [...valid.ordered_operation_ids].reverse());
 });
