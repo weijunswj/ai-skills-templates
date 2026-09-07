@@ -67,6 +67,7 @@
     "trusted_pr_inspection_digest": { "$ref": "#/$defs/digest" },
     "trusted_relationship_inspection_digest": { "$ref": "#/$defs/digest" },
     "relationship_capability_digest": { "$ref": "#/$defs/digest" },
+    "operation_binding_digest": { "$ref": "#/$defs/digest" },
     "required_relationship_operations": { "$ref": "#/$defs/relationshipOperations" },
     "bootstrap": { "$ref": "#/$defs/bootstrapReport" },
     "bootstrap_conformance": { "$ref": "#/$defs/bootstrapConformance" },
@@ -104,9 +105,19 @@
         "prs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/digest" } }
       }
     },
-    "labels": {
+    "labelMap": {
       "type": "object",
       "additionalProperties": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/safeLine" } }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after", "changed"],
+      "properties": {
+        "before": { "$ref": "#/$defs/labelMap" },
+        "after": { "$ref": "#/$defs/labelMap" },
+        "changed": { "type": "boolean" }
+      }
     },
     "relationshipOperations": {
       "type": "array", "maxItems": 20, "uniqueItems": true,
@@ -326,7 +337,7 @@
     },
     "expectedSnapshot": {
       "type": "object", "additionalProperties": false, "required": ["repository", "revision", "complete", "canonical_state", "bodies", "labels", "managed_events", "native", "bootstrap"],
-      "properties": { "repository": { "$ref": "#/$defs/safeLine" }, "revision": { "$ref": "#/$defs/safeLine" }, "complete": { "const": true }, "canonical_state": { "$ref": "#/$defs/canonicalState" }, "bodies": { "type": "object", "additionalProperties": false, "required": ["parent", "children", "prs"], "properties": { "parent": { "type": "string" }, "children": { "type": "object", "additionalProperties": { "type": "string" } }, "prs": { "type": "object", "additionalProperties": { "type": "string" } } } }, "labels": { "$ref": "#/$defs/labels" }, "managed_events": { "type": "array", "items": { "oneOf": [{ "$ref": "#/$defs/eventV1" }, { "$ref": "#/$defs/eventV2" }, { "$ref": "#/$defs/eventV3" }] } }, "native": { "$ref": "#/$defs/nativeSnapshot" }, "bootstrap": { "$ref": "#/$defs/controllerBootstrap" } }
+      "properties": { "repository": { "$ref": "#/$defs/safeLine" }, "revision": { "$ref": "#/$defs/safeLine" }, "complete": { "const": true }, "canonical_state": { "$ref": "#/$defs/canonicalState" }, "bodies": { "type": "object", "additionalProperties": false, "required": ["parent", "children", "prs"], "properties": { "parent": { "type": "string" }, "children": { "type": "object", "additionalProperties": { "type": "string" } }, "prs": { "type": "object", "additionalProperties": { "type": "string" } } } }, "labels": { "$ref": "#/$defs/labelMap" }, "managed_events": { "type": "array", "items": { "oneOf": [{ "$ref": "#/$defs/eventV1" }, { "$ref": "#/$defs/eventV2" }, { "$ref": "#/$defs/eventV3" }] } }, "native": { "$ref": "#/$defs/nativeSnapshot" }, "bootstrap": { "$ref": "#/$defs/controllerBootstrap" } }
     },
     "operation": {
       "type": "object",

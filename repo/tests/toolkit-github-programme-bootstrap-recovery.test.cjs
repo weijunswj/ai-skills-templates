@@ -492,9 +492,22 @@ test('v5 preserves additive extensions and owner or unmanaged body bytes', async
   assert.equal(preview.ok, true, JSON.stringify(preview));
   const migrationSchema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/github-program-reconciler/programme-migration-v2.schema.json'), 'utf8'));
   const validateMigration = schemaValidator(migrationSchema);
+  assert.deepEqual(migrationSchema.properties.operation_binding_digest, { $ref: '#/$defs/digest' });
+  assert.equal(migrationSchema.properties.labels.$ref, '#/$defs/labels');
+  assert.equal(migrationSchema.$defs.expectedSnapshot.properties.labels.$ref, '#/$defs/labelMap');
+  assert.equal(migrationSchema.$defs.labels.additionalProperties, false);
+  const labelMap = { '359': ['current'], '366': ['queued'] };
+  const labelDelta = { before: labelMap, after: { '359': ['current'], '366': ['queued', 'blocked'] }, changed: true };
+  assert.deepEqual(validateJsonSchema(labelMap, migrationSchema.$defs.labelMap, migrationSchema), []);
+  assert.deepEqual(validateJsonSchema(labelDelta, migrationSchema.$defs.labels, migrationSchema), []);
+  assert.notDeepEqual(validateJsonSchema({ ...labelDelta, unexpected: true }, migrationSchema.$defs.labels, migrationSchema), []);
+  assert.notDeepEqual(validateJsonSchema({ before: labelMap, after: labelDelta.after }, migrationSchema.$defs.labels, migrationSchema), []);
   assert.equal(validateMigration(preview), true, JSON.stringify(validateMigration.errors));
   const unexpected = { ...preview, unexpected_property: true };
   assert.equal(validateMigration(unexpected), false);
+  const missingOperationBinding = { ...preview };
+  delete missingOperationBinding.operation_binding_digest;
+  assert.equal(validateMigration(missingOperationBinding), false);
   assert.equal(preview.expected_snapshot.bodies.parent.startsWith(ownerFixture.parent_prefix), true);
   assert.equal(preview.expected_snapshot.bodies.parent.endsWith(ownerFixture.parent_suffix), true);
   assert.equal(preview.expected_snapshot.bodies.children['359'].startsWith(ownerFixture.child_prefix), true);
@@ -681,8 +694,15 @@ test('v5 produces deterministic PROGRAMME_ZERO_DELTA and does not apply it', asy
     authority_ref: 'github:issue:359:comment:5564753393',
   });
   assert.equal(first.ok, true, JSON.stringify(first));
+  assert.equal(first.managed_event_delta.new_events.length, 1);
+  assert.equal(first.managed_event_delta.new_events[0].event_type, 'canonical_transition');
+  assert.equal(first.operations.length, 1);
+  assert.equal(first.operations[0].kind, 'managed-event');
   const tamperedPreview = JSON.parse(JSON.stringify(first));
-  tamperedPreview.operations.reverse();
+  const originalAfterDigest = tamperedPreview.operations[0].after_digest;
+  tamperedPreview.operations[0].after_digest = `${originalAfterDigest[0] === '0' ? '1' : '0'}${originalAfterDigest.slice(1)}`;
+  assert.notEqual(tamperedPreview.operations[0].after_digest, originalAfterDigest);
+  assert.match(tamperedPreview.operations[0].after_digest, /^[a-f0-9]{64}$/);
   let tamperedWriterCalls = 0;
   const tamperedStore = v5.createMemoryDurableStore({ previews: [tamperedPreview], receipts: first.required_receipt_delta.chain });
   const tamperedRuntime = v5.createProgrammeRuntimeV5({
