@@ -109,116 +109,246 @@ jobs:
       - name: Self-test and adjudicate real Rust SARIF
         run: |
           python - <<'PY'
-          import json, os, pathlib, re
+          import csv, io, json, os, pathlib, re
+
+          class EvidenceError(ValueError):
+              pass
+
+          def require(condition, code):
+              if not condition: raise EvidenceError(code)
+
+          CANDIDATE_FILES=['repo/scripts/github-program-broker/src/'+x+'.rs' for x in
+                           ['canonical','crypto','error','lib','main','protocol']]+[
+                           'repo/scripts/github-program-broker/tests/contracts.rs']
+          LIMITATION_TEXT=re.compile(r'semantic analyzer unavailable(?: \(not included in files loaded from manifest\))?: macro expansion will be skipped\.')
+
+          def generated_limitation(path, message):
+              path=path.replace('\\','/')
+              require('..' not in path.split('/') and re.fullmatch(
+                  r'(?:/|file:///)[^\s]+/build/serde(?:_core)?-[A-Za-z0-9_-]+/out/private\.rs',path),
+                  'UNKNOWN_EXTRACTION_DIAGNOSTIC_PATH')
+              require(LIMITATION_TEXT.fullmatch(' '.join(message.split())), 'UNKNOWN_EXTRACTION_DIAGNOSTIC')
+              return 'serde_core' if '/build/serde_core-' in path else 'serde'
+
+          def csv_records(text, entity, width):
+              try:
+                  rows=list(csv.reader(io.StringIO(text, newline=''), strict=True))
+              except csv.Error:
+                  raise EvidenceError('MALFORMED_BQRS_CSV') from None
+              require(bool(rows), 'MISSING_BQRS_CSV_HEADER')
+              header=rows.pop(0)
+              require(len(header)==width and header[0]==entity and len(set(header))==width
+                      and all(header), 'INVALID_BQRS_CSV_HEADER')
+              require(all(len(row)==width and all(field.strip() for field in row) for row in rows),
+                      'MALFORMED_BQRS_CSV_RECORD')
+              return rows
+
+          def extracted_files(text, workspace):
+              rows=csv_records(text,'f',2)
+              require(all(row[1]=='File successfully extracted.' for row in rows), 'UNKNOWN_EXTRACTION_RECORD')
+              paths={row[0].replace('\\','/') for row in rows}
+              root=workspace.replace('\\','/').rstrip('/')
+              require(all(path in paths or root+'/'+path in paths for path in CANDIDATE_FILES),
+                      'CANDIDATE_EXTRACTION_COVERAGE_INCOMPLETE')
+              return len(CANDIDATE_FILES)
+
+          def extraction_errors(text):
+              rows=csv_records(text,'error',3)
+              notes=[]
+              for diagnostic,message,severity in rows:
+                  require(severity=='2', 'UNKNOWN_EXTRACTION_DIAGNOSTIC_SEVERITY')
+                  match=re.fullmatch(r'Extraction failed in (\S+) with error (.+)',message,re.S)
+                  require(match is not None, 'UNKNOWN_EXTRACTION_DIAGNOSTIC')
+                  require(diagnostic==match[2], 'INCONSISTENT_EXTRACTION_DIAGNOSTIC')
+                  notes.append(generated_limitation(match[1],diagnostic))
+              return notes
 
           def adjudicate(doc):
-              if doc.get('version') != '2.1.0' or not doc.get('runs'):
-                  raise ValueError('SARIF_MISSING_OR_INVALID')
+              require(isinstance(doc,dict) and doc.get('version')=='2.1.0'
+                      and isinstance(doc.get('runs'),list) and bool(doc['runs']), 'SARIF_MISSING_OR_INVALID')
               security=[]; limitations=[]; query_rules=set()
               for run in doc['runs']:
                   driver=run['tool']['driver']
-                  if driver.get('name') != 'CodeQL': raise ValueError('WRONG_ANALYZER')
-                  rules={r['id']:r for component in [driver,*run['tool'].get('extensions',[])] for r in component.get('rules',[])}
-                  for rid,rule in rules.items():
-                      p=rule.get('properties',{})
-                      if 'security' in p.get('tags',[]) or 'security-severity' in p: query_rules.add(rid)
-                  for result in run.get('results',[]):
+                  require(driver.get('name')=='CodeQL', 'WRONG_ANALYZER')
+                  rules={}
+                  for component in [driver,*run['tool'].get('extensions',[])]:
+                      require(isinstance(component.get('rules',[]),list), 'SARIF_RULES_INVALID')
+                      for rule in component.get('rules',[]):
+                          rid=rule['id']
+                          require(isinstance(rid,str) and re.fullmatch(r'rust/[A-Za-z0-9_./-]+',rid), 'INVALID_RULE_ID')
+                          require(rid not in rules, 'DUPLICATE_RULE_ID')
+                          rules[rid]=rule
+                          props=rule.get('properties',{})
+                          if 'security' in props.get('tags',[]) or 'security-severity' in props: query_rules.add(rid)
+                  require(isinstance(run.get('results'),list), 'SARIF_RESULTS_MISSING_OR_INVALID')
+                  for result in run['results']:
                       rid=result.get('ruleId')
-                      if rid not in rules: raise ValueError('UNKNOWN_RESULT_RULE')
-                      rule=rules[rid];props=rule.get('properties',{})
-                      if 'security' in props.get('tags',[]) or 'security-severity' in props:
-                          if not re.fullmatch(r'rust/[A-Za-z0-9_./-]+',rid): raise ValueError('INVALID_RULE_ID')
+                      require(rid in rules, 'UNKNOWN_RESULT_RULE')
+                      props=rules[rid].get('properties',{})
+                      if rid in query_rules:
                           security.append(rid)
                       elif props.get('kind')=='metric' and rid.startswith(('rust/summary/','rust/telemetry/')):
                           continue
                       elif rid=='rust/diagnostics/successfully-extracted-files':
                           continue
                       else:
-                          # A diagnostic cannot silently erase coverage or become a waived finding.
-                          raise ValueError('UNADJUDICATED_NONSECURITY_RESULT')
-                  for invocation in run.get('invocations',[]):
-                      if invocation.get('executionSuccessful') is False: raise ValueError('ANALYSIS_INCOMPLETE')
-                      for note in invocation.get('toolExecutionNotifications',[]):
-                          if note.get('level') not in ('warning','error'): continue
-                          locations=note.get('locations',[])
-                          uris=[x.get('physicalLocation',{}).get('artifactLocation',{}).get('uri','') for x in locations]
-                          if not uris or not all(re.search(r'/build/serde(?:_core)?-[^/]+/out/private\.rs$',u) for u in uris):
-                              raise ValueError('EXTRACTION_ASSURANCE_GAP')
-                          limitations.append('generated-serde-private.rs')
+                          raise EvidenceError('UNADJUDICATED_NONSECURITY_RESULT')
+                  invocations=run.get('invocations')
+                  require(isinstance(invocations,list) and bool(invocations), 'ANALYSIS_COMPLETION_EVIDENCE_MISSING')
+                  for invocation in invocations:
+                      require(invocation.get('executionSuccessful') is True, 'ANALYSIS_INCOMPLETE')
+                      for kind in ['toolExecutionNotifications','toolConfigurationNotifications']:
+                          for note in invocation.get(kind,[]):
+                              level=note.get('level','warning')
+                              require(level in ('none','note','warning','error'), 'UNKNOWN_NOTIFICATION_LEVEL')
+                              if level in ('none','note'): continue
+                              locations=note.get('locations',[])
+                              require(bool(locations), 'EXTRACTION_DIAGNOSTIC_PATH_MISSING')
+                              for location in locations:
+                                  uri=location['physicalLocation']['artifactLocation']['uri']
+                                  limitations.append(generated_limitation(uri,note['message']['text']))
               return security,limitations,query_rules
 
           def extraction_log_notes(text):
               notes=[]
               for line in text.splitlines():
+                  line=re.sub(r'\x1b\[[0-9;]*m','',line)
                   if not re.search(r'semantic analyzer unavailable|macro expansion will be skipped|extraction (?:failed|error)',line,re.I): continue
-                  if not re.search(r'/build/serde(?:_core)?-[^/]+/out/private\.rs(?::\d+)*:',line):
-                      raise ValueError('CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS')
-                  notes.append('generated-serde-private.rs')
+                  # CodeQL logs this query interpretation as metadata, even for zero errors.
+                  # Exempt only this complete record, never arbitrary lines mentioning the query.
+                  marker='Interpreted diagnostic query "Extraction errors" (rust/diagnostics/extraction-errors) at path '
+                  prefix,separator,record=line.partition(marker)
+                  if separator and re.fullmatch(r'\S+/codeql/rust-queries/queries/diagnostics/ExtractionErrors\.bqrs\.',record):
+                      require(not re.search(r'warn|error|failed|semantic|macro',prefix,re.I), 'UNKNOWN_EXTRACTION_LOG_RECORD')
+                      continue
+                  match=re.search(r'(\S+/build/serde(?:_core)?-[A-Za-z0-9_-]+/out/private\.rs):\d+:\d+: (.+)$',line)
+                  require(match is not None, 'CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS')
+                  require(not re.search(r'extraction (?:failed|error)|semantic analyzer unavailable|macro expansion will be skipped',line[:match.start()],re.I),
+                          'UNKNOWN_EXTRACTION_LOG_RECORD')
+                  notes.append(generated_limitation(match[1],match[2]))
               return notes
 
           def gate(doc):
               evidence=adjudicate(doc)
               return (1 if evidence[0] else 0),evidence
 
+          def security_coverage(rules):
+              require(len(rules)>=16, 'RUST_SECURITY_QUERY_COVERAGE_INCOMPLETE')
+
           def synthetic(rules,results):
-              return {'version':'2.1.0','runs':[{'tool':{'driver':{'name':'CodeQL','rules':rules}},'results':results}]}
-          sec={'id':'rust/synthetic-security','properties':{'tags':['security'],'security-severity':'8.0','kind':'problem'}}
-          metric={'id':'rust/summary/synthetic-metric','properties':{'kind':'metric'}}
-          assert gate(synthetic([sec],[]))[0]==0
-          assert gate(synthetic([sec],[{'ruleId':sec['id']}]))[0]==1
-          assert adjudicate(synthetic([metric],[{'ruleId':metric['id']}]))[0]==[]
-          try:
-              adjudicate(synthetic([{'id':'rust/diagnostics/extraction-errors'}],[{'ruleId':'rust/diagnostics/extraction-errors'}]))
-              raise AssertionError('diagnostic incorrectly accepted')
-          except ValueError: pass
-          try:
-              adjudicate(synthetic([], [{'ruleId':'missing'}]))
-              raise AssertionError('unknown rule incorrectly accepted')
-          except ValueError: pass
-          for uri,allowed in [('/target/build/serde-abc/out/private.rs',True),('/target/build/serde_core-abc/out/private.rs',True),('/repo/scripts/github-program-broker/src/protocol.rs',False)]:
-              probe=synthetic([],[])
-              probe['runs'][0]['invocations']=[{'executionSuccessful':True,'toolExecutionNotifications':[{'level':'warning','locations':[{'physicalLocation':{'artifactLocation':{'uri':uri}}}]}]}]
-              try:
-                  _,notes,_=adjudicate(probe)
-                  assert allowed and notes
-              except ValueError:
-                  assert not allowed
-          assert extraction_log_notes('WARN /target/build/serde-abc/out/private.rs:1:1: semantic analyzer unavailable: macro expansion will be skipped.')
-          try:
-              extraction_log_notes('WARN /repo/scripts/github-program-broker/src/protocol.rs:1:1: semantic analyzer unavailable: macro expansion will be skipped.')
-              raise AssertionError('candidate semantic loss accepted')
-          except ValueError: pass
-          print('RUST_CODEQL_ADJUDICATOR_SELFTEST=PASS_ZERO_SECURITY_FAIL_ONE_SECURITY_CLASSIFY_DIAGNOSTICS')
-          if os.environ.get('BROKER_SARIF_SELFTEST_ONLY')=='1': raise SystemExit(0)
-          try:
+              return {'version':'2.1.0','runs':[{'tool':{'driver':{'name':'CodeQL','rules':rules}},
+                      'results':results,'invocations':[{'executionSuccessful':True}]}]}
+
+          def selftest():
+              def fails(code, call):
+                  try: call()
+                  except EvidenceError as error:
+                      require(str(error)==code, 'SELFTEST_WRONG_FAILURE_CLASSIFICATION')
+                  else: raise EvidenceError('SELFTEST_NEGATIVE_CASE_ACCEPTED')
+              def csv_text(rows):
+                  output=io.StringIO(newline=''); csv.writer(output).writerows(rows); return output.getvalue()
+              sec={'id':'rust/synthetic-security','properties':{'tags':['security'],'security-severity':'8.0','kind':'problem'}}
+              metric={'id':'rust/summary/synthetic-metric','properties':{'kind':'metric'}}
+              require(gate(synthetic([sec],[]))[0]==0, 'SELFTEST_ZERO_SECURITY')
+              require(gate(synthetic([sec],[{'ruleId':sec['id']}]))[0]==1, 'SELFTEST_ONE_SECURITY')
+              require(adjudicate(synthetic([metric],[{'ruleId':metric['id']}]))[0]==[], 'SELFTEST_METRIC')
+              fails('UNKNOWN_RESULT_RULE',lambda: adjudicate(synthetic([], [{'ruleId':'missing'}])))
+              fails('UNADJUDICATED_NONSECURITY_RESULT',lambda: adjudicate(synthetic(
+                  [{'id':'rust/diagnostics/extraction-errors'}],[{'ruleId':'rust/diagnostics/extraction-errors'}])))
+              fails('RUST_SECURITY_QUERY_COVERAGE_INCOMPLETE',lambda: security_coverage({sec['id']}))
+              fails('SARIF_MISSING_OR_INVALID',lambda: adjudicate({}))
+              incomplete=synthetic([],[]); incomplete['runs'][0]['invocations'][0]['executionSuccessful']=False
+              fails('ANALYSIS_INCOMPLETE',lambda: adjudicate(incomplete))
+              del incomplete['runs'][0]['invocations']
+              fails('ANALYSIS_COMPLETION_EVIDENCE_MISSING',lambda: adjudicate(incomplete))
+              extracted=[['f','col1']]+[['/workspace/'+x,'File successfully extracted.'] for x in CANDIDATE_FILES]
+              require(extracted_files(csv_text(extracted),'/workspace')==7, 'SELFTEST_EXTRACTION')
+              fails('CANDIDATE_EXTRACTION_COVERAGE_INCOMPLETE',lambda: extracted_files(csv_text(extracted[:-1]),'/workspace'))
+              spoofed=[row[:] for row in extracted]; spoofed[-1][0]+='.unextracted'
+              fails('CANDIDATE_EXTRACTION_COVERAGE_INCOMPLETE',lambda: extracted_files(csv_text(spoofed),'/workspace'))
+              message='semantic analyzer unavailable (not included in files loaded from manifest):\nmacro expansion will be skipped.'
+              header=['error','col1','col2']
+              def error_row(path,diagnostic=message):
+                  return [diagnostic,'Extraction failed in '+path+' with error '+diagnostic,'2']
+              rows=[error_row('/target/build/'+crate+'-abc/out/private.rs') for crate in ['serde','serde_core','serde']]
+              single=csv_text([header,rows[0]])
+              require(len(csv_records(single,'error',3))==1, 'SELFTEST_MULTILINE_RECORD_COUNT')
+              require(extraction_errors(single)==['serde'], 'SELFTEST_SERDE_LIMITATION')
+              require(extraction_errors(csv_text([header,rows[1]]))==['serde_core'], 'SELFTEST_SERDE_CORE_LIMITATION')
+              require(extraction_errors(csv_text([header,*rows]))==['serde','serde_core','serde'], 'SELFTEST_MULTIPLE_LOGICAL_RECORDS')
+              require(extraction_errors(csv_text([header]))==[], 'SELFTEST_ZERO_ERRORS')
+              fails('UNKNOWN_EXTRACTION_DIAGNOSTIC_PATH',lambda: extraction_errors(csv_text([header,error_row('/workspace/'+CANDIDATE_FILES[0])])))
+              fails('UNKNOWN_EXTRACTION_DIAGNOSTIC_PATH',lambda: extraction_errors(csv_text([header,error_row('/target/build/unknown-abc/out/private.rs')])))
+              fails('UNKNOWN_EXTRACTION_DIAGNOSTIC',lambda: extraction_errors(csv_text([header,error_row('/target/build/serde-abc/out/private.rs','unknown error')])))
+              fails('MALFORMED_BQRS_CSV',lambda: extraction_errors('error,col1,col2\n"unterminated'))
+              fails('MALFORMED_BQRS_CSV',lambda: extraction_errors('error,col1,col2\n"x"junk,y,2\n'))
+              fails('MALFORMED_BQRS_CSV_RECORD',lambda: extraction_errors('error,col1,col2\nx,y\n'))
+              fails('MISSING_BQRS_CSV_HEADER',lambda: extraction_errors(''))
+              fails('INVALID_BQRS_CSV_HEADER',lambda: extraction_errors('wrong,col1,col2\n'))
+              for crate in ['serde','serde_core']:
+                  path='/target/build/'+crate+'-abc/out/private.rs'
+                  plain=message.replace('\n',' ')
+                  require(extraction_log_notes('WARN '+path+':1:1: '+plain)==[crate], 'SELFTEST_LOG_LIMITATION')
+                  probe=synthetic([],[])
+                  probe['runs'][0]['invocations'][0]['toolExecutionNotifications']=[{'level':'warning','message':{'text':plain},
+                      'locations':[{'physicalLocation':{'artifactLocation':{'uri':path}}}]}]
+                  require(adjudicate(probe)[1]==[crate], 'SELFTEST_SARIF_LIMITATION')
+                  probe['runs'][0]['invocations'][0]['toolExecutionNotifications'][0]['message']['text']='unknown failure'
+                  fails('UNKNOWN_EXTRACTION_DIAGNOSTIC',lambda: adjudicate(probe))
+              metadata='Interpreted diagnostic query "Extraction errors" (rust/diagnostics/extraction-errors) at path /temp/codeql_databases/rust/results/codeql/rust-queries/queries/diagnostics/ExtractionErrors.bqrs.'
+              require(extraction_log_notes('[2026-09-07 00:21:38] [INFO] '+metadata)==[], 'SELFTEST_QUERY_METADATA')
+              fails('UNKNOWN_EXTRACTION_LOG_RECORD',lambda: extraction_log_notes('ERROR '+metadata))
+              fails('CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS',lambda: extraction_log_notes(metadata+' extraction failed'))
+              fails('CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS',lambda: extraction_log_notes('WARN /workspace/'+CANDIDATE_FILES[0]+':1:1: '+message.replace('\n',' ')))
+              fails('UNKNOWN_EXTRACTION_DIAGNOSTIC',lambda: extraction_log_notes('WARN /target/build/serde-abc/out/private.rs:1:1: extraction failed'))
+              print('RUST_CODEQL_ADJUDICATOR_SELFTEST=PASS_ZERO_SECURITY_FAIL_ONE_SECURITY_CLASSIFY_DIAGNOSTICS')
+              print('RUST_CODEQL_CSV_SELFTEST=PASS_STRUCTURAL_MULTILINE_EXACT_LOGICAL_COUNTS_AND_NEGATIVE_CASES')
+
+          def read_evidence(path, code):
+              require(path.is_file(),code)
+              return path.read_text(encoding='utf-8')
+
+          def main():
+              selftest()
+              if os.environ.get('BROKER_SARIF_SELFTEST_ONLY')=='1': return 0
               temp=pathlib.Path(os.environ['RUNNER_TEMP'])
               files=sorted((temp/'broker-sarif').glob('*.sarif'))
-              if len(files)!=1: raise ValueError('SARIF_INVENTORY_INVALID')
-              exit_code,(findings,limitations,rules)=gate(json.loads(files[0].read_text()))
-              if len(rules)<16: raise ValueError('RUST_SECURITY_QUERY_COVERAGE_INCOMPLETE')
-              extracted=(temp/'broker-extracted.csv').read_text().replace('\\','/')
-              expected=['src/'+x+'.rs' for x in ['canonical','crypto','error','lib','main','protocol']]+['tests/contracts.rs']
-              if not all('repo/scripts/github-program-broker/'+x in extracted for x in expected):
-                  raise ValueError('CANDIDATE_EXTRACTION_COVERAGE_INCOMPLETE')
-              errors=(temp/'broker-extraction-errors.csv').read_text().splitlines()[1:]
-              if len(errors)>2 or any(not re.search(r'/build/serde(?:_core)?-[^/]+/out/private\.rs',x) for x in errors):
-                  raise ValueError('CANDIDATE_EXTRACTION_DIAGNOSTIC')
-              print('RUST_CODEQL_CANDIDATE_FILES_ANALYSED=7')
+              require(len(files)==1, 'SARIF_INVENTORY_INVALID')
+              exit_code,(findings,limitations,rules)=gate(json.loads(read_evidence(files[0],'SARIF_MISSING')))
+              security_coverage(rules)
+              count=extracted_files(read_evidence(temp/'broker-extracted.csv','EXTRACTED_FILES_EVIDENCE_MISSING'),os.environ['GITHUB_WORKSPACE'])
+              errors=extraction_errors(read_evidence(temp/'broker-extraction-errors.csv','EXTRACTION_ERRORS_EVIDENCE_MISSING'))
+              build_log=read_evidence(temp/'broker-codeql-build.log','BUILD_LOG_EVIDENCE_MISSING')
+              log_notes=extraction_log_notes(build_log)
+              db_logs=sorted((temp/'codeql_databases'/'rust'/'log').rglob('*.log'))
+              require(bool(db_logs), 'EXTRACTOR_LOG_EVIDENCE_MISSING')
+              for log in db_logs: log_notes.extend(extraction_log_notes(read_evidence(log,'EXTRACTOR_LOG_EVIDENCE_MISSING')))
+              print('RUST_CODEQL_CANDIDATE_FILES_ANALYSED='+str(count))
               print('RUST_CODEQL_SECURITY_QUERY_RULE_COUNT='+str(len(rules)))
               print('RUST_CODEQL_SECURITY_RESULT_COUNT='+str(len(findings)))
               print('RUST_CODEQL_SECURITY_RULE_IDS='+(','.join(sorted(set(findings))) or 'none'))
-              build_log=(temp/'broker-codeql-build.log').read_text()
-              log_notes=extraction_log_notes(build_log)
-              db_logs=list((temp/'codeql_databases'/'rust'/'log').rglob('*.log'))
-              if not db_logs: raise ValueError('EXTRACTOR_LOG_EVIDENCE_MISSING')
-              for log in db_logs: log_notes.extend(extraction_log_notes(log.read_text(errors='replace')))
+              print('RUST_CODEQL_EXTRACTION_ERROR_LOGICAL_RECORD_COUNT='+str(len(errors)))
               print('CANDIDATE_EXTRACTION_ASSURANCE=COMPLETE_SEVEN_FILES_NO_MATERIAL_LOSS')
               print('GENERATED_DEPENDENCY_EXTRACTION_LIMITATION=KNOWN_SERDE_SERDE_CORE_PRIVATE_RS_SEMANTIC_AND_MACRO_LIMITATION')
               print('GENERATED_DEPENDENCY_LIMITATION_OBSERVED='+('YES' if errors or limitations or log_notes else 'NOT_OBSERVED_IN_THIS_RUN_KNOWN_LIMITATION_RETAINED'))
+              print('GENERATED_DEPENDENCY_LIMITATION_CRATES='+(','.join(sorted(set(errors+limitations+log_notes))) or 'none_observed'))
               print('RUST_CODEQL_UPLOAD=none')
+              if findings: print('RUST_CODEQL_EVIDENCE_ERROR=SECURITY_FINDINGS_PRESENT')
               print('RUST_CODEQL_SECURITY_GATE='+('FAIL' if findings else 'PASS'))
-              raise SystemExit(exit_code)
-          except (ValueError,KeyError,TypeError,OSError):
+              return exit_code
+
+          try:
+              raise SystemExit(main())
+          except (ValueError,KeyError,TypeError,OSError,AttributeError,IndexError,AssertionError) as error:
+              if isinstance(error,EvidenceError): code=str(error)
+              elif isinstance(error,json.JSONDecodeError): code='MALFORMED_SARIF_JSON'
+              elif isinstance(error,UnicodeError): code='INVALID_EVIDENCE_ENCODING'
+              elif isinstance(error,OSError): code='EVIDENCE_IO_ERROR'
+              elif isinstance(error,AssertionError): code='ADJUDICATOR_SELFTEST_FAILED'
+              else: code='MALFORMED_EVIDENCE_STRUCTURE'
+              print('RUST_CODEQL_EVIDENCE_ERROR='+code)
+              print('CANDIDATE_EXTRACTION_ASSURANCE=INCOMPLETE_OR_UNCLASSIFIED')
+              print('GENERATED_DEPENDENCY_EXTRACTION_LIMITATION=UNADJUDICATED_KNOWN_LIMITATION_RETAINED')
               print('RUST_CODEQL_SECURITY_GATE=FAIL_INCOMPLETE_OR_UNCLASSIFIED_EVIDENCE')
               print('RUST_CODEQL_UPLOAD=none')
               raise SystemExit(1)
