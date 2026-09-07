@@ -1,0 +1,190 @@
+{
+  "source": {
+    "schema": "toolkit.github-program.state.v4",
+    "design_lock": "DL-S2-GITHUB-PROGRAM-CONVERGENCE-002",
+    "repository": "weijunswj/ai-agent-toolkit",
+    "parent": {
+      "issue": 240,
+      "title": "Canonical programme",
+      "goal": "Maintain one authoritative programme model and safe projections."
+    },
+    "children": [
+      {
+        "issue": 359,
+        "order": 1,
+        "title": "Web acceptance",
+        "objective": "Recover the accepted canonical programme controller surface.",
+        "lifecycle": "CURRENT",
+        "dependencies": [],
+        "scope": [
+          "Canonical state and trusted projections.",
+          "Recovery-safe bootstrap publication."
+        ],
+        "out_of_scope": [
+          "Programme Apply.",
+          "Ready, merge, or finality."
+        ],
+        "boundaries": [
+          "Web retains architecture and finality authority."
+        ],
+        "eli5": "One trusted plan describes the programme."
+        ,
+        "epochs": [
+          {
+            "id": "E3",
+            "name": "Canonical recovery",
+            "lock": "LOCK-E3",
+            "purpose": "Recover the accepted v5 controller surface.",
+            "gates": [
+              "G2",
+              "G3",
+              "G4"
+            ],
+            "terminal_disposition": null,
+            "evidence_ref": null
+          }
+        ],
+        "holds": [],
+        "pr_registry": [
+          {
+            "pr": 376,
+            "status": "ACTIVE",
+            "role": "INTERMEDIATE",
+            "completes_child": false,
+            "epoch_id": "E3",
+            "accepted_evidence_ref": null,
+            "retirement_evidence_ref": null
+          }
+        ],
+        "finality": {
+          "state": "HELD",
+          "authority_ref": null
+        }
+      },
+      {
+        "issue": 366,
+        "order": 2,
+        "title": "Queued follow-up",
+        "objective": "Remain queued until the current recovery is complete.",
+        "lifecycle": "QUEUED",
+        "dependencies": [
+          359
+        ],
+        "scope": [
+          "Later programme work."
+        ],
+        "out_of_scope": [
+          "Current recovery implementation."
+        ],
+        "boundaries": [
+          "Do not start while the recovery child is current."
+        ],
+        "eli5": "This child waits for the current child."
+        ,
+        "epochs": [
+          {
+            "id": "E4",
+            "name": "Follow-up",
+            "lock": "LOCK-E4",
+            "purpose": "Handle later work after recovery.",
+            "gates": [
+              "G1"
+            ],
+            "terminal_disposition": null,
+            "evidence_ref": null
+          }
+        ],
+        "holds": [],
+        "pr_registry": [],
+        "finality": {
+          "state": "HELD",
+          "authority_ref": null
+        }
+      }
+    ],
+    "prs": [
+      {
+        "number": 376,
+        "child_issue": 359,
+        "purpose": "Recover the canonical v5 programme controller and bootstrap surface.",
+        "scope": [
+          "v5 state runtime.",
+          "v5 contracts and focused tests."
+        ],
+        "out_of_scope": [
+          "Live managed-body mutation.",
+          "Programme Apply."
+        ],
+        "design_constraints": [
+          "Use one shared governance facade.",
+          "Use the existing receipt subsystem."
+        ],
+        "changed_surfaces": [
+          "repo/scripts",
+          "repo/contracts",
+          "repo/tests"
+        ],
+        "eli5": "This change rebuilds the trusted plan without applying it."
+      }
+    ],
+    "cursor": {
+      "child_issue": 359,
+      "epoch_id": "E3",
+      "gate": "G3",
+      "status": "ACTIVE",
+      "result": null
+    },
+    "candidate": {
+      "pr": 376,
+      "branch": "codex/e3-canonical-programme-bootstrap-recovery-g3",
+      "base_ref": "main",
+      "base_sha": "c72028c63cc09dd07d3e522692065448b6b7dbb6",
+      "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "version": "2.11.0",
+      "epoch_id": "E3"
+    },
+    "predecessor_contract_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "evidence_refs": [
+      {
+        "id": "web-359",
+        "kind": "WEB",
+        "reference": "github:issue:359:comment:5564753393",
+        "summary": "Controlling Web acceptance and G3 authority."
+      },
+      {
+        "id": "web-240",
+        "kind": "WEB",
+        "reference": "github:issue:240:comment:5564754827",
+        "summary": "Parent programme mirror."
+      },
+      {
+        "id": "web-376",
+        "kind": "WEB",
+        "reference": "github:pr:376:comment:5564756325",
+        "summary": "Recovery mirror and untouched terminal evidence."
+      }
+    ],
+    "historical_transitions": [
+      {
+        "id": "e3-g2-accepted",
+        "child_issue": 359,
+        "epoch_id": "E3",
+        "gate": "G2",
+        "disposition": "ACCEPTED",
+        "evidence_ref": "web-359"
+      }
+    ],
+    "extensions": []
+  },
+  "snapshot": {
+    "revision": "v4-snapshot-2026-09-07",
+    "complete": true
+  },
+  "trust": {
+    "api_version": "2026-03-10",
+    "scope_revision": "scope-revision-g3",
+    "capability_revision": "capability-revision-g3",
+    "version_resolver": "toolkit-version-v1"
+  }
+}
