@@ -27,6 +27,24 @@ function schemaRef(root, reference) {
     .reduce((value, part) => value?.[part], root);
 }
 
+function rfc3339DateTime(value) {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthDays = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day > monthDays[month - 1]) return false;
+  if (match[7] !== undefined && (Number(match[8]) > 23 || Number(match[9]) > 59)) return false;
+  return true;
+}
+
 function schemaValueEqual(left, right) {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -74,10 +92,11 @@ function validateJsonSchema(value, schema, root, location = '$', errors = []) {
     }
   }
   if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${location}: shorter than minLength`);
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${location}: longer than maxLength`);
+    const characterLength = Array.from(value).length;
+    if (schema.minLength !== undefined && characterLength < schema.minLength) errors.push(`${location}: shorter than minLength`);
+    if (schema.maxLength !== undefined && characterLength > schema.maxLength) errors.push(`${location}: longer than maxLength`);
     if (schema.pattern && !new RegExp(schema.pattern).test(value)) errors.push(`${location}: pattern mismatch`);
-    if (schema.format === 'date-time' && !Number.isFinite(Date.parse(value))) errors.push(`${location}: date-time mismatch`);
+    if (schema.format === 'date-time' && !rfc3339DateTime(value)) errors.push(`${location}: date-time mismatch`);
   }
   if (typeof value === 'number') {
     if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${location}: below minimum`);
@@ -147,6 +166,19 @@ test('self-contained migration schema harness audits keywords and enforces struc
     type: 'array', uniqueItems: true, items: { type: 'object' },
   }, {});
   assert.equal(duplicateObjects.some((error) => error.includes('uniqueItems')), true, JSON.stringify(duplicateObjects));
+  const lengthSchema = { type: 'string', maxLength: 512 };
+  assert.deepEqual(validateJsonSchema('😀'.repeat(300), lengthSchema, {}), []);
+  assert.deepEqual(validateJsonSchema('😀'.repeat(512), lengthSchema, {}), []);
+  assert.equal(validateJsonSchema('😀'.repeat(513), lengthSchema, {}).some((error) => error.includes('maxLength')), true);
+  assert.deepEqual(validateJsonSchema('界'.repeat(512), lengthSchema, {}), []);
+  assert.equal(validateJsonSchema('a'.repeat(513), lengthSchema, {}).some((error) => error.includes('maxLength')), true);
+  const dateSchema = { type: 'string', format: 'date-time' };
+  for (const valid of ['2026-09-07T01:02:03Z', '2026-09-07t01:02:03+08:00', '2024-02-29T23:59:59.123-04:00']) {
+    assert.deepEqual(validateJsonSchema(valid, dateSchema, {}), []);
+  }
+  for (const invalid of ['1', '2026-09-07', '2026-09-07T01:02:03', '2026-13-07T01:02:03Z', '2026-02-30T01:02:03Z', '2026-09-07T24:00:00Z', '2026-09-07T01:60:00Z', '2026-09-07T01:02:60Z']) {
+    assert.equal(validateJsonSchema(invalid, dateSchema, {}).some((error) => error.includes('date-time')), true, invalid);
+  }
 });
 
 function schemaValidator(schema) {
@@ -954,6 +986,117 @@ test('v5 keeps the independently expected bootstrap revision through current, mi
   assert.equal(staleMigration.reason, 'bootstrap-revision-mismatch');
 });
 
+test('v5 runtime propagates configured bootstrap expectations through preview, migration preview, and apply', () => {
+  const expectedRevision = '7cbdb78aac022386b17696f6930fe4f06d274fd1';
+  const staleRevision = '460a2460e5e8eaebebd7d2dc4c9f8e4bec0dd125';
+  const state = migrateState();
+  const harness = trustHarness(state);
+  const staleSnapshot = currentSnapshot(state, bootstrap(staleRevision));
+  const staleRuntime = v5.createProgrammeRuntimeV5({
+    store: v5.createMemoryDurableStore(), inspect_snapshot: () => staleSnapshot,
+    scope_grant: harness.scope.grant, broker: harness.broker,
+    expected_bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(staleRevision),
+  });
+  const staleRuntimePreview = staleRuntime.preview({ desired: state, scope_grant: harness.scope.grant, broker: harness.broker });
+  assert.equal(staleRuntimePreview.reason, 'v5-bootstrap-invalid-or-missing');
+  assert.equal(staleRuntimePreview.detail, 'bootstrap-revision-mismatch');
+
+  const exactSnapshot = currentSnapshot(state, bootstrap(expectedRevision));
+  const exactContext = memoryReceiptContext(state, harness.scope.grant, {
+    run_id: 'run-memory-runtime-expectation', allocation_id: 'allocation-memory-runtime-expectation',
+  });
+  const exactStore = v5.createMemoryDurableStore();
+  const exactRuntime = v5.createProgrammeRuntimeV5({
+    store: exactStore, inspect_snapshot: () => exactSnapshot,
+    scope_grant: harness.scope.grant, broker: harness.broker,
+    expected_bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(expectedRevision),
+  });
+  const exactPreview = exactRuntime.preview({
+    desired: state, scope_grant: harness.scope.grant, broker: harness.broker,
+    resolved_contract: resolvedContract(expectedRevision), receipt_context: exactContext,
+  });
+  assert.equal(exactPreview.ok, true, JSON.stringify(exactPreview));
+  const zeroSnapshot = { ...exactPreview.expected_snapshot, receipts: exactPreview.required_receipt_delta.chain };
+  const zeroRuntime = v5.createProgrammeRuntimeV5({
+    store: v5.createMemoryDurableStore({ receipts: exactPreview.required_receipt_delta.chain }),
+    inspect_snapshot: () => zeroSnapshot, scope_grant: harness.scope.grant, broker: harness.broker,
+    expected_bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(expectedRevision),
+  });
+  const zeroPreview = zeroRuntime.preview({ desired: state, scope_grant: harness.scope.grant, broker: harness.broker, resolved_contract: resolvedContract(expectedRevision) });
+  assert.equal(zeroPreview.code, 'PROGRAMME_ZERO_DELTA');
+  assert.equal(zeroRuntime.preview({ desired: state, scope_grant: harness.scope.grant, broker: harness.broker, resolved_contract: resolvedContract(expectedRevision), expected_bootstrap_revision: expectedRevision }).ok, true);
+  assert.equal(zeroRuntime.preview({ desired: state, scope_grant: harness.scope.grant, broker: harness.broker, resolved_contract: resolvedContract(expectedRevision), expected_bootstrap_revision: staleRevision }).reason, 'bootstrap-revision-conflict');
+  const exactApply = zeroRuntime.apply({ preview: zeroPreview });
+  assert.equal(exactApply.ok, true, JSON.stringify(exactApply));
+
+  const migrationRuntime = v5.createProgrammeRuntimeV5({
+    store: v5.createMemoryDurableStore(), inspect_snapshot: () => legacySnapshot(sourceState()),
+    scope_grant: harness.scope.grant, broker: harness.broker,
+    expected_bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(staleRevision),
+  });
+  const staleMigration = migrationRuntime.migrationPreview({
+    bootstrap_after: bootstrap(staleRevision), scope_grant: harness.scope.grant, broker: harness.broker,
+  });
+  assert.equal(staleMigration.ok, false, JSON.stringify(staleMigration));
+  assert.equal(staleMigration.reason, 'bootstrap-revision-mismatch');
+});
+
+test('v5 derives terminal authority and recovery state from the durable chain', () => {
+  const fixtureForTest = memoryPreviewFixture();
+  const baseChain = fixtureForTest.preview.required_receipt_delta.chain;
+  const executorTerminal = invalidatingReceipt(baseChain, 'EXECUTOR_TERMINAL');
+  const durableTerminalChain = [...baseChain, executorTerminal];
+  const terminalArgs = {
+    receipts: durableTerminalChain, repository: fixtureForTest.state.repository, parent_issue: fixtureForTest.state.parent.issue,
+    run_id: executorTerminal.run_id, allocation_id: executorTerminal.allocation_id,
+    terminal: executorTerminal, terminal_persisted: true, now: '2026-09-07T01:00:00.000Z',
+  };
+  assert.equal(v5.canAdvanceFromTerminal(terminalArgs).ok, true);
+
+  const fabricated = v5.createRunReceipt({
+    ...executorTerminal, receipt_id: undefined, created_at: '2026-09-07T00:00:00.004Z',
+  });
+  assert.equal(v5.canAdvanceFromTerminal({ ...terminalArgs, terminal: fabricated }).reason, 'terminal-chain-mismatch');
+  const postTerminal = v5.createRunReceipt({
+    ...executorTerminal, receipt_type: 'TRANSITION_PREVIEW', receipt_id: undefined,
+    sequence: executorTerminal.sequence + 1, prior_receipt_id: executorTerminal.receipt_id,
+    payload: { classification: 'TRANSITION_PREVIEW' }, created_at: '2026-09-07T00:00:00.003Z',
+  });
+  assert.equal(v5.canAdvanceFromTerminal({ ...terminalArgs, receipts: [...durableTerminalChain, postTerminal], terminal: executorTerminal }).ok, false);
+  assert.equal(v5.canAdvanceFromTerminal({ ...terminalArgs, repository: 'wrong/repository' }).ok, false);
+  assert.equal(v5.canAdvanceFromTerminal({ ...terminalArgs, parent_issue: 241 }).ok, false);
+
+  for (const receiptType of ['EXECUTOR_TERMINAL', 'RUN_INTERRUPTED']) {
+    const terminal = invalidatingReceipt(baseChain, receiptType);
+    const recovery = v5.recoverRun({
+      receipts: [...baseChain, terminal], repository: fixtureForTest.state.repository,
+      parent_issue: fixtureForTest.state.parent.issue, run_id: terminal.run_id,
+      allocation_id: terminal.allocation_id, now: '2026-09-07T01:00:00.000Z',
+    });
+    assert.equal(recovery.ok, true, JSON.stringify(recovery));
+    assert.notEqual(recovery.status, 'LOST');
+    assert.equal(recovery.replay_allowed, false);
+  }
+  const g4Terminal = invalidatingReceipt(baseChain, 'G4_TERMINAL');
+  const g4Recovery = v5.recoverRun({
+    receipts: [...baseChain, g4Terminal], repository: fixtureForTest.state.repository,
+    parent_issue: fixtureForTest.state.parent.issue, run_id: g4Terminal.run_id,
+    allocation_id: g4Terminal.allocation_id, now: '2026-09-07T01:00:00.000Z',
+  });
+  assert.equal(g4Recovery.status, 'G4_UNADJUDICATED');
+  assert.equal(g4Recovery.replay_allowed, false);
+  const running = v5.recoverRun({
+    receipts: baseChain, repository: fixtureForTest.state.repository,
+    parent_issue: fixtureForTest.state.parent.issue, run_id: baseChain[0].run_id,
+    allocation_id: baseChain[0].allocation_id, terminal: fabricated, now: '2026-09-07T01:00:00.000Z',
+  });
+  assert.equal(running.status, 'RUNNING');
+  assert.equal(running.replay_allowed, false);
+  const corrupt = JSON.parse(JSON.stringify(baseChain));
+  corrupt[0].lock = 'corrupt-chain';
+  assert.equal(v5.recoverRun({ receipts: corrupt }).ok, false);
+});
+
 test('v5 migration preview separates receipts from Programme Apply and binds event and operation digests', async (t) => {
   const source = sourceState();
   const target = migrateState();
@@ -1209,6 +1352,10 @@ test('v5 enforces the active receipt fence before, at, and after the mutation bo
   assert.equal(boundaryRejected, true);
   assert.equal(boundaryResult.ok, false, JSON.stringify(boundaryResult));
   assert.equal(boundaryResult.reason, 'apply-failed');
+  assert.equal(boundaryResult.writer_boundary_crossed, true);
+  assert.equal(boundaryResult.mutation_outcome, 'UNKNOWN');
+  assert.equal(boundaryResult.replay_allowed, false);
+  assert.equal(boundaryResult.recovery_required, true);
   assert.equal(boundaryWriterCalls, 1);
 
   for (const receiptType of ['RUN_INTERRUPTED', 'EXECUTOR_TERMINAL', 'G4_TERMINAL']) {
@@ -1270,6 +1417,10 @@ test('v5 enforces the active receipt fence before, at, and after the mutation bo
   assert.equal(movedResult.ok, false, JSON.stringify(movedResult));
   assert.equal(movedResult.reason, 'active-receipt-invalidated');
   assert.equal(movedWriterCalls, 1);
+  assert.equal(movedResult.writer_boundary_crossed, true);
+  assert.equal(movedResult.mutation_outcome, 'UNKNOWN');
+  assert.equal(movedResult.replay_allowed, false);
+  assert.equal(movedResult.recovery_required, true);
 
   const movedAfterReadback = memoryPreviewFixture();
   let readbackSnapshot = movedAfterReadback.snapshot;
@@ -1299,6 +1450,10 @@ test('v5 enforces the active receipt fence before, at, and after the mutation bo
   assert.equal(readbackResult.ok, false, JSON.stringify(readbackResult));
   assert.equal(readbackResult.reason, 'active-receipt-invalidated');
   assert.equal(readbackWriterCalls, 1);
+  assert.equal(readbackResult.writer_boundary_crossed, true);
+  assert.equal(readbackResult.mutation_outcome, 'UNKNOWN');
+  assert.equal(readbackResult.replay_allowed, false);
+  assert.equal(readbackResult.recovery_required, true);
 });
 
 test('v5 validates referenced historical receipt runs independently from the active run chain', () => {
@@ -1339,7 +1494,15 @@ test('v5 validates referenced historical receipt runs independently from the act
   const chainB = previewB.required_receipt_delta.chain;
 
   function applyB(receipts) {
-    const store = v5.createMemoryDurableStore({ previews: [previewB], receipts });
+    const baseStore = v5.createMemoryDurableStore({ previews: [previewB], receipts });
+    const readRuns = [];
+    const store = Object.freeze({
+      ...baseStore,
+      readReceiptChain(runId) {
+        readRuns.push(runId);
+        return baseStore.readReceiptChain(runId);
+      },
+    });
     let current = snapshotA;
     let writerCalls = 0;
     const result = v5.createProgrammeRuntimeV5({
@@ -1359,12 +1522,13 @@ test('v5 validates referenced historical receipt runs independently from the act
         };
       },
     }).apply({ preview: previewB, now });
-    return { result, writerCalls };
+    return { result, writerCalls, readRuns };
   }
 
   const valid = applyB([...chainA, ...chainB]);
   assert.equal(valid.result.ok, true, JSON.stringify(valid.result));
   assert.equal(valid.writerCalls, 1);
+  assert.equal(valid.readRuns.includes('run-memory-a'), true, JSON.stringify(valid.readRuns));
 
   const missingHistorical = applyB(chainB);
   assert.equal(missingHistorical.result.ok, false, JSON.stringify(missingHistorical.result));
@@ -1388,4 +1552,71 @@ test('v5 validates referenced historical receipt runs independently from the act
   const unrelated = applyB([...chainA, ...chainB, ...unrelatedC.started_chain]);
   assert.equal(unrelated.result.ok, true, JSON.stringify(unrelated.result));
   assert.equal(unrelated.writerCalls, 1);
+});
+
+test('v5 permits append-only A-to-B-to-A transitions while keeping immediate reruns zero-delta', () => {
+  const stateA = migrateState();
+  const harnessA = trustHarness(stateA);
+  const snapshotA = currentSnapshot(stateA);
+  const contextA = memoryReceiptContext(stateA, harnessA.scope.grant, {
+    run_id: 'run-memory-transition-a', allocation_id: 'allocation-memory-transition-a',
+  });
+  const stateB = JSON.parse(JSON.stringify(stateA));
+  stateB.children[0].summary += ' B';
+  const harnessB = trustHarness(stateB);
+  const previewAB = v5.buildConvergencePreviewV5({
+    desired: stateB, snapshot: snapshotA, scope_grant: harnessB.scope.grant, broker: harnessB.broker,
+    resolved_contract: resolvedContract(snapshotA.bootstrap.toolkit_contract.revision), receipt_context: contextA,
+    authority_ref: contextA.authority_ref,
+  });
+  assert.equal(previewAB.ok, true, JSON.stringify(previewAB));
+  const eventAB = previewAB.managed_event_delta.new_events[0];
+  const chainA = previewAB.required_receipt_delta.chain;
+  const contextB = memoryReceiptContext(stateB, harnessB.scope.grant, {
+    run_id: 'run-memory-transition-b', allocation_id: 'allocation-memory-transition-b',
+  });
+  const snapshotB = { ...previewAB.expected_snapshot, receipts: chainA };
+  const previewBA = v5.buildConvergencePreviewV5({
+    desired: stateA, snapshot: snapshotB, scope_grant: harnessA.scope.grant, broker: harnessA.broker,
+    resolved_contract: resolvedContract(snapshotB.bootstrap.toolkit_contract.revision), receipt_context: contextB,
+    authority_ref: contextB.authority_ref,
+  });
+  assert.equal(previewBA.ok, true, JSON.stringify(previewBA));
+  assert.equal(previewBA.managed_event_delta.new_events.length, 1);
+  const eventBA = previewBA.managed_event_delta.new_events[0];
+  assert.equal(eventBA.from_state_digest, v5.digest(stateB));
+  assert.equal(eventBA.to_state_digest, v5.digest(stateA));
+  assert.equal(eventBA.prior_event_id, eventAB.event_id);
+  assert.notDeepEqual(eventBA, eventAB);
+  assert.equal(previewBA.required_receipt_delta.receipt.run_id, 'run-memory-transition-b');
+
+  const chainB = previewBA.required_receipt_delta.chain;
+  const snapshotAtA = { ...previewBA.expected_snapshot, receipts: [...chainA, ...chainB] };
+  const rerun = v5.buildConvergencePreviewV5({
+    desired: stateA, snapshot: snapshotAtA, scope_grant: harnessA.scope.grant, broker: harnessA.broker,
+    resolved_contract: resolvedContract(snapshotAtA.bootstrap.toolkit_contract.revision),
+  });
+  assert.equal(rerun.ok, true, JSON.stringify(rerun));
+  assert.equal(rerun.code, 'PROGRAMME_ZERO_DELTA');
+  assert.equal(rerun.operations.length, 0);
+  assert.equal(rerun.managed_event_delta.new_events.length, 0);
+
+  const contextC = memoryReceiptContext(stateB, harnessB.scope.grant, {
+    run_id: 'run-memory-transition-c', allocation_id: 'allocation-memory-transition-c',
+  });
+  const previewABAgain = v5.buildConvergencePreviewV5({
+    desired: stateB, snapshot: snapshotAtA, scope_grant: harnessB.scope.grant, broker: harnessB.broker,
+    resolved_contract: resolvedContract(snapshotAtA.bootstrap.toolkit_contract.revision), receipt_context: contextC,
+    authority_ref: contextC.authority_ref,
+  });
+  assert.equal(previewABAgain.ok, true, JSON.stringify(previewABAgain));
+  const eventABAgain = previewABAgain.managed_event_delta.new_events[0];
+  assert.equal(eventABAgain.from_state_digest, v5.digest(stateA));
+  assert.equal(eventABAgain.to_state_digest, v5.digest(stateB));
+  assert.equal(eventABAgain.prior_event_id, eventBA.event_id);
+  assert.equal(previewABAgain.required_receipt_delta.receipt.run_id, 'run-memory-transition-c');
+  assert.deepEqual(previewABAgain.expected_snapshot.managed_events.slice(0, 2), previewBA.expected_snapshot.managed_events);
+  assert.equal(v5.validateManagedEventInventoryV5(previewABAgain.expected_snapshot.managed_events, stateA.repository, {
+    parent_issue: stateA.parent.issue, receipts: [...chainA, ...chainB, ...previewABAgain.required_receipt_delta.chain],
+  }).ok, true);
 });
