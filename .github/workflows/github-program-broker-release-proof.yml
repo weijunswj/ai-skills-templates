@@ -109,7 +109,7 @@ jobs:
       - name: Self-test and adjudicate real Rust SARIF
         run: |
           python - <<'PY'
-          import csv, io, json, os, pathlib, re
+          import csv, hashlib, io, json, os, pathlib, re
 
           class EvidenceError(ValueError):
               pass
@@ -121,6 +121,46 @@ jobs:
                            ['canonical','crypto','error','lib','main','protocol']]+[
                            'repo/scripts/github-program-broker/tests/contracts.rs']
           LIMITATION_TEXT=re.compile(r'semantic analyzer unavailable(?: \(not included in files loaded from manifest\))?: macro expansion will be skipped\.')
+
+          DIAGNOSTICS_LIVE=False
+
+          def public_path(value, workspace):
+              # Diagnostic rendering only; this never supplies a trusted extraction path.
+              if not isinstance(value,str): return {'representation':'non-string'}
+              original=value
+              root=workspace.replace('\\','/').rstrip('/')
+              for prefix in ['file://'+root,root] if root else []:
+                  if value==prefix or value.startswith(prefix+'/'):
+                      value='$WORKSPACE'+value[len(prefix):]
+                      break
+              public=r'(?:\$WORKSPACE/)?repo/scripts/github-program-broker/(?:target/(?:x86_64-unknown-linux-gnu/)?debug/build/serde(?:_core)?-[a-f0-9]{16}/out/private\.rs|src/(?:canonical|crypto|error|lib|main|protocol)\.rs|tests/contracts\.rs)'
+              if value in ('$WORKSPACE','$WORKSPACE/') or re.fullmatch(public,value):
+                  return {'representation':value,'workspace_prefix_replaced':value!=original}
+              return {'representation':'redacted','length':len(original),
+                      'sha256':hashlib.sha256(original.encode('utf-8')).hexdigest()}
+
+          def diagnostic_record(path, message, source, locator, artifact, bases):
+              workspace=os.environ.get('GITHUB_WORKSPACE','')
+              record={'source':source,'locator':locator,'path':public_path(path,workspace),
+                      'message':message if isinstance(message,str) and LIMITATION_TEXT.fullmatch(' '.join(message.split()))
+                      and len(message)<=240 else '<redacted>'}
+              if artifact is not None:
+                  base_id=artifact.get('uriBaseId')
+                  record['uri_base_id']=base_id if base_id in (None,'%SRCROOT%') else '<redacted>'
+                  record['artifact_index_present']='index' in artifact
+                  base=bases.get(base_id) if isinstance(bases,dict) else None
+                  record['base_uri']=public_path(base.get('uri'),workspace) if isinstance(base,dict) else {'representation':'absent'}
+                  record['base_parent_present']=isinstance(base,dict) and 'uriBaseId' in base
+              return record
+
+          def observed_limitation(path, message, source, locator, artifact=None, bases=None):
+              try:
+                  return generated_limitation(path,message)
+              except EvidenceError:
+                  if DIAGNOSTICS_LIVE:
+                      print('RUST_CODEQL_REJECTED_DIAGNOSTIC='+json.dumps(
+                          diagnostic_record(path,message,source,locator,artifact,bases),sort_keys=True))
+                  raise
 
           def generated_limitation(path, message):
               path=path.replace('\\','/')
@@ -155,19 +195,19 @@ jobs:
           def extraction_errors(text):
               rows=csv_records(text,'error',3)
               notes=[]
-              for diagnostic,message,severity in rows:
+              for row_index,(diagnostic,message,severity) in enumerate(rows):
                   require(severity=='2', 'UNKNOWN_EXTRACTION_DIAGNOSTIC_SEVERITY')
                   match=re.fullmatch(r'Extraction failed in (\S+) with error (.+)',message,re.S)
                   require(match is not None, 'UNKNOWN_EXTRACTION_DIAGNOSTIC')
                   require(diagnostic==match[2], 'INCONSISTENT_EXTRACTION_DIAGNOSTIC')
-                  notes.append(generated_limitation(match[1],diagnostic))
+                  notes.append(observed_limitation(match[1],diagnostic,'bqrs-csv',[row_index]))
               return notes
 
           def adjudicate(doc):
               require(isinstance(doc,dict) and doc.get('version')=='2.1.0'
                       and isinstance(doc.get('runs'),list) and bool(doc['runs']), 'SARIF_MISSING_OR_INVALID')
               security=[]; limitations=[]; query_rules=set()
-              for run in doc['runs']:
+              for run_index,run in enumerate(doc['runs']):
                   driver=run['tool']['driver']
                   require(driver.get('name')=='CodeQL', 'WRONG_ANALYZER')
                   rules={}
@@ -195,23 +235,25 @@ jobs:
                           raise EvidenceError('UNADJUDICATED_NONSECURITY_RESULT')
                   invocations=run.get('invocations')
                   require(isinstance(invocations,list) and bool(invocations), 'ANALYSIS_COMPLETION_EVIDENCE_MISSING')
-                  for invocation in invocations:
+                  for invocation_index,invocation in enumerate(invocations):
                       require(invocation.get('executionSuccessful') is True, 'ANALYSIS_INCOMPLETE')
                       for kind in ['toolExecutionNotifications','toolConfigurationNotifications']:
-                          for note in invocation.get(kind,[]):
+                          for note_index,note in enumerate(invocation.get(kind,[])):
                               level=note.get('level','warning')
                               require(level in ('none','note','warning','error'), 'UNKNOWN_NOTIFICATION_LEVEL')
                               if level in ('none','note'): continue
                               locations=note.get('locations',[])
                               require(bool(locations), 'EXTRACTION_DIAGNOSTIC_PATH_MISSING')
-                              for location in locations:
-                                  uri=location['physicalLocation']['artifactLocation']['uri']
-                                  limitations.append(generated_limitation(uri,note['message']['text']))
+                              for location_index,location in enumerate(locations):
+                                  artifact=location['physicalLocation']['artifactLocation']
+                                  limitations.append(observed_limitation(artifact['uri'],note['message']['text'],
+                                      'sarif-notification',[run_index,invocation_index,kind,note_index,location_index],
+                                      artifact,run.get('originalUriBaseIds',{})))
               return security,limitations,query_rules
 
-          def extraction_log_notes(text):
+          def extraction_log_notes(text, source='selftest-log', log_index=0):
               notes=[]
-              for line in text.splitlines():
+              for line_index,line in enumerate(text.splitlines()):
                   line=re.sub(r'\x1b\[[0-9;]*m','',line)
                   if not re.search(r'semantic analyzer unavailable|macro expansion will be skipped|extraction (?:failed|error)',line,re.I): continue
                   # CodeQL logs this query interpretation as metadata, even for zero errors.
@@ -225,7 +267,7 @@ jobs:
                   require(match is not None, 'CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS')
                   require(not re.search(r'extraction (?:failed|error)|semantic analyzer unavailable|macro expansion will be skipped',line[:match.start()],re.I),
                           'UNKNOWN_EXTRACTION_LOG_RECORD')
-                  notes.append(generated_limitation(match[1],match[2]))
+                  notes.append(observed_limitation(match[1],match[2],source,[log_index,line_index]))
               return notes
 
           def gate(doc):
@@ -302,6 +344,10 @@ jobs:
               fails('CANDIDATE_OR_UNKNOWN_EXTRACTION_LOSS',lambda: extraction_log_notes('WARN /workspace/'+CANDIDATE_FILES[0]+':1:1: '+message.replace('\n',' ')))
               fails('UNKNOWN_EXTRACTION_DIAGNOSTIC',lambda: extraction_log_notes('WARN /target/build/serde-abc/out/private.rs:1:1: extraction failed'))
               print('RUST_CODEQL_ADJUDICATOR_SELFTEST=PASS_ZERO_SECURITY_FAIL_ONE_SECURITY_CLASSIFY_DIAGNOSTICS')
+              require(public_path('/private/person/token','/workspace')['representation']=='redacted', 'SELFTEST_DIAGNOSTIC_PRIVACY')
+              require(public_path('/workspace/../private','/workspace')['representation']=='redacted', 'SELFTEST_DIAGNOSTIC_TRAVERSAL_PRIVACY')
+              require(public_path('/workspace','/workspace')['representation']=='$WORKSPACE', 'SELFTEST_DIAGNOSTIC_ROOT')
+              require(diagnostic_record('/private/person/token','unknown secret','selftest',[],None,None)['message']=='<redacted>', 'SELFTEST_DIAGNOSTIC_MESSAGE_PRIVACY')
               print('RUST_CODEQL_CSV_SELFTEST=PASS_STRUCTURAL_MULTILINE_EXACT_LOGICAL_COUNTS_AND_NEGATIVE_CASES')
 
           def read_evidence(path, code):
@@ -309,8 +355,10 @@ jobs:
               return path.read_text(encoding='utf-8')
 
           def main():
+              global DIAGNOSTICS_LIVE
               selftest()
               if os.environ.get('BROKER_SARIF_SELFTEST_ONLY')=='1': return 0
+              DIAGNOSTICS_LIVE=True
               temp=pathlib.Path(os.environ['RUNNER_TEMP'])
               files=sorted((temp/'broker-sarif').glob('*.sarif'))
               require(len(files)==1, 'SARIF_INVENTORY_INVALID')
@@ -319,10 +367,11 @@ jobs:
               count=extracted_files(read_evidence(temp/'broker-extracted.csv','EXTRACTED_FILES_EVIDENCE_MISSING'),os.environ['GITHUB_WORKSPACE'])
               errors=extraction_errors(read_evidence(temp/'broker-extraction-errors.csv','EXTRACTION_ERRORS_EVIDENCE_MISSING'))
               build_log=read_evidence(temp/'broker-codeql-build.log','BUILD_LOG_EVIDENCE_MISSING')
-              log_notes=extraction_log_notes(build_log)
+              log_notes=extraction_log_notes(build_log,'build-log')
               db_logs=sorted((temp/'codeql_databases'/'rust'/'log').rglob('*.log'))
               require(bool(db_logs), 'EXTRACTOR_LOG_EVIDENCE_MISSING')
-              for log in db_logs: log_notes.extend(extraction_log_notes(read_evidence(log,'EXTRACTOR_LOG_EVIDENCE_MISSING')))
+              for log_index,log in enumerate(db_logs):
+                  log_notes.extend(extraction_log_notes(read_evidence(log,'EXTRACTOR_LOG_EVIDENCE_MISSING'),'database-log',log_index))
               print('RUST_CODEQL_CANDIDATE_FILES_ANALYSED='+str(count))
               print('RUST_CODEQL_SECURITY_QUERY_RULE_COUNT='+str(len(rules)))
               print('RUST_CODEQL_SECURITY_RESULT_COUNT='+str(len(findings)))
