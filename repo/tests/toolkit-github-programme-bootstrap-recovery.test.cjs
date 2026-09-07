@@ -28,7 +28,19 @@ function schemaRef(root, reference) {
 }
 
 function schemaValueEqual(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((entry, index) => schemaValueEqual(entry, right[index]));
+  }
+  if (left && typeof left === 'object' || right && typeof right === 'object') {
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return schemaValueEqual(leftKeys, rightKeys)
+      && leftKeys.every((key) => schemaValueEqual(left[key], right[key]));
+  }
+  return false;
 }
 
 function validateJsonSchema(value, schema, root, location = '$', errors = []) {
@@ -74,6 +86,13 @@ function validateJsonSchema(value, schema, root, location = '$', errors = []) {
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${location}: fewer than minItems`);
     if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${location}: more than maxItems`);
+    if (schema.uniqueItems === true) {
+      for (let left = 0; left < value.length; left += 1) {
+        for (let right = left + 1; right < value.length; right += 1) {
+          if (schemaValueEqual(value[left], value[right])) errors.push(`${location}: duplicate uniqueItems`);
+        }
+      }
+    }
     if (schema.items) value.forEach((entry, index) => validateJsonSchema(entry, schema.items, root, `${location}[${index}]`, errors));
   }
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -89,6 +108,46 @@ function validateJsonSchema(value, schema, root, location = '$', errors = []) {
   }
   return errors;
 }
+
+const EXPECTED_MIGRATION_SCHEMA_KEYWORDS = [
+  '$defs', '$id', '$ref', '$schema', 'additionalProperties', 'const', 'enum', 'format', 'items',
+  'maxItems', 'maxLength', 'maximum', 'minItems', 'minLength', 'minimum', 'oneOf', 'pattern',
+  'properties', 'required', 'title', 'type', 'uniqueItems',
+];
+
+function collectSchemaKeywords(schema) {
+  const allowed = new Set(EXPECTED_MIGRATION_SCHEMA_KEYWORDS);
+  const used = new Set();
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    for (const [keyword, value] of Object.entries(node)) {
+      if (!allowed.has(keyword)) throw new Error(`unsupported schema keyword: ${keyword}`);
+      used.add(keyword);
+      if (keyword === 'properties' || keyword === '$defs') Object.values(value || {}).forEach(visit);
+      else if (keyword === 'items' || keyword === 'additionalProperties') visit(value);
+      else if (['allOf', 'oneOf', 'anyOf'].includes(keyword)) visit(value);
+    }
+  }
+  visit(schema);
+  return [...used].sort();
+}
+
+test('self-contained migration schema harness audits keywords and enforces structural uniqueItems', () => {
+  const migrationSchema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/github-program-reconciler/programme-migration-v2.schema.json'), 'utf8'));
+  assert.deepEqual(collectSchemaKeywords(migrationSchema), EXPECTED_MIGRATION_SCHEMA_KEYWORDS.slice().sort());
+  assert.equal(schemaValueEqual({ first: 1, nested: { second: 2 } }, { nested: { second: 2 }, first: 1 }), true);
+  const duplicateIds = validateJsonSchema([DIGEST, DIGEST], migrationSchema.properties.ordered_operation_ids, migrationSchema);
+  assert.equal(duplicateIds.some((error) => error.includes('uniqueItems')), true, JSON.stringify(duplicateIds));
+  const duplicateRelationshipOperations = validateJsonSchema(
+    ['PR_ASSOCIATION', 'PR_ASSOCIATION'], schemaRef(migrationSchema, migrationSchema.properties.required_relationship_operations.$ref), migrationSchema
+  );
+  assert.equal(duplicateRelationshipOperations.some((error) => error.includes('uniqueItems')), true, JSON.stringify(duplicateRelationshipOperations));
+  const duplicateObjects = validateJsonSchema([{ first: 1, second: 2 }, { second: 2, first: 1 }], {
+    type: 'array', uniqueItems: true, items: { type: 'object' },
+  }, {});
+  assert.equal(duplicateObjects.some((error) => error.includes('uniqueItems')), true, JSON.stringify(duplicateObjects));
+});
 
 function schemaValidator(schema) {
   const validate = (value) => {
@@ -369,6 +428,94 @@ function currentSnapshot(state, currentBootstrap = bootstrap()) {
   };
 }
 
+function legacyV1Event(options = {}) {
+  const event = {
+    schema: 'toolkit.github-program.managed-event.v1',
+    event_type: options.event_type || 'lifecycle_transition',
+    repository: bootstrapFixture.repository,
+    entity: options.entity || { kind: 'parent', number: 240 },
+    exact_revision: options.exact_revision || SHA,
+    resulting_state: options.resulting_state || 'CURRENT',
+    authority_ref: options.authority_ref || 'github:issue:359:comment:5564753393',
+  };
+  if (options.prior_event !== undefined) event.prior_event = options.prior_event;
+  if (options.child_issue !== undefined) event.child_issue = options.child_issue;
+  if (options.pr_number !== undefined) event.pr_number = options.pr_number;
+  if (options.epoch !== undefined) event.epoch = options.epoch;
+  event.event_id = v4.digest(event);
+  return event;
+}
+
+function memoryReceiptContext(state, scope, options = {}) {
+  const authority = {
+    child_comment_id: 5564753393,
+    parent_comment_id: 5564754827,
+    node_id: 'MDU6SXNzdWVDb21tZW50OjU1NjQ3NTMzOTM',
+    author_login: 'weijunswj',
+    author_association: 'OWNER',
+    body_digest: '1'.repeat(64),
+    updated_at: '2026-09-07T00:00:00.000Z',
+    update_identity_digest: '2'.repeat(64),
+    scope_digest: scope.scope_digest,
+  };
+  const start = {
+    base_sha: BASE,
+    head_sha: SHA,
+    tree_sha: TREE,
+    status_digest: DIGEST,
+    clean_worktree: true,
+    ref: { detached: false, name: 'codex/e3-memory-receipt-boundary' },
+  };
+  const lease = {
+    lease_id: options.lease_id || 'lease-memory-1',
+    fence_id: options.fence_id || 'fence-memory-1',
+    fence_sequence: options.fence_sequence || 1,
+    issued_at: options.issued_at || '2026-09-07T00:00:00.000Z',
+    expires_at: options.expires_at || '2099-09-07T00:00:00.000Z',
+  };
+  const runId = options.run_id || 'run-memory-1';
+  const allocationId = options.allocation_id || 'allocation-memory-1';
+  const lock = options.lock || 'lock-memory-1';
+  const started = v5.createRunReceipt({
+    receipt_type: 'RUN_STARTED', sequence: 1, run_id: runId, allocation_id: allocationId,
+    repository: state.repository, parent_issue: state.parent.issue, child_issue: state.children[0].issue,
+    lock, authority, start, candidate: null, lease,
+    payload: { classification: 'RUN_STARTED_VERIFIED' },
+    created_at: options.created_at || '2026-09-07T00:00:00.000Z',
+  });
+  return {
+    authority_ref: 'github:issue:359:comment:5564753393', authority, start, lease, run_id: runId,
+    allocation_id: allocationId, child_issue: state.children[0].issue, lock,
+    started_chain: [started], transition_created_at: '2026-09-07T00:00:00.001Z',
+  };
+}
+
+function memoryPreviewFixture(options = {}) {
+  const state = migrateState();
+  const harness = trustHarness(state);
+  const snapshot = currentSnapshot(state);
+  const context = memoryReceiptContext(state, harness.scope.grant, options);
+  const preview = v5.buildConvergencePreviewV5({
+    desired: state, snapshot, scope_grant: harness.scope.grant, broker: harness.broker,
+    resolved_contract: resolvedContract(snapshot.bootstrap.toolkit_contract.revision), receipt_context: context,
+    authority_ref: context.authority_ref,
+  });
+  assert.equal(preview.ok, true, JSON.stringify(preview));
+  const store = v5.createMemoryDurableStore({ previews: [preview], receipts: preview.required_receipt_delta.chain });
+  return { state, harness, snapshot, context, preview, store };
+}
+
+function invalidatingReceipt(chain, receiptType = 'RUN_INTERRUPTED') {
+  const prior = chain.at(-1);
+  return v5.createRunReceipt({
+    receipt_type: receiptType, sequence: prior.sequence + 1, prior_receipt_id: prior.receipt_id,
+    run_id: prior.run_id, allocation_id: prior.allocation_id, repository: prior.repository,
+    parent_issue: prior.parent_issue, child_issue: prior.child_issue, lock: prior.lock,
+    authority: prior.authority, start: prior.start, candidate: prior.candidate, lease: prior.lease,
+    payload: { classification: receiptType }, created_at: '2026-09-07T00:00:00.002Z',
+  });
+}
+
 test('v5 migrates v4 and recovers already-v5 state without changing identity', () => {
   const state = migrateState();
   const valid = v5.validateCanonicalStateV5(state);
@@ -424,6 +571,82 @@ test('v5 does not project completion from an unresolved epoch or held finality',
   assert.notEqual(v5.deriveProjectionV5(state).ok, true);
 });
 
+test('v5 requires an accepted merged completing PR for completed children and derives status-aware associations', () => {
+  const retired = migrateState();
+  const retiredChild = retired.children[0];
+  retiredChild.pr_registry[0] = {
+    ...retiredChild.pr_registry[0], status: 'RETIRED', role: 'TERMINAL', completes_child: true,
+    accepted_evidence_ref: null, retirement_evidence_ref: 'web-359',
+  };
+  retired.active_lanes[0].candidate = null;
+  const retiredValid = v5.validateCanonicalStateV5(retired);
+  assert.equal(retiredValid.ok, true, JSON.stringify(retiredValid));
+  assert.equal(v5.derivePrAssociationsV5(retired).associations['376'].kind, 'CROSS_REFERENCE');
+
+  const incomplete = migrateState();
+  const incompleteChild = incomplete.children[0];
+  incompleteChild.lifecycle = 'COMPLETED';
+  incompleteChild.epochs.forEach((epoch) => { epoch.terminal_disposition = 'RETIRED'; epoch.evidence_ref = 'web-359'; });
+  incompleteChild.finality = { state: 'MERGED', authority_ref: 'web-359' };
+  incompleteChild.pr_registry[0] = {
+    ...incompleteChild.pr_registry[0], status: 'RETIRED', role: 'TERMINAL', completes_child: true,
+    accepted_evidence_ref: null, retirement_evidence_ref: 'web-359',
+  };
+  incomplete.active_lanes = [];
+  assert.equal(v5.validateCanonicalStateV5(incomplete).reason, 'completed-child-completing-pr-required');
+  assert.equal(v5.derivePrAssociationsV5(incomplete).ok, false);
+
+  const activeReadyOnly = migrateState();
+  const activeReadyChild = activeReadyOnly.children[0];
+  activeReadyChild.lifecycle = 'COMPLETED';
+  activeReadyChild.epochs.forEach((epoch) => { epoch.terminal_disposition = 'ACCEPTED'; epoch.evidence_ref = 'web-359'; });
+  activeReadyChild.finality = { state: 'MERGED', authority_ref: 'web-359' };
+  activeReadyOnly.active_lanes = [];
+  activeReadyChild.pr_registry[0] = {
+    ...activeReadyChild.pr_registry[0], status: 'ACTIVE', role: 'TERMINAL', completes_child: true,
+  };
+  assert.equal(v5.validateCanonicalStateV5(activeReadyOnly).reason, 'completed-child-completing-pr-required');
+
+  const readyOnly = migrateState();
+  const readyOnlyChild = readyOnly.children[0];
+  readyOnlyChild.lifecycle = 'COMPLETED';
+  readyOnlyChild.epochs.forEach((epoch) => { epoch.terminal_disposition = 'ACCEPTED'; epoch.evidence_ref = 'web-359'; });
+  readyOnlyChild.finality = { state: 'READY_AUTHORIZED', authority_ref: 'web-359' };
+  readyOnlyChild.pr_registry[0] = {
+    ...readyOnlyChild.pr_registry[0], status: 'ACTIVE', role: 'TERMINAL', completes_child: true,
+  };
+  readyOnly.active_lanes = [];
+  assert.equal(v5.validateCanonicalStateV5(readyOnly).reason, 'completed-child-finality-incomplete');
+  const closedUnmerged = trustHarness(incomplete, { lifecycle: 'CLOSED_UNMERGED' });
+  assert.equal(v5.inspectTrustBindingsV5(incomplete, closedUnmerged.scope.grant, closedUnmerged.broker).ok, false);
+
+  const completed = migrateState();
+  const completedChild = completed.children[0];
+  completedChild.lifecycle = 'COMPLETED';
+  completedChild.epochs.forEach((epoch) => { epoch.terminal_disposition = 'ACCEPTED'; epoch.evidence_ref = 'web-359'; });
+  completedChild.finality = { state: 'MERGED', authority_ref: 'web-359' };
+  completedChild.pr_registry[0] = {
+    ...completedChild.pr_registry[0], status: 'ACCEPTED', role: 'TERMINAL', completes_child: true,
+    accepted_evidence_ref: 'web-359', retirement_evidence_ref: null,
+  };
+  completed.active_lanes = [];
+  const completedValid = v5.validateCanonicalStateV5(completed);
+  assert.equal(completedValid.ok, true, JSON.stringify(completedValid));
+  assert.equal(v5.derivePrAssociationsV5(completed).associations['376'].kind, 'CLOSING');
+  const completedTrust = trustHarness(completed, { lifecycle: 'MERGED' });
+  assert.equal(v5.inspectTrustBindingsV5(completed, completedTrust.scope.grant, completedTrust.broker).ok, true);
+
+  const ready = migrateState();
+  ready.children[0].epochs[0].terminal_disposition = 'ACCEPTED';
+  ready.children[0].epochs[0].evidence_ref = 'web-359';
+  ready.children[0].pr_registry[0].role = 'TERMINAL';
+  ready.children[0].pr_registry[0].completes_child = true;
+  ready.children[0].finality = { state: 'READY_AUTHORIZED', authority_ref: 'web-359' };
+  const readyAssociations = v5.derivePrAssociationsV5(ready);
+  assert.equal(readyAssociations.ok, true, JSON.stringify(readyAssociations));
+  assert.equal(readyAssociations.associations['376'].kind, 'CLOSING');
+});
+
 test('v5 separates an intermediate OPEN_READY presentation from Programme Ready authority', () => {
   const state = migrateState();
   const intermediate = trustHarness(state, { lifecycle: 'OPEN_READY' });
@@ -468,6 +691,39 @@ test('v5 validates retained v2 history as one ordered prefix before appending v3
   const appended = v5.validateManagedEventInventoryV5([first, second, third], repository);
   assert.equal(appended.ok, true, JSON.stringify(appended));
   assert.deepEqual(appended.events.slice(0, 2), [first, second]);
+});
+
+test('v5 validates v1 predecessor links while preserving legacy bytes and mixed history order', () => {
+  const first = legacyV1Event({ resulting_state: 'INITIALISED' });
+  const second = legacyV1Event({ resulting_state: 'CURRENT', prior_event: first.event_id });
+  const valid = v5.validateManagedEventInventoryV5([first, second], bootstrapFixture.repository);
+  assert.equal(valid.ok, true, JSON.stringify(valid));
+  assert.deepEqual(valid.events, [first, second]);
+
+  const broken = legacyV1Event({ resulting_state: 'BROKEN', prior_event: 'f'.repeat(64) });
+  assert.equal(v5.validateManagedEventInventoryV5([first, broken], bootstrapFixture.repository).reason, 'managed-event-history-link-invalid');
+  assert.equal(v5.validateManagedEventInventoryV5([second, first], bootstrapFixture.repository).reason, 'managed-event-history-link-invalid');
+
+  const v2 = {
+    schema: 'toolkit.github-program.managed-event.v2', event_type: 'canonical_transition', repository: bootstrapFixture.repository,
+    parent_issue: 240, entity: { kind: 'parent', number: 240 }, source_state_schema: v4.STATE_SCHEMA,
+    from_state_digest: DIGEST, to_canonical_digest: 'e'.repeat(64), authority_ref: 'github:issue:359:comment:5564753393',
+    candidate_binding_digest: null, prior_event_id: second.event_id, migration_binding_digest: null,
+  };
+  v2.event_id = v4.digest(v2);
+  const brokenBoundary = { ...v2, prior_event_id: broken.event_id };
+  brokenBoundary.event_id = v4.digest(Object.fromEntries(Object.entries(brokenBoundary).filter(([key]) => key !== 'event_id')));
+  assert.equal(v5.validateManagedEventInventoryV5([first, broken, brokenBoundary], bootstrapFixture.repository).ok, false);
+  const v3 = v5.createManagedEventV3({
+    event_type: 'canonical_transition', repository: bootstrapFixture.repository, parent_issue: 240,
+    entity: { kind: 'parent', number: 240 }, source_state_schema: v5.STATE_SCHEMA,
+    from_state_digest: 'e'.repeat(64), to_state_digest: 'f'.repeat(64), authority_ref: 'github:issue:359:comment:5564753393',
+    prior_event_id: v2.event_id,
+  });
+  const mixed = v5.validateManagedEventInventoryV5([first, second, v2, v3], bootstrapFixture.repository);
+  assert.equal(mixed.ok, true, JSON.stringify(mixed));
+  assert.deepEqual(mixed.events.slice(0, 3), [first, second, v2]);
+  assert.equal(mixed.events[3].event_id, v3.event_id);
 });
 
 test('v5 preserves additive extensions and owner or unmanaged body bytes', async (t) => {
@@ -556,6 +812,7 @@ test('v5 preserves additive extensions and owner or unmanaged body bytes', async
   assert.equal(preview.ok, true, JSON.stringify(preview));
   const migrationSchema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/github-program-reconciler/programme-migration-v2.schema.json'), 'utf8'));
   const validateMigration = schemaValidator(migrationSchema);
+  assert.deepEqual(collectSchemaKeywords(migrationSchema), EXPECTED_MIGRATION_SCHEMA_KEYWORDS.slice().sort());
   assert.deepEqual(migrationSchema.properties.operation_binding_digest, { $ref: '#/$defs/digest' });
   assert.equal(migrationSchema.properties.labels.$ref, '#/$defs/labels');
   assert.equal(migrationSchema.$defs.expectedSnapshot.properties.labels.$ref, '#/$defs/labelMap');
@@ -567,6 +824,16 @@ test('v5 preserves additive extensions and owner or unmanaged body bytes', async
   assert.notDeepEqual(validateJsonSchema({ ...labelDelta, unexpected: true }, migrationSchema.$defs.labels, migrationSchema), []);
   assert.notDeepEqual(validateJsonSchema({ before: labelMap, after: labelDelta.after }, migrationSchema.$defs.labels, migrationSchema), []);
   assert.equal(validateMigration(preview), true, JSON.stringify(validateMigration.errors));
+  const duplicateOperationIds = JSON.parse(JSON.stringify(preview));
+  duplicateOperationIds.ordered_operation_ids.push(duplicateOperationIds.ordered_operation_ids[0]);
+  assert.equal(validateMigration(duplicateOperationIds), false);
+  const duplicateConsumedReceipts = JSON.parse(JSON.stringify(preview));
+  const consumedReceiptIds = duplicateConsumedReceipts.expected_snapshot.managed_events.at(-1).consumed_receipt_ids;
+  duplicateConsumedReceipts.expected_snapshot.managed_events.at(-1).consumed_receipt_ids = [consumedReceiptIds[0], consumedReceiptIds[0]];
+  assert.equal(validateMigration(duplicateConsumedReceipts), false);
+  const unexpectedNested = JSON.parse(JSON.stringify(preview));
+  unexpectedNested.expected_snapshot.bootstrap.unexpected_property = true;
+  assert.equal(validateMigration(unexpectedNested), false);
   const unexpected = { ...preview, unexpected_property: true };
   assert.equal(validateMigration(unexpected), false);
   const missingOperationBinding = { ...preview };
@@ -644,6 +911,47 @@ test('v5 bootstrap validation rejects missing, malformed, stale, unknown-major, 
   }).ok, false);
   assert.equal(v5.validateControllerBootstrap({ ...good, repository: bootstrapFixture.wrong_repository }, { repository: bootstrapFixture.repository }).reason, 'bootstrap-repository-mismatch');
   assert.equal(v5.validateControllerBootstrap({ ...good, parent_issue: bootstrapFixture.wrong_parent_issue }, { parent_issue: 240 }).reason, 'bootstrap-parent-mismatch');
+});
+
+test('v5 keeps the independently expected bootstrap revision through current, migration, and apply paths', () => {
+  const expectedRevision = '7cbdb78aac022386b17696f6930fe4f06d274fd1';
+  const staleRevision = '460a2460e5e8eaebebd7d2dc4c9f8e4bec0dd125';
+  const state = migrateState();
+  const harness = trustHarness(state);
+  const staleSnapshot = currentSnapshot(state, bootstrap(staleRevision));
+  const staleCurrent = v5.buildConvergencePreviewV5({
+    desired: state, snapshot: staleSnapshot, scope_grant: harness.scope.grant, broker: harness.broker,
+    bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(staleRevision),
+  });
+  assert.equal(staleCurrent.ok, false, JSON.stringify(staleCurrent));
+  assert.equal(staleCurrent.reason, 'v5-bootstrap-invalid-or-missing');
+  assert.equal(staleCurrent.detail, 'bootstrap-revision-mismatch');
+
+  const exactSnapshot = currentSnapshot(state, bootstrap(expectedRevision));
+  const exactContext = memoryReceiptContext(state, harness.scope.grant, {
+    run_id: 'run-memory-bootstrap-exact', allocation_id: 'allocation-memory-bootstrap-exact',
+  });
+  const exactCurrent = v5.buildConvergencePreviewV5({
+    desired: state, snapshot: exactSnapshot, scope_grant: harness.scope.grant, broker: harness.broker,
+    bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(expectedRevision),
+    receipt_context: exactContext, authority_ref: exactContext.authority_ref,
+  });
+  assert.equal(exactCurrent.ok, true, JSON.stringify(exactCurrent));
+  const exactStore = v5.createMemoryDurableStore({ previews: [exactCurrent], receipts: exactCurrent.required_receipt_delta.chain });
+  const staleApply = v5.createProgrammeRuntimeV5({
+    store: exactStore, inspect_snapshot: () => exactSnapshot, scope_grant: harness.scope.grant, broker: harness.broker,
+    resolved_contract: resolvedContract(expectedRevision),
+  }).apply({ preview: exactCurrent, bootstrap_revision: staleRevision, resolved_contract: resolvedContract(expectedRevision) });
+  assert.equal(staleApply.ok, false, JSON.stringify(staleApply));
+  assert.equal(staleApply.reason, 'bootstrap-revision-mismatch');
+
+  const staleMigration = v5.buildMigrationPreviewV5({
+    legacy_snapshot: legacySnapshot(sourceState()), authority_ref: 'github:issue:359:comment:5564753393',
+    scope_grant: harness.scope.grant, broker: harness.broker, bootstrap_after: bootstrap(staleRevision),
+    bootstrap_revision: expectedRevision, resolved_contract: resolvedContract(staleRevision),
+  });
+  assert.equal(staleMigration.ok, false, JSON.stringify(staleMigration));
+  assert.equal(staleMigration.reason, 'bootstrap-revision-mismatch');
 });
 
 test('v5 migration preview separates receipts from Programme Apply and binds event and operation digests', async (t) => {
@@ -850,4 +1158,234 @@ test('v5 produces deterministic PROGRAMME_ZERO_DELTA and does not apply it', asy
   assert.equal(applied.ok, true, JSON.stringify(applied));
   assert.equal(applied.code, 'PROGRAMME_ZERO_DELTA');
   assert.equal(applied.mutation_count, 0);
+});
+
+test('v5 enforces the active receipt fence before, at, and after the mutation boundary', () => {
+  const now = '2026-09-07T01:00:00.000Z';
+  const fixtureForTest = memoryPreviewFixture();
+  let currentSnapshotValue = fixtureForTest.snapshot;
+  let writerRequest;
+  const runtime = v5.createProgrammeRuntimeV5({
+    store: fixtureForTest.store,
+    inspect_snapshot: () => currentSnapshotValue,
+    scope_grant: fixtureForTest.harness.scope.grant,
+    broker: fixtureForTest.harness.broker,
+    now,
+    resolved_contract: resolvedContract(fixtureForTest.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      writerRequest = request;
+      currentSnapshotValue = fixtureForTest.preview.expected_snapshot;
+      return {
+        ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest,
+        operation_binding_digest: request.operation_binding_digest, applied_count: request.operations.length,
+      };
+    },
+  });
+  const applied = runtime.apply({ preview: fixtureForTest.preview, now });
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal(writerRequest.expected.active_receipt_fence.tip_receipt_id, fixtureForTest.preview.required_receipt_delta.receipt_id);
+  assert.equal(writerRequest.expected.active_receipt_fence_digest, v5.digest(writerRequest.expected.active_receipt_fence));
+
+  const boundary = memoryPreviewFixture();
+  let boundaryWriterCalls = 0;
+  let boundaryRejected = false;
+  const boundaryResult = v5.createProgrammeRuntimeV5({
+    store: boundary.store,
+    inspect_snapshot: () => boundary.snapshot,
+    scope_grant: boundary.harness.scope.grant,
+    broker: boundary.harness.broker,
+    now,
+    resolved_contract: resolvedContract(boundary.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      boundaryWriterCalls += 1;
+      boundary.store.appendReceipt(invalidatingReceipt(boundary.preview.required_receipt_delta.chain));
+      const actual = boundary.store.readReceiptChain(boundary.preview.required_receipt_delta.receipt.run_id);
+      boundaryRejected = v5.digest(actual) !== request.expected.active_receipt_fence.chain_digest;
+      return boundaryRejected ? { ok: false, reason: 'writer-active-fence-mismatch' } : { ok: true };
+    },
+  }).apply({ preview: boundary.preview, now });
+  assert.equal(boundaryRejected, true);
+  assert.equal(boundaryResult.ok, false, JSON.stringify(boundaryResult));
+  assert.equal(boundaryResult.reason, 'apply-failed');
+  assert.equal(boundaryWriterCalls, 1);
+
+  for (const receiptType of ['RUN_INTERRUPTED', 'EXECUTOR_TERMINAL', 'G4_TERMINAL']) {
+    const invalidated = memoryPreviewFixture();
+    invalidated.store.appendReceipt(invalidatingReceipt(invalidated.preview.required_receipt_delta.chain, receiptType));
+    let calls = 0;
+    const blocked = v5.createProgrammeRuntimeV5({
+      store: invalidated.store,
+      inspect_snapshot: () => invalidated.snapshot,
+      scope_grant: invalidated.harness.scope.grant,
+      broker: invalidated.harness.broker,
+      now,
+      resolved_contract: resolvedContract(invalidated.snapshot.bootstrap.toolkit_contract.revision),
+      verify_authority: () => ({ ok: true }),
+      apply_operations: () => { calls += 1; return { ok: true }; },
+    }).apply({ preview: invalidated.preview, now });
+    assert.equal(blocked.ok, false, JSON.stringify(blocked));
+    assert.equal(blocked.reason, 'active-receipt-invalidated');
+    assert.equal(calls, 0);
+  }
+
+  const expired = memoryPreviewFixture({ expires_at: '2026-09-07T00:30:00.000Z' });
+  let expiredCalls = 0;
+  const expiredResult = v5.createProgrammeRuntimeV5({
+    store: expired.store,
+    inspect_snapshot: () => expired.snapshot,
+    scope_grant: expired.harness.scope.grant,
+    broker: expired.harness.broker,
+    now,
+    resolved_contract: resolvedContract(expired.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: () => { expiredCalls += 1; return { ok: true }; },
+  }).apply({ preview: expired.preview, now });
+  assert.equal(expiredResult.ok, false, JSON.stringify(expiredResult));
+  assert.equal(expiredResult.reason, 'expired-fence');
+  assert.equal(expiredCalls, 0);
+
+  const movedDuringWriter = memoryPreviewFixture();
+  let movedSnapshot = movedDuringWriter.snapshot;
+  let movedWriterCalls = 0;
+  const movedResult = v5.createProgrammeRuntimeV5({
+    store: movedDuringWriter.store,
+    inspect_snapshot: () => movedSnapshot,
+    scope_grant: movedDuringWriter.harness.scope.grant,
+    broker: movedDuringWriter.harness.broker,
+    now,
+    resolved_contract: resolvedContract(movedDuringWriter.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      movedWriterCalls += 1;
+      movedDuringWriter.store.appendReceipt(invalidatingReceipt(movedDuringWriter.preview.required_receipt_delta.chain));
+      movedSnapshot = movedDuringWriter.preview.expected_snapshot;
+      return {
+        ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest,
+        operation_binding_digest: request.operation_binding_digest, applied_count: request.operations.length,
+      };
+    },
+  }).apply({ preview: movedDuringWriter.preview, now });
+  assert.equal(movedResult.ok, false, JSON.stringify(movedResult));
+  assert.equal(movedResult.reason, 'active-receipt-invalidated');
+  assert.equal(movedWriterCalls, 1);
+
+  const movedAfterReadback = memoryPreviewFixture();
+  let readbackSnapshot = movedAfterReadback.snapshot;
+  let inspectCount = 0;
+  let readbackWriterCalls = 0;
+  const readbackResult = v5.createProgrammeRuntimeV5({
+    store: movedAfterReadback.store,
+    inspect_snapshot: () => {
+      inspectCount += 1;
+      if (inspectCount === 3) movedAfterReadback.store.appendReceipt(invalidatingReceipt(movedAfterReadback.preview.required_receipt_delta.chain));
+      return readbackSnapshot;
+    },
+    scope_grant: movedAfterReadback.harness.scope.grant,
+    broker: movedAfterReadback.harness.broker,
+    now,
+    resolved_contract: resolvedContract(movedAfterReadback.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      readbackWriterCalls += 1;
+      readbackSnapshot = movedAfterReadback.preview.expected_snapshot;
+      return {
+        ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest,
+        operation_binding_digest: request.operation_binding_digest, applied_count: request.operations.length,
+      };
+    },
+  }).apply({ preview: movedAfterReadback.preview, now });
+  assert.equal(readbackResult.ok, false, JSON.stringify(readbackResult));
+  assert.equal(readbackResult.reason, 'active-receipt-invalidated');
+  assert.equal(readbackWriterCalls, 1);
+});
+
+test('v5 validates referenced historical receipt runs independently from the active run chain', () => {
+  const now = '2026-09-07T01:00:00.000Z';
+  const runA = memoryPreviewFixture({ run_id: 'run-memory-a', allocation_id: 'allocation-memory-a' });
+  let runASnapshot = runA.snapshot;
+  const runAApply = v5.createProgrammeRuntimeV5({
+    store: runA.store,
+    inspect_snapshot: () => runASnapshot,
+    scope_grant: runA.harness.scope.grant,
+    broker: runA.harness.broker,
+    now,
+    resolved_contract: resolvedContract(runA.snapshot.bootstrap.toolkit_contract.revision),
+    verify_authority: () => ({ ok: true }),
+    apply_operations: (request) => {
+      runASnapshot = runA.preview.expected_snapshot;
+      return {
+        ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest,
+        operation_binding_digest: request.operation_binding_digest, applied_count: request.operations.length,
+      };
+    },
+  }).apply({ preview: runA.preview, now });
+  assert.equal(runAApply.ok, true, JSON.stringify(runAApply));
+  const stateB = JSON.parse(JSON.stringify(runA.state));
+  stateB.children[0].summary += ' Follow-up.';
+  const harnessB = trustHarness(stateB);
+  const snapshotA = { ...runASnapshot, receipts: runA.preview.required_receipt_delta.chain };
+  const contextB = memoryReceiptContext(stateB, harnessB.scope.grant, {
+    run_id: 'run-memory-b', allocation_id: 'allocation-memory-b', lease_id: 'lease-memory-b', fence_id: 'fence-memory-b',
+  });
+  const previewB = v5.buildConvergencePreviewV5({
+    desired: stateB, snapshot: snapshotA, scope_grant: harnessB.scope.grant, broker: harnessB.broker,
+    resolved_contract: resolvedContract(snapshotA.bootstrap.toolkit_contract.revision), receipt_context: contextB,
+    authority_ref: contextB.authority_ref,
+  });
+  assert.equal(previewB.ok, true, JSON.stringify(previewB));
+  const chainA = runA.preview.required_receipt_delta.chain;
+  const chainB = previewB.required_receipt_delta.chain;
+
+  function applyB(receipts) {
+    const store = v5.createMemoryDurableStore({ previews: [previewB], receipts });
+    let current = snapshotA;
+    let writerCalls = 0;
+    const result = v5.createProgrammeRuntimeV5({
+      store,
+      inspect_snapshot: () => current,
+      scope_grant: harnessB.scope.grant,
+      broker: harnessB.broker,
+      now,
+      resolved_contract: resolvedContract(snapshotA.bootstrap.toolkit_contract.revision),
+      verify_authority: () => ({ ok: true }),
+      apply_operations: (request) => {
+        writerCalls += 1;
+        current = previewB.expected_snapshot;
+        return {
+          ok: true, preconditions_verified: true, precondition_digest: request.expected.precondition_digest,
+          operation_binding_digest: request.operation_binding_digest, applied_count: request.operations.length,
+        };
+      },
+    }).apply({ preview: previewB, now });
+    return { result, writerCalls };
+  }
+
+  const valid = applyB([...chainA, ...chainB]);
+  assert.equal(valid.result.ok, true, JSON.stringify(valid.result));
+  assert.equal(valid.writerCalls, 1);
+
+  const missingHistorical = applyB(chainB);
+  assert.equal(missingHistorical.result.ok, false, JSON.stringify(missingHistorical.result));
+  assert.equal(missingHistorical.result.reason, 'receipt-not-persisted');
+  assert.equal(missingHistorical.writerCalls, 0);
+
+  const corruptHistorical = JSON.parse(JSON.stringify(chainA));
+  corruptHistorical[0].lock = 'corrupt-history';
+  const corrupted = applyB([...corruptHistorical, ...chainB]);
+  assert.equal(corrupted.result.ok, false, JSON.stringify(corrupted.result));
+  assert.equal(corrupted.writerCalls, 0);
+
+  const missingActive = applyB(chainA);
+  assert.equal(missingActive.result.ok, false, JSON.stringify(missingActive.result));
+  assert.equal(missingActive.result.reason, 'active-receipt-chain-invalid');
+  assert.equal(missingActive.writerCalls, 0);
+
+  const unrelatedC = memoryReceiptContext(stateB, harnessB.scope.grant, {
+    run_id: 'run-memory-c', allocation_id: 'allocation-memory-c', lease_id: 'lease-memory-c', fence_id: 'fence-memory-c',
+  });
+  const unrelated = applyB([...chainA, ...chainB, ...unrelatedC.started_chain]);
+  assert.equal(unrelated.result.ok, true, JSON.stringify(unrelated.result));
+  assert.equal(unrelated.writerCalls, 1);
 });

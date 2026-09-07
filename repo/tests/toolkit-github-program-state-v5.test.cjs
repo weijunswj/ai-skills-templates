@@ -62,6 +62,24 @@ test('v5 bootstrap pins the canonical contract by revision and canonical digest'
   }).reason, 'toolkit-contract-content-invalid');
 });
 
+test('v5 keeps an independently expected bootstrap revision separate from the pin under validation', () => {
+  const contractBytes = fs.readFileSync(contractPath, 'utf8');
+  const expectedRevision = '7cbdb78aac022386b17696f6930fe4f06d274fd1';
+  const staleRevision = '460a2460e5e8eaebebd7d2dc4c9f8e4bec0dd125';
+  const stale = v5.buildBootstrap({ repository: fixture.source.repository, parent_issue: fixture.source.parent.issue, revision: staleRevision });
+  const rejected = v5.validateControllerBootstrap(stale, {
+    repository: fixture.source.repository, parent_issue: fixture.source.parent.issue,
+    revision: expectedRevision, contract_bytes: contractBytes,
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, 'bootstrap-revision-mismatch');
+  const exact = v5.buildBootstrap({ repository: fixture.source.repository, parent_issue: fixture.source.parent.issue, revision: expectedRevision });
+  assert.equal(v5.validateControllerBootstrap(exact, {
+    repository: fixture.source.repository, parent_issue: fixture.source.parent.issue,
+    revision: expectedRevision, contract_bytes: contractBytes,
+  }).ok, true);
+});
+
 test('v5 bootstrap discovery fails closed when a v5 repository has no bootstrap', () => {
   const result = v5.detectManagedRepository({
     repository: fixture.source.repository,

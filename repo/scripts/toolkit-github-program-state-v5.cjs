@@ -40,6 +40,7 @@ const GATE_STATES = Object.freeze(['ACTIVE', 'RESULT_RECORDED', 'WEB_DECISION_RE
 const GATE_RESULTS = Object.freeze([null, 'AMEND', 'PASS']);
 const PROGRAMME_STATES = Object.freeze(['HELD', 'WEB_DECISION_REQUIRED', 'ACTIVE', 'COMPLETE', 'IDLE']);
 const TERMINAL_RECEIPT_TYPES = Object.freeze(['EXECUTOR_TERMINAL', 'G4_TERMINAL']);
+const ACTIVE_RECEIPT_INVALIDATORS = Object.freeze([...TERMINAL_RECEIPT_TYPES, 'RUN_INTERRUPTED']);
 const RECOVERY_STATUSES = Object.freeze([
   'RUNNING', 'LOST', 'TERMINAL_UNCONSUMED', 'PREVIEWED_NOT_APPLIED',
   'APPLIED_ACK_LOST', 'ALREADY_APPLIED', 'STALE_CANDIDATE',
@@ -289,11 +290,16 @@ function validateCanonicalStateV5(state) {
     if (child.finality.authority_ref !== null && !evidenceIsWeb(state, child.finality.authority_ref)) return fail('finality-web-authority-required', { child: child.issue });
     const epochsTerminal = child.epochs.every((epoch) => ['ACCEPTED', 'RETIRED'].includes(epoch.terminal_disposition));
     if (child.lifecycle === 'COMPLETED' && (!epochsTerminal || blockingHolds(child).length
-      || child.finality.state === 'HELD' || child.finality.authority_ref === null)) {
+      || child.finality.state !== 'MERGED' || child.finality.authority_ref === null)) {
       return fail('completed-child-finality-incomplete', { child: child.issue });
     }
     const epochIds = new Set(child.epochs.map((epoch) => epoch.id));
     if (!validateRegistry(child, evidenceIds, epochIds, activeRegistryPrs)) return fail('canonical-registry-shape', { child: child.issue });
+    if (child.lifecycle === 'COMPLETED' && !child.pr_registry.some((entry) => entry.role === 'TERMINAL'
+      && entry.completes_child === true && entry.status === 'ACCEPTED'
+      && entry.accepted_evidence_ref !== null && evidenceIds.has(entry.accepted_evidence_ref))) {
+      return fail('completed-child-completing-pr-required', { child: child.issue });
+    }
     childIssues.add(child.issue);
     for (const entry of child.pr_registry) {
       if (!registryRefs.has(entry.pr)) registryRefs.set(entry.pr, []);
@@ -653,8 +659,10 @@ function derivePrAssociationsV5(state) {
   const associations = {};
   for (const pr of state.prs) {
     const binding = registryFor(state, pr.number);
+    const lifecycleAllowsClosing = binding.registry.status === 'ACTIVE' && binding.child.finality.state === 'READY_AUTHORIZED'
+      || binding.registry.status === 'ACCEPTED' && binding.child.finality.state === 'MERGED';
     const closing = binding.registry.role === 'TERMINAL' && binding.registry.completes_child
-      && (binding.child.finality.state === 'MERGED' || binding.child.finality.state === 'READY_AUTHORIZED')
+      && lifecycleAllowsClosing
       && binding.child.finality.authority_ref !== null;
     associations[String(pr.number)] = { parent_issue: state.parent.issue, child_issue: binding.child.issue, kind: closing ? 'CLOSING' : 'CROSS_REFERENCE' };
   }
@@ -1205,6 +1213,10 @@ function validateManagedEventInventoryV5(events, repository, options = {}) {
       legacyPrefix.push(clone(supplied));
       const legacy = v4.validateManagedEventInventoryV4(legacyPrefix, repository);
       result = legacy.ok ? ok('LEGACY_MANAGED_EVENT_RETAINED', { event: clone(supplied) }) : legacy;
+      if (result.ok && supplied.schema === 'toolkit.github-program.managed-event.v1' && hasOwn(supplied, 'prior_event')
+        && supplied.prior_event !== (legacyPrefix.at(-2)?.event_id || null)) {
+        return fail('managed-event-history-link-invalid', { event_id: supplied.event_id });
+      }
     } else {
       return fail('managed-event-inventory-invalid');
     }
@@ -1236,6 +1248,83 @@ function validateManagedEventInventoryV5(events, repository, options = {}) {
 function receiptFenceExpired(receipt, now = new Date()) {
   return !receipt?.lease?.expires_at || Date.parse(receipt.lease.expires_at) <= new Date(now).getTime();
 }
+
+function validateActiveReceiptFence(required, activeChain, now = new Date()) {
+  if (!isRecord(required) || !isRecord(required.receipt) || !Array.isArray(required.chain)) return fail('active-receipt-fence-invalid');
+  const expectedReceipt = required.receipt;
+  const expectedChain = required.chain;
+  const binding = {
+    repository: expectedReceipt.repository,
+    parent_issue: expectedReceipt.parent_issue,
+    run_id: expectedReceipt.run_id,
+    allocation_id: expectedReceipt.allocation_id,
+  };
+  const expectedCheck = validateRunReceiptChain(expectedChain, binding);
+  if (!expectedCheck.ok) return fail('active-receipt-fence-invalid', { detail: expectedCheck.reason });
+  if (!Array.isArray(activeChain)) return fail('run-receipt-readback-invalid');
+  const activeCheck = validateRunReceiptChain(activeChain, binding);
+  if (!activeCheck.ok) return fail('active-receipt-chain-invalid', { detail: activeCheck.reason });
+  const invalidated = activeChain.find((receipt) => ACTIVE_RECEIPT_INVALIDATORS.includes(receipt.receipt_type));
+  if (invalidated) return fail('active-receipt-invalidated', {
+    receipt_id: invalidated.receipt_id, receipt_type: invalidated.receipt_type,
+  });
+  if (expectedChain[0]?.receipt_id !== required.started_receipt_id
+    || expectedChain[0]?.sequence !== required.started_sequence
+    || activeChain[0]?.receipt_id !== expectedChain[0]?.receipt_id
+    || activeChain.at(-1)?.receipt_id !== required.receipt_id
+    || !same(activeChain.at(-1), expectedReceipt)
+    || !same(activeChain, expectedChain)) return fail('active-receipt-chain-changed');
+  const tip = activeChain.at(-1);
+  if (receiptFenceExpired(tip, now)) return fail('expired-fence', { active: true, advances_state: false });
+  const lease = tip.lease;
+  const preconditions = {
+    run_id: tip.run_id,
+    allocation_id: tip.allocation_id,
+    started_receipt_id: activeChain[0].receipt_id,
+    started_sequence: activeChain[0].sequence,
+    chain_digest: digest(activeChain),
+    chain_length: activeChain.length,
+    tip_receipt_id: tip.receipt_id,
+    tip_sequence: tip.sequence,
+    tip_prior_receipt_id: tip.prior_receipt_id,
+    tip_type: tip.receipt_type,
+    lease_id: lease.lease_id,
+    fence_id: lease.fence_id,
+    fence_sequence: lease.fence_sequence,
+    lease_issued_at: lease.issued_at,
+    lease_expires_at: lease.expires_at,
+  };
+  return ok('ACTIVE_RECEIPT_FENCE_VALID', { receipts: clone(activeChain), preconditions });
+}
+
+function receiptBoundEvents(events) {
+  return (Array.isArray(events) ? events : []).filter((event) => event?.schema === MANAGED_EVENT_SCHEMA
+    && ((Array.isArray(event.consumed_receipt_ids) && event.consumed_receipt_ids.length) || event.receipt_id));
+}
+
+function readDurableReceiptInventory(store, snapshot, events, activeChain) {
+  if (store && typeof store.readAllReceipts === 'function') {
+    let receiptsList;
+    try { receiptsList = store.readAllReceipts(); } catch (_error) { return fail('run-receipt-readback-failed'); }
+    if (!Array.isArray(receiptsList)) return fail('run-receipt-readback-invalid');
+    return ok('DURABLE_RECEIPT_INVENTORY_READ', { receipts: receiptsList });
+  }
+  if (Array.isArray(snapshot?.receipts)) {
+    if (!Array.isArray(activeChain) || !activeChain.length) return ok('DURABLE_RECEIPT_INVENTORY_READ', { receipts: snapshot.receipts });
+    const activeRunId = activeChain[0].run_id;
+    const historical = snapshot.receipts.filter((receipt) => receipt?.run_id !== activeRunId);
+    return ok('DURABLE_RECEIPT_INVENTORY_READ', { receipts: [...historical, ...activeChain] });
+  }
+  const claimed = receiptBoundEvents(events);
+  if (!claimed.length) return ok('DURABLE_RECEIPT_INVENTORY_NOT_REQUIRED', { receipts: activeChain });
+  const activeIds = new Set((activeChain || []).map((receipt) => receipt.receipt_id));
+  if (Array.isArray(activeChain) && claimed.every((event) => [event.receipt_id, ...(event.consumed_receipt_ids || [])]
+    .filter(Boolean).every((receiptId) => activeIds.has(receiptId)))) {
+    return ok('DURABLE_RECEIPT_INVENTORY_READ', { receipts: activeChain });
+  }
+  return fail('receipt-inventory-not-durable');
+}
+
 function canAdvanceFromTerminal(input = {}) {
   const terminal = input.receipt || input.terminal;
   const chain = validateRunReceiptChain(input.receipts || (terminal ? [terminal] : []), { repository: input.repository, parent_issue: input.parent_issue });
@@ -1463,6 +1552,14 @@ function resolvePinnedContract(bootstrap, expected = {}) {
   });
 }
 
+function independentBootstrapRevision(input = {}, options = {}) {
+  if (hasOwn(input, 'bootstrap_revision') && input.bootstrap_revision !== undefined) return input.bootstrap_revision;
+  if (hasOwn(input, 'expected_bootstrap_revision') && input.expected_bootstrap_revision !== undefined) return input.expected_bootstrap_revision;
+  if (hasOwn(options, 'bootstrap_revision') && options.bootstrap_revision !== undefined) return options.bootstrap_revision;
+  if (hasOwn(options, 'expected_bootstrap_revision') && options.expected_bootstrap_revision !== undefined) return options.expected_bootstrap_revision;
+  return undefined;
+}
+
 function detectManagedRepository(input = {}) {
   const bootstrap = input.bootstrap;
   const hasV5 = input.canonical_state?.schema === STATE_SCHEMA || input.state_schema === STATE_SCHEMA;
@@ -1630,7 +1727,7 @@ function receiptContext(input, state, candidate, operationDigestValue, detailDig
     || context.start !== undefined && !same(context.start, started.start)
     || context.lease !== undefined && !same(context.lease, prior.lease)
     || context.lock !== undefined && context.lock !== prior.lock) return fail('canonical-started-chain-binding-mismatch');
-  if (TERMINAL_RECEIPT_TYPES.includes(prior.receipt_type)) return fail('canonical-started-chain-terminal');
+  if (ACTIVE_RECEIPT_INVALIDATORS.includes(prior.receipt_type)) return fail('canonical-started-chain-terminal');
   const child = state.children.find((entry) => entry.issue === (context.child_issue || state.active_lanes[0]?.child_issue)) || state.children[0];
   if (!child || started.child_issue !== child.issue) return fail('canonical-started-chain-child-mismatch');
   const lane = state.active_lanes.find((entry) => entry.child_issue === child.issue) || state.active_lanes[0] || null;
@@ -1794,14 +1891,15 @@ function buildMigrationPreviewV5(input = {}) {
   if (!relationshipCapability.ok) return relationshipCapability;
   const labels = expectedLabelsV5(target, snapshot.labels);
   const bootstrapBefore = snapshot.bootstrap === undefined ? null : clone(snapshot.bootstrap);
+  const bootstrapRevision = input.bootstrap_revision !== undefined ? input.bootstrap_revision : input.expected_bootstrap_revision;
   const bootstrapAfter = input.bootstrap_after || input.bootstrap || buildBootstrap({
     repository: target.repository, parent_issue: target.parent.issue, version: input.toolkit_version || '2.11.0',
-    revision: input.bootstrap_revision,
+    revision: bootstrapRevision,
     toolkit_contract: input.toolkit_contract,
   });
   const bootstrapCheck = resolvePinnedContract(bootstrapAfter, {
     repository: target.repository, parent_issue: target.parent.issue,
-    version: input.toolkit_version || '2.11.0', revision: bootstrapAfter.toolkit_contract.revision,
+    version: input.toolkit_version || '2.11.0', revision: independentBootstrapRevision(input),
     contract_bytes: input.contract_bytes, toolkit_contract_bytes: input.toolkit_contract_bytes,
     resolved_contract: input.resolved_contract, resolve_contract: input.resolve_contract,
   });
@@ -1939,7 +2037,7 @@ function validateCurrentSnapshot(snapshot, desired, input = {}) {
   };
   const bootstrap = resolvePinnedContract(snapshot.bootstrap, {
     ...bootstrapExpected,
-    revision: snapshot.bootstrap?.toolkit_contract?.revision,
+    revision: independentBootstrapRevision(input),
   });
   if (!bootstrap.ok) return fail('v5-bootstrap-invalid-or-missing', { detail: bootstrap.reason });
   const bodies = requireBodyInventory(snapshot, desired);
@@ -2224,8 +2322,8 @@ function previewBootstrapResolution(preview, options = {}, input = {}) {
   return resolvePinnedContract(bootstrap, {
     repository: preview.repository,
     parent_issue: preview.parent_issue,
-    version: bootstrap.toolkit_package_version,
-    revision: bootstrap.toolkit_contract?.revision,
+    version: input.toolkit_version !== undefined ? input.toolkit_version : options.toolkit_version || bootstrap.toolkit_package_version,
+    revision: independentBootstrapRevision(input, options),
     contract_bytes: input.contract_bytes !== undefined ? input.contract_bytes : options.contract_bytes,
     toolkit_contract_bytes: input.toolkit_contract_bytes !== undefined ? input.toolkit_contract_bytes : options.toolkit_contract_bytes,
     resolved_contract: resolved,
@@ -2277,10 +2375,14 @@ function expectedApplyOperations(preview, sourceSnapshot, sourceEvents, expected
   return ok('EXPECTED_PROGRAMME_OPERATIONS_REBUILT', { operations, event_changed: eventChanged });
 }
 
-function validateApplyFacts(preview, snapshot, desired, options = {}, receiptsForValidation) {
+function validateApplyFacts(preview, snapshot, desired, options = {}, receiptsForValidation, activeReceiptsForValidation) {
   if (!isRecord(desired)) return fail('programme-preview-desired-state-missing');
   const bootstrap = previewBootstrapResolution(preview, options, options);
   if (!bootstrap.ok) return bootstrap;
+  const active = preview.required_receipt_delta
+    ? validateActiveReceiptFence(preview.required_receipt_delta, activeReceiptsForValidation, options.now || new Date())
+    : ok('ACTIVE_RECEIPT_FENCE_NOT_REQUIRED', { preconditions: null });
+  if (!active.ok) return active;
   let sourceEventInventoryDigest;
   let sourceEvents;
   if (preview.schema === MIGRATION_SCHEMA) {
@@ -2355,6 +2457,8 @@ function validateApplyFacts(preview, snapshot, desired, options = {}, receiptsFo
     authority_ref: preview.authority_ref || null,
     authority_digest: preview.authority_digest || null,
     bootstrap_digest: digest(bootstrap.bootstrap),
+    active_receipt_fence: clone(active.preconditions),
+    active_receipt_fence_digest: active.preconditions ? digest(active.preconditions) : null,
     expected_snapshot_digest: preview.expected_snapshot_digest,
     operations_digest: operations.operations_digest,
     operation_binding_digest: operations.operation_binding_digest,
@@ -2418,55 +2522,64 @@ function createProgrammeRuntimeV5(options = {}) {
     const required = preview.required_receipt_delta;
     const consumedEvent = preview.managed_event_delta?.new_events?.find((event) => event?.schema === MANAGED_EVENT_SCHEMA) || null;
     if (preview.operations.length > 0 && (!required || !consumedEvent)) return fail('transition-receipt-required');
-    let durableReceipts;
-    if (required) {
+    const applyOptions = {
+      ...options,
+      bootstrap_revision: input.bootstrap_revision !== undefined ? input.bootstrap_revision : options.bootstrap_revision,
+      expected_bootstrap_revision: input.expected_bootstrap_revision !== undefined ? input.expected_bootstrap_revision : options.expected_bootstrap_revision,
+      contract_bytes: input.contract_bytes !== undefined ? input.contract_bytes : options.contract_bytes,
+      toolkit_contract_bytes: input.toolkit_contract_bytes !== undefined ? input.toolkit_contract_bytes : options.toolkit_contract_bytes,
+      resolved_contract: input.resolved_contract !== undefined ? input.resolved_contract : options.resolved_contract,
+      resolve_contract: input.resolve_contract || options.resolve_contract,
+      now: input.now !== undefined ? input.now : options.now,
+      toolkit_version: input.toolkit_version !== undefined ? input.toolkit_version : options.toolkit_version,
+    };
+    const readActive = () => {
+      if (!required) return ok('ACTIVE_RECEIPT_FENCE_NOT_REQUIRED', { receipts: null, preconditions: null });
       if (typeof store.readReceiptChain !== 'function') return fail('durable-receipt-store-required');
       let chain;
       try { chain = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
-      if (!Array.isArray(chain)) return fail('run-receipt-readback-invalid');
-      durableReceipts = chain;
-      if (!required.chain || !same(chain, required.chain) || chain.at(-1)?.receipt_id !== required.receipt_id
-        || !same(required.receipt, chain.at(-1))) return fail('receipt-not-persisted', { receipt_id: required.receipt_id });
+      return validateActiveReceiptFence(required, chain, applyOptions.now || new Date());
+    };
+    const readInventory = (snapshot, activeChain) => readDurableReceiptInventory(store, snapshot, [
+      ...(Array.isArray(snapshot?.managed_events) ? snapshot.managed_events : []),
+      ...(Array.isArray(preview.expected_snapshot?.managed_events) ? preview.expected_snapshot.managed_events : []),
+    ], activeChain);
+    const validateReadbackEvents = (snapshot, receiptInventory) => validateManagedEventInventoryV5(
+      snapshot?.managed_events, preview.repository, {
+        parent_issue: preview.parent_issue,
+        receipts: receiptInventory,
+      }
+    );
+    let durableReceipts;
+    let activeRunChain = null;
+    if (required) {
+      const active = readActive();
+      if (!active.ok) return active;
+      activeRunChain = active.receipts;
+      durableReceipts = activeRunChain;
       const requiredCheck = validateReceiptObject(required.receipt, {
         repository: preview.repository, parent_issue: preview.parent_issue,
-        receipt_type: 'TRANSITION_PREVIEW', sequence: chain.at(-1)?.sequence,
-        prior_receipt_id: chain.at(-2)?.receipt_id || null,
+        receipt_type: 'TRANSITION_PREVIEW', sequence: activeRunChain.at(-1)?.sequence,
+        prior_receipt_id: activeRunChain.at(-2)?.receipt_id || null,
       });
       if (!requiredCheck.ok) return requiredCheck;
-      const chainCheck = validateRunReceiptChain(chain, { repository: preview.repository, parent_issue: preview.parent_issue });
-      if (!chainCheck.ok) return chainCheck;
       if (required.receipt.payload.operation_digest !== operationCheck.operation_binding_digest) return fail('preview-operation-binding-mismatch');
       if (consumedEvent) {
-        const consumption = validateReceiptConsumption(consumedEvent, chain, {
+        const consumption = validateReceiptConsumption(consumedEvent, activeRunChain, {
           repository: preview.repository, parent_issue: preview.parent_issue,
           operation_digest: operationCheck.operation_binding_digest, require_readback: true,
         });
         if (!consumption.ok) return consumption;
-      }
-    } else {
-      const claimed = preview.expected_snapshot?.managed_events || [];
-      if (consumedEvent?.consumed_receipt_ids?.length || claimed.some((event) => event?.schema === MANAGED_EVENT_SCHEMA && event.consumed_receipt_ids?.length)) {
-        if (typeof store.readAllReceipts !== 'function') return fail('receipt-consumption-without-durable-receipt');
-        try { durableReceipts = store.readAllReceipts(); } catch (_error) { return fail('run-receipt-readback-failed'); }
-        if (!Array.isArray(durableReceipts)) return fail('run-receipt-readback-invalid');
-        const retained = validateRetainedReceiptBindings(claimed, durableReceipts, {
-          repository: preview.repository, parent_issue: preview.parent_issue,
-        });
-        if (!retained.ok) return retained;
       }
     }
     const preflight = inspect();
     if (!preflight.ok) return preflight;
     const desired = preview.expected_snapshot?.canonical_state;
     if (!options.scope_grant || !options.broker) return fail('trusted-rerun-adapters-required');
-    const applyOptions = {
-      ...options,
-      contract_bytes: input.contract_bytes !== undefined ? input.contract_bytes : options.contract_bytes,
-      toolkit_contract_bytes: input.toolkit_contract_bytes !== undefined ? input.toolkit_contract_bytes : options.toolkit_contract_bytes,
-      resolved_contract: input.resolved_contract !== undefined ? input.resolved_contract : options.resolved_contract,
-      resolve_contract: input.resolve_contract || options.resolve_contract,
-    };
-    const preflightFacts = validateApplyFacts(preview, preflight.snapshot, desired, applyOptions, durableReceipts || preflight.snapshot.receipts);
+    const preflightInventory = readInventory(preflight.snapshot, activeRunChain);
+    if (!preflightInventory.ok) return preflightInventory;
+    durableReceipts = preflightInventory.receipts;
+    const preflightFacts = validateApplyFacts(preview, preflight.snapshot, desired, applyOptions, durableReceipts, activeRunChain);
     if (!preflightFacts.ok) return preflightFacts;
     if (preview.operations.length === 0) {
       if (snapshotDigest(preflight.snapshot) !== preview.expected_snapshot_digest) return fail('stale-preview');
@@ -2488,22 +2601,21 @@ function createProgrammeRuntimeV5(options = {}) {
     if (authority.preconditions !== undefined && !same(authority.preconditions, writerBinding)) return fail('trusted-authority-preconditions-changed');
     if (authority.authority_ref !== undefined && authority.authority_ref !== writerBinding.authority_ref) return fail('trusted-authority-binding-changed');
     if (authority.authority_digest !== undefined && authority.authority_digest !== writerBinding.authority_digest) return fail('trusted-authority-binding-changed');
-    if (required && typeof store.readReceiptChain === 'function') {
-      let reboundReceipts;
-      try { reboundReceipts = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
-      if (!Array.isArray(reboundReceipts)) return fail('run-receipt-readback-invalid');
-      if (!same(reboundReceipts, durableReceipts)) return fail('receipt-freshness-changed');
-      durableReceipts = reboundReceipts;
-    } else if (durableReceipts && typeof store.readAllReceipts === 'function') {
-      let reboundReceipts;
-      try { reboundReceipts = store.readAllReceipts(); } catch (_error) { return fail('run-receipt-readback-failed'); }
-      if (!Array.isArray(reboundReceipts)) return fail('run-receipt-readback-invalid');
-      if (!same(reboundReceipts, durableReceipts)) return fail('receipt-freshness-changed');
-      durableReceipts = reboundReceipts;
-    }
+    const authorityActive = readActive();
+    if (!authorityActive.ok) return authorityActive;
+    activeRunChain = authorityActive.receipts;
     const rebound = inspect();
     if (!rebound.ok) return rebound;
-    const reboundFacts = validateApplyFacts(preview, rebound.snapshot, desired, applyOptions, durableReceipts || rebound.snapshot.receipts);
+    const reboundInventory = readInventory(rebound.snapshot, activeRunChain);
+    if (!reboundInventory.ok) return reboundInventory;
+    durableReceipts = reboundInventory.receipts;
+    const prewriteActive = readActive();
+    if (!prewriteActive.ok) return prewriteActive;
+    activeRunChain = prewriteActive.receipts;
+    const prewriteInventory = readInventory(rebound.snapshot, activeRunChain);
+    if (!prewriteInventory.ok) return prewriteInventory;
+    durableReceipts = prewriteInventory.receipts;
+    const reboundFacts = validateApplyFacts(preview, rebound.snapshot, desired, applyOptions, durableReceipts, activeRunChain);
     if (!reboundFacts.ok) return reboundFacts;
     if (!same(reboundFacts.preconditions, preflightFacts.preconditions)) return fail('prewrite-freshness-changed');
     let applied;
@@ -2521,27 +2633,49 @@ function createProgrammeRuntimeV5(options = {}) {
       || applied.operation_binding_digest !== operationCheck.operation_binding_digest) return fail('writer-preconditions-unverified');
     const appliedCount = applied.applied_count ?? preview.operations.length;
     if (!Number.isSafeInteger(appliedCount) || appliedCount !== preview.operations.length) return fail('applied-count-mismatch');
+    const postWriteActive = readActive();
+    if (!postWriteActive.ok) return postWriteActive;
+    activeRunChain = postWriteActive.receipts;
     const inspected = inspect();
     if (!inspected.ok) return inspected;
+    const postReadbackActive = readActive();
+    if (!postReadbackActive.ok) return postReadbackActive;
+    activeRunChain = postReadbackActive.receipts;
+    const postReadbackInventory = readInventory(inspected.snapshot, activeRunChain);
+    if (!postReadbackInventory.ok) return postReadbackInventory;
+    durableReceipts = postReadbackInventory.receipts;
+    const readbackEvents = validateReadbackEvents(inspected.snapshot, durableReceipts);
+    if (!readbackEvents.ok) return readbackEvents;
     const readback = verifyConvergenceReadbackV5(inspected.snapshot, preview);
     if (!readback.ok) return readback;
-    let rerunReceipts = durableReceipts;
-    if (required && typeof store.readReceiptChain === 'function') {
-      try { rerunReceipts = store.readReceiptChain(required.receipt.run_id); } catch (_error) { return fail('run-receipt-readback-failed'); }
-    }
+    const finalActive = readActive();
+    if (!finalActive.ok) return finalActive;
+    activeRunChain = finalActive.receipts;
+    const finalInventory = readInventory(inspected.snapshot, activeRunChain);
+    if (!finalInventory.ok) return finalInventory;
+    durableReceipts = finalInventory.receipts;
+    const finalEvents = validateReadbackEvents(inspected.snapshot, durableReceipts);
+    if (!finalEvents.ok) return finalEvents;
     const rerun = buildConvergencePreviewV5({
       desired,
-      snapshot: { ...inspected.snapshot, ...(rerunReceipts ? { receipts: rerunReceipts } : {}) },
+      snapshot: { ...inspected.snapshot, ...(durableReceipts ? { receipts: durableReceipts } : {}) },
       scope_grant: options.scope_grant,
       broker: options.broker,
       authority_ref: preview.authority_ref || 'runtime:v5',
       authority_digest: preview.authority_digest,
+      bootstrap_revision: independentBootstrapRevision(applyOptions),
       contract_bytes: applyOptions.contract_bytes,
       toolkit_contract_bytes: applyOptions.toolkit_contract_bytes,
       resolved_contract: applyOptions.resolved_contract,
       resolve_contract: applyOptions.resolve_contract,
     });
     if (!rerun.ok || rerun.code !== 'PROGRAMME_ZERO_DELTA' || rerun.operations.length !== 0) return fail('immediate-rerun-not-zero-delta');
+    const completedActive = readActive();
+    if (!completedActive.ok) return completedActive;
+    const completedInventory = readInventory(inspected.snapshot, completedActive.receipts);
+    if (!completedInventory.ok) return completedInventory;
+    const completedEvents = validateReadbackEvents(inspected.snapshot, completedInventory.receipts);
+    if (!completedEvents.ok) return completedEvents;
     return ok('PROGRAMME_V5_APPLIED', {
       applied_count: appliedCount,
       operations_digest: preview.operations_digest,
