@@ -1,0 +1,3840 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "toolkit.github-program.broker-ipc.v1",
+  "title": "Toolkit broker IPC - Lock-007 inherited typed contract",
+  "$comment": "Lock-008 public standalone envelope contract. All schema-expressible constraints are assertions here. Additional semantic constraints are declared in github-program-receipt-policy.json#/native_broker_ipc/semantic_constraints and enforced before acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "request_id",
+    "operation",
+    "namespace",
+    "lock",
+    "expected"
+  ],
+  "properties": {
+    "schema": {
+      "const": "toolkit.github-program.broker-ipc.v1"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 32,
+      "pattern": "^[a-f0-9]{32}(?![\\s\\S])"
+    },
+    "operation": {
+      "$ref": "#/$defs/operation"
+    },
+    "namespace": {
+      "$ref": "#/$defs/namespace"
+    },
+    "lock": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+    },
+    "expected": {
+      "$ref": "#/$defs/expected"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]{1,160}$(?![\\s\\S])"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$(?![\\s\\S])"
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$(?![\\s\\S])"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$(?![\\s\\S])"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}$(?![\\s\\S])"
+    },
+    "authority": {
+      "$ref": "#/$defs/brokerReceipt/$defs/authority"
+    },
+    "start": {
+      "$ref": "#/$defs/brokerReceipt/$defs/start"
+    },
+    "candidate": {
+      "$ref": "#/$defs/brokerReceipt/$defs/candidate"
+    },
+    "lease": {
+      "$ref": "#/$defs/brokerReceipt/$defs/lease"
+    },
+    "payload": {
+      "$ref": "#/$defs/brokerReceipt/$defs/payload"
+    },
+    "receipt": {
+      "$ref": "#/$defs/brokerReceipt"
+    },
+    "holder_attestation": {
+      "$ref": "#/$defs/brokerHolder"
+    },
+    "pre_recovery_evidence": {
+      "$ref": "#/$defs/brokerPreRecovery"
+    },
+    "recovery_record": {
+      "$ref": "#/$defs/brokerRecovery"
+    },
+    "namespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "parent_issue",
+        "child_issue"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 201,
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}(?![\\s\\S])"
+        },
+        "parent_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "child_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_digest"
+      ],
+      "properties": {
+        "state_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "target_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "resource_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        }
+      }
+    },
+    "mutation_state": {
+      "enum": [
+        "PREPARED",
+        "IN_FLIGHT",
+        "APPLIED",
+        "NOT_APPLIED",
+        "UNKNOWN"
+      ]
+    },
+    "operation_kind": {
+      "enum": [
+        "GIT_REF_UPDATE",
+        "CONDITIONAL_PROVIDER_UPDATE",
+        "IDEMPOTENT_SET",
+        "APPEND_CREATE"
+      ]
+    },
+    "safety_class": {
+      "enum": [
+        "CAS",
+        "IDEMPOTENT",
+        "APPEND_IDEMPOTENT"
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_digest",
+        "expected_source_digest",
+        "cas_digest",
+        "adapter_identity_digest",
+        "operation_kind",
+        "safety_class",
+        "target_identity",
+        "expected_post_state_digest",
+        "retry_of_operation_id"
+      ],
+      "properties": {
+        "target_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "expected_source_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "cas_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "adapter_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "operation_kind": {
+          "$ref": "#/$defs/operation_kind"
+        },
+        "safety_class": {
+          "$ref": "#/$defs/safety_class"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "expected_post_state_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_of_operation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "GIT_REF_UPDATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "CAS"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "git_ref"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "CONDITIONAL_PROVIDER_UPDATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "CAS"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_resource"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "IDEMPOTENT_SET"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "IDEMPOTENT"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_resource"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "APPEND_CREATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "APPEND_IDEMPOTENT"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_collection"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "outcome_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_operation_digest",
+        "adapter_identity_digest",
+        "target_digest",
+        "cas_digest",
+        "evidence_digest",
+        "operation_id",
+        "target_identity",
+        "provider_operation_key",
+        "classification",
+        "observed_post_state_digest",
+        "rejection_digest",
+        "delayed_completion_excluded",
+        "evidence_at"
+      ],
+      "properties": {
+        "logical_operation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "adapter_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "target_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "cas_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "evidence_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "provider_operation_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "classification": {
+          "enum": [
+            "APPLIED",
+            "NOT_APPLIED",
+            "UNKNOWN"
+          ]
+        },
+        "observed_post_state_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejection_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delayed_completion_excluded": {
+          "type": "boolean"
+        },
+        "evidence_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "APPLIED"
+              }
+            },
+            "required": [
+              "classification"
+            ]
+          },
+          "then": {
+            "properties": {
+              "observed_post_state_digest": {
+                "type": "string"
+              },
+              "rejection_digest": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "NOT_APPLIED"
+              }
+            },
+            "required": [
+              "classification"
+            ]
+          },
+          "then": {
+            "properties": {
+              "observed_post_state_digest": {
+                "type": "null"
+              },
+              "rejection_digest": {
+                "type": "string"
+              },
+              "delayed_completion_excluded": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    "receipt_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_type",
+        "candidate",
+        "payload",
+        "created_at"
+      ],
+      "properties": {
+        "receipt_type": {
+          "enum": [
+            "TRANSITION_PREVIEW",
+            "EXECUTOR_TERMINAL",
+            "G4_TERMINAL",
+            "RUN_INTERRUPTED"
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/candidate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/payload"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        }
+      }
+    },
+    "allocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allocation_id",
+        "run_id",
+        "lock",
+        "lease"
+      ],
+      "properties": {
+        "allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "lease": {
+          "$ref": "#/$defs/lease"
+        }
+      }
+    },
+    "mutation_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_digest",
+        "expected_source_digest",
+        "cas_digest",
+        "adapter_identity_digest",
+        "operation_kind",
+        "safety_class",
+        "target_identity",
+        "expected_post_state_digest",
+        "retry_of_operation_id",
+        "operation_id",
+        "run_id",
+        "allocation_id",
+        "lock",
+        "lease_id",
+        "fence_id",
+        "provider_operation_key",
+        "logical_operation_digest",
+        "authority_digest",
+        "operation_digest",
+        "fence_sequence",
+        "created_at"
+      ],
+      "properties": {
+        "target_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "expected_source_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "cas_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "adapter_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "operation_kind": {
+          "$ref": "#/$defs/operation_kind"
+        },
+        "safety_class": {
+          "$ref": "#/$defs/safety_class"
+        },
+        "target_identity": {
+          "$ref": "#/$defs/target_identity"
+        },
+        "expected_post_state_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_of_operation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "lease_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "fence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "provider_operation_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "logical_operation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "authority_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "operation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "fence_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "GIT_REF_UPDATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "CAS"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "git_ref"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "CONDITIONAL_PROVIDER_UPDATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "CAS"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_resource"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "IDEMPOTENT_SET"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "IDEMPOTENT"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_resource"
+                  }
+                }
+              },
+              "expected_post_state_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_kind": {
+                "const": "APPEND_CREATE"
+              }
+            },
+            "required": [
+              "operation_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "safety_class": {
+                "const": "APPEND_IDEMPOTENT"
+              },
+              "target_identity": {
+                "properties": {
+                  "resource_type": {
+                    "const": "provider_collection"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "mutation_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_digest",
+        "provider_evidence_digest",
+        "detail_digest",
+        "event_digest",
+        "event_id",
+        "operation_id",
+        "sequence",
+        "prior_event_id",
+        "event_type",
+        "state",
+        "event_at",
+        "readback_digest"
+      ],
+      "properties": {
+        "authority_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "provider_evidence_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "detail_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "event_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "prior_event_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_type": {
+          "enum": [
+            "PREPARED",
+            "IN_FLIGHT",
+            "OUTCOME_RECORDED",
+            "RECONCILED"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/mutation_state"
+        },
+        "event_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "readback_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "recovery_status": {
+      "enum": [
+        "RUN_NOT_FOUND",
+        "TERMINAL",
+        "UNSTARTED_ALLOCATION_EXPIRED",
+        "UNSTARTED_ALLOCATION_ACTIVE",
+        "STARTED_LEASE_EXPIRED",
+        "LIVE_RUN_NOT_ADOPTABLE"
+      ]
+    },
+    "readback": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "namespace",
+            "namespace_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "NAMESPACE"
+            },
+            "namespace": {
+              "$ref": "#/$defs/namespace"
+            },
+            "namespace_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "type": "boolean"
+            },
+            "run_started_receipt_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64,
+                  "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "started": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "started"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "run_started_receipt_id": {
+                    "type": "string"
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "run_started_receipt_id": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "run_id",
+            "receipts",
+            "chain_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RECEIPT_CHAIN"
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "receipts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/receipt"
+              },
+              "maxItems": 128,
+              "minItems": 1
+            },
+            "chain_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation",
+            "state",
+            "events"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION"
+            },
+            "operation": {
+              "$ref": "#/$defs/mutation_operation"
+            },
+            "state": {
+              "$ref": "#/$defs/mutation_state"
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/mutation_event"
+                  },
+                  {
+                    "properties": {
+                      "state": {
+                        "enum": [
+                          "APPLIED",
+                          "NOT_APPLIED",
+                          "UNKNOWN"
+                        ]
+                      },
+                      "event_type": {
+                        "enum": [
+                          "OUTCOME_RECORDED",
+                          "RECONCILED"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "maxItems": 256,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/mutation_event"
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "const": "PREPARED"
+                        },
+                        "event_type": {
+                          "const": "PREPARED"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/mutation_event"
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "const": "IN_FLIGHT"
+                        },
+                        "event_type": {
+                          "const": "IN_FLIGHT"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "run_id",
+            "status",
+            "receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RECOVERY"
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "status": {
+              "$ref": "#/$defs/recovery_status"
+            },
+            "receipt_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64,
+                  "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "TERMINAL"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "receipt_id": {
+                    "type": "string"
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "receipt_id": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "readback_target": {
+      "enum": [
+        "NAMESPACE",
+        "RUN",
+        "RECEIPT_CHAIN",
+        "MUTATION",
+        "RECOVERY"
+      ]
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target"
+          ],
+          "properties": {
+            "kind": {
+              "const": "READBACK_INSPECTION"
+            },
+            "target": {
+              "$ref": "#/$defs/readback_target"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "authority",
+            "start",
+            "candidate",
+            "lease_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ALLOCATE_RUN"
+            },
+            "authority": {
+              "$ref": "#/$defs/authority"
+            },
+            "start": {
+              "$ref": "#/$defs/start"
+            },
+            "candidate": {
+              "type": "null"
+            },
+            "lease_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 86400000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "START_RUN"
+            },
+            "allocation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "properties": {
+            "kind": {
+              "const": "APPEND_RECEIPT"
+            },
+            "receipt": {
+              "$ref": "#/$defs/receipt_input"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "const": "INTERRUPT_RUN"
+            },
+            "reason": {
+              "enum": [
+                "REQUESTED",
+                "BROKER_RECOVERY",
+                "SHUTDOWN"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "descriptor"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_ADMIT"
+            },
+            "descriptor": {
+              "$ref": "#/$defs/descriptor"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_DISPATCH"
+            },
+            "operation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id",
+            "evidence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_OUTCOME"
+            },
+            "operation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "evidence": {
+              "$ref": "#/$defs/outcome_evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "operation_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_RECONCILE"
+            },
+            "operation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "old_run_digest",
+            "evidence_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ORPHAN_RECOVERY"
+            },
+            "old_run_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "evidence_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source_schema_fingerprint"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MIGRATE_V2_TO_V3"
+            },
+            "source_schema_fingerprint": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        }
+      ]
+    },
+    "operationKind": {
+      "enum": [
+        "READBACK_INSPECTION",
+        "ALLOCATE_RUN",
+        "START_RUN",
+        "APPEND_RECEIPT",
+        "INTERRUPT_RUN",
+        "MUTATION_ADMIT",
+        "MUTATION_DISPATCH",
+        "MUTATION_OUTCOME",
+        "MUTATION_RECONCILE",
+        "ORPHAN_RECOVERY",
+        "MIGRATE_V2_TO_V3"
+      ]
+    },
+    "successValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "READBACK_INSPECTION"
+            },
+            "target": {
+              "$ref": "#/$defs/readback_target"
+            },
+            "readback": {
+              "$ref": "#/$defs/readback"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "NAMESPACE"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "NAMESPACE"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RUN"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RUN"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RECEIPT_CHAIN"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RECEIPT_CHAIN"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "MUTATION"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "MUTATION"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "const": "RECOVERY"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "readback": {
+                    "properties": {
+                      "kind": {
+                        "const": "RECOVERY"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ALLOCATE_RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "const": false
+            },
+            "run_started_receipt_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "allocation",
+            "started",
+            "run_started_receipt_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "START_RUN"
+            },
+            "allocation": {
+              "$ref": "#/$defs/allocation"
+            },
+            "started": {
+              "const": true
+            },
+            "run_started_receipt_id": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt",
+            "duplicate"
+          ],
+          "properties": {
+            "kind": {
+              "const": "APPEND_RECEIPT"
+            },
+            "receipt": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/brokerReceipt"
+                },
+                {
+                  "properties": {
+                    "receipt_type": {
+                      "not": {
+                        "const": "RUN_STARTED"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "duplicate": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "receipt",
+            "duplicate"
+          ],
+          "properties": {
+            "kind": {
+              "const": "INTERRUPT_RUN"
+            },
+            "receipt": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/brokerReceipt"
+                },
+                {
+                  "properties": {
+                    "receipt_type": {
+                      "const": "RUN_INTERRUPTED"
+                    }
+                  }
+                }
+              ]
+            },
+            "duplicate": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_ADMIT"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "IN_FLIGHT"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/mutation_event"
+                      },
+                      {
+                        "properties": {
+                          "state": {
+                            "enum": [
+                              "APPLIED",
+                              "NOT_APPLIED",
+                              "UNKNOWN"
+                            ]
+                          },
+                          "event_type": {
+                            "enum": [
+                              "OUTCOME_RECORDED",
+                              "RECONCILED"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "maxItems": 256,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "PREPARED"
+                            },
+                            "event_type": {
+                              "const": "PREPARED"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "IN_FLIGHT"
+                            },
+                            "event_type": {
+                              "const": "IN_FLIGHT"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_DISPATCH"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "IN_FLIGHT"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/mutation_event"
+                      },
+                      {
+                        "properties": {
+                          "state": {
+                            "enum": [
+                              "APPLIED",
+                              "NOT_APPLIED",
+                              "UNKNOWN"
+                            ]
+                          },
+                          "event_type": {
+                            "enum": [
+                              "OUTCOME_RECORDED",
+                              "RECONCILED"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "maxItems": 256,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "PREPARED"
+                            },
+                            "event_type": {
+                              "const": "PREPARED"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "IN_FLIGHT"
+                            },
+                            "event_type": {
+                              "const": "IN_FLIGHT"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_OUTCOME"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "APPLIED",
+                    "NOT_APPLIED",
+                    "UNKNOWN"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/mutation_event"
+                      },
+                      {
+                        "properties": {
+                          "state": {
+                            "enum": [
+                              "APPLIED",
+                              "NOT_APPLIED",
+                              "UNKNOWN"
+                            ]
+                          },
+                          "event_type": {
+                            "enum": [
+                              "OUTCOME_RECORDED",
+                              "RECONCILED"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "maxItems": 256,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "PREPARED"
+                            },
+                            "event_type": {
+                              "const": "PREPARED"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "IN_FLIGHT"
+                            },
+                            "event_type": {
+                              "const": "IN_FLIGHT"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "readback"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MUTATION_RECONCILE"
+            },
+            "readback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "operation",
+                "state",
+                "events"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "MUTATION"
+                },
+                "operation": {
+                  "$ref": "#/$defs/mutation_operation"
+                },
+                "state": {
+                  "enum": [
+                    "PREPARED",
+                    "IN_FLIGHT",
+                    "APPLIED",
+                    "NOT_APPLIED",
+                    "UNKNOWN"
+                  ]
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/mutation_event"
+                      },
+                      {
+                        "properties": {
+                          "state": {
+                            "enum": [
+                              "APPLIED",
+                              "NOT_APPLIED",
+                              "UNKNOWN"
+                            ]
+                          },
+                          "event_type": {
+                            "enum": [
+                              "OUTCOME_RECORDED",
+                              "RECONCILED"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "maxItems": 256,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "PREPARED"
+                            },
+                            "event_type": {
+                              "const": "PREPARED"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/mutation_event"
+                        },
+                        {
+                          "properties": {
+                            "state": {
+                              "const": "IN_FLIGHT"
+                            },
+                            "event_type": {
+                              "const": "IN_FLIGHT"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "recovery_record",
+            "replacement_allocation"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ORPHAN_RECOVERY"
+            },
+            "recovery_record": {
+              "$ref": "#/$defs/recovery_record"
+            },
+            "replacement_allocation": {
+              "$ref": "#/$defs/allocation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "status",
+            "source_schema_fingerprint",
+            "destination_schema_fingerprint",
+            "namespace_digest",
+            "store_binding_digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "MIGRATE_V2_TO_V3"
+            },
+            "status": {
+              "const": "MIGRATED"
+            },
+            "source_schema_fingerprint": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "destination_schema_fingerprint": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "namespace_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "store_binding_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "value",
+        "result_digest"
+      ],
+      "properties": {
+        "operation": {
+          "$ref": "#/$defs/operationKind"
+        },
+        "value": {
+          "$ref": "#/$defs/successValue"
+        },
+        "result_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "READBACK_INSPECTION"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "READBACK_INSPECTION"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "ALLOCATE_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "ALLOCATE_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "START_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "START_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "APPEND_RECEIPT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "APPEND_RECEIPT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "INTERRUPT_RUN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "INTERRUPT_RUN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_ADMIT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_ADMIT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_DISPATCH"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_DISPATCH"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_OUTCOME"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_OUTCOME"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MUTATION_RECONCILE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MUTATION_RECONCILE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "ORPHAN_RECOVERY"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "ORPHAN_RECOVERY"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MIGRATE_V2_TO_V3"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "properties": {
+                  "kind": {
+                    "const": "MIGRATE_V2_TO_V3"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "BROKER_MALFORMED_FRAME",
+            "BROKER_MALFORMED_REQUEST",
+            "BROKER_UNSUPPORTED_SCHEMA",
+            "BROKER_UNSUPPORTED_OPERATION",
+            "BROKER_INVALID_FIELD",
+            "BROKER_LIMIT_VIOLATION",
+            "BROKER_REQUEST_CONFLICT",
+            "BROKER_BUSY",
+            "BROKER_STALE_EXPECTED_STATE",
+            "BROKER_UNVERIFIABLE_IDENTITY",
+            "BROKER_UNSUPPORTED_PLATFORM",
+            "BROKER_INTERNAL_INVARIANT"
+          ]
+        }
+      }
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "request_id",
+            "ok",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "schema": {
+              "const": "toolkit.github-program.broker-ipc.v1"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 32,
+              "pattern": "^[a-f0-9]{32}(?![\\s\\S])"
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "$ref": "#/$defs/result"
+            },
+            "error": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "request_id",
+            "ok",
+            "result",
+            "error"
+          ],
+          "properties": {
+            "schema": {
+              "const": "toolkit.github-program.broker-ipc.v1"
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 32,
+                  "maxLength": 32,
+                  "pattern": "^[a-f0-9]{32}(?![\\s\\S])"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ok": {
+              "const": false
+            },
+            "result": {
+              "type": "null"
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "brokerReceipt": {
+      "title": "Toolkit GitHub Programme Run Receipt v1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "receipt_type",
+        "receipt_id",
+        "sequence",
+        "prior_receipt_id",
+        "run_id",
+        "allocation_id",
+        "repository",
+        "parent_issue",
+        "child_issue",
+        "lock",
+        "authority",
+        "start",
+        "candidate",
+        "lease",
+        "payload",
+        "created_at"
+      ],
+      "properties": {
+        "schema": {
+          "const": "toolkit.github-program.run-receipt.v1"
+        },
+        "receipt_type": {
+          "enum": [
+            "RUN_STARTED",
+            "TRANSITION_PREVIEW",
+            "EXECUTOR_TERMINAL",
+            "G4_TERMINAL",
+            "RUN_INTERRUPTED"
+          ]
+        },
+        "receipt_id": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "prior_receipt_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 201,
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}(?![\\s\\S])"
+        },
+        "parent_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "child_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+        },
+        "authority": {
+          "$ref": "#/$defs/brokerReceipt/$defs/authority"
+        },
+        "start": {
+          "$ref": "#/$defs/brokerReceipt/$defs/start"
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/brokerReceipt/$defs/candidate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lease": {
+          "$ref": "#/$defs/brokerReceipt/$defs/lease"
+        },
+        "payload": {
+          "$ref": "#/$defs/brokerReceipt/$defs/payload"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        }
+      },
+      "$defs": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:/-]{1,160}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sha1": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 32
+        },
+        "gitRef": {
+          "type": "string",
+          "pattern": "^(?!@$)(?!-)(?!/)(?!.*(?:\\.\\.|@\\{|//|[\\u0000-\\u0020\\u007f~^:?*\\[\\\\]))(?!.*(?:^|/)\\.)(?!.*\\.lock(?:/|$))(?!.*[/.]$).{1,240}$"
+        },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "child_comment_id",
+            "parent_comment_id",
+            "node_id",
+            "author_login",
+            "author_association",
+            "body_digest",
+            "updated_at",
+            "update_identity_digest",
+            "scope_digest"
+          ],
+          "properties": {
+            "child_comment_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parent_comment_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "node_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "author_login": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 39,
+              "pattern": "^[A-Za-z0-9-]{1,39}(?![\\s\\S])"
+            },
+            "author_association": {
+              "const": "OWNER"
+            },
+            "body_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "updated_at": {
+              "type": "string",
+              "minLength": 24,
+              "maxLength": 24,
+              "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+            },
+            "update_identity_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "scope_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            }
+          }
+        },
+        "start": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "base_sha",
+            "head_sha",
+            "tree_sha",
+            "status_digest",
+            "clean_worktree",
+            "ref"
+          ],
+          "properties": {
+            "base_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            },
+            "head_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            },
+            "tree_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            },
+            "status_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "clean_worktree": {
+              "const": true
+            },
+            "ref": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "detached",
+                    "name"
+                  ],
+                  "properties": {
+                    "detached": {
+                      "const": true
+                    },
+                    "name": {
+                      "type": "null"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "detached",
+                    "name"
+                  ],
+                  "properties": {
+                    "detached": {
+                      "const": false
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240,
+                      "pattern": "^(?![-/])(?![\\s\\S]*(?:\\.\\.|@\\{|//))(?!@(?:$))(?![\\s\\S]*(?:^|/)\\.)(?![\\s\\S]*(?:^|/)[^/]*\\.lock(?:/|$))(?![\\s\\S]*[./]$)[^\\x00-\\x20\\x7f~^:?*\\\\\\[]+(?![\\s\\S])",
+                      "$comment": "SEM.GIT_REF_UTF8_BYTES: additionally require 1..240 UTF-8 bytes under broker policy semantic_constraints; maxLength is only a necessary character guard."
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pr_number",
+            "branch",
+            "base_ref",
+            "base_sha",
+            "head_sha",
+            "tree_sha"
+          ],
+          "properties": {
+            "pr_number": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "branch": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^(?![-/])(?![\\s\\S]*(?:\\.\\.|@\\{|//))(?!@(?:$))(?![\\s\\S]*(?:^|/)\\.)(?![\\s\\S]*(?:^|/)[^/]*\\.lock(?:/|$))(?![\\s\\S]*[./]$)[^\\x00-\\x20\\x7f~^:?*\\\\\\[]+(?![\\s\\S])",
+              "$comment": "SEM.GIT_REF_UTF8_BYTES: additionally require 1..240 UTF-8 bytes under broker policy semantic_constraints; maxLength is only a necessary character guard."
+            },
+            "base_ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^(?![-/])(?![\\s\\S]*(?:\\.\\.|@\\{|//))(?!@(?:$))(?![\\s\\S]*(?:^|/)\\.)(?![\\s\\S]*(?:^|/)[^/]*\\.lock(?:/|$))(?![\\s\\S]*[./]$)[^\\x00-\\x20\\x7f~^:?*\\\\\\[]+(?![\\s\\S])",
+              "$comment": "SEM.GIT_REF_UTF8_BYTES: additionally require 1..240 UTF-8 bytes under broker policy semantic_constraints; maxLength is only a necessary character guard."
+            },
+            "base_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            },
+            "head_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            },
+            "tree_sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[a-f0-9]{40}(?![\\s\\S])"
+            }
+          }
+        },
+        "lease": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lease_id",
+            "fence_id",
+            "fence_sequence",
+            "issued_at",
+            "expires_at"
+          ],
+          "properties": {
+            "lease_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "fence_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "fence_sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "issued_at": {
+              "type": "string",
+              "minLength": 24,
+              "maxLength": 24,
+              "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+            },
+            "expires_at": {
+              "type": "string",
+              "minLength": 24,
+              "maxLength": 24,
+              "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+            }
+          }
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification"
+          ],
+          "properties": {
+            "classification": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "reason_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+            },
+            "outcome_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "evidence_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "operation_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "detail_digest": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "mutation_outcome": {
+              "enum": [
+                "KNOWN",
+                "UNKNOWN"
+              ]
+            },
+            "evidence_refs": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "digest"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._:/-]+(?![\\s\\S])"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                    "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "$comment": "Broker-local constraints; shape provenance run-receipt-v1.schema.json blob 6a6b2772b4994e00cbe24308d9337cbd4075a930",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sequence": {
+                "const": 1
+              }
+            },
+            "required": [
+              "sequence"
+            ]
+          },
+          "then": {
+            "properties": {
+              "receipt_type": {
+                "const": "RUN_STARTED"
+              },
+              "prior_receipt_id": {
+                "type": "null"
+              },
+              "candidate": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "receipt_type": {
+                "not": {
+                  "const": "RUN_STARTED"
+                }
+              },
+              "prior_receipt_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "brokerHolder": {
+      "title": "Toolkit GitHub Programme Holder Attestation v1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "attestation_id",
+        "algorithm",
+        "key_id",
+        "platform",
+        "repository",
+        "parent_issue",
+        "child_issue",
+        "lock",
+        "allocation_id",
+        "allocation_digest",
+        "run_id",
+        "run_digest",
+        "lease_id",
+        "fence_id",
+        "fence_sequence",
+        "authority_digest",
+        "start_digest",
+        "broker_identity_digest",
+        "process_id_digest",
+        "process_start_digest",
+        "boot_id_digest",
+        "pid_namespace_digest",
+        "process_incarnation_digest",
+        "lease_issued_at",
+        "lease_expires_at",
+        "attestation_digest",
+        "attestation_tag"
+      ],
+      "properties": {
+        "schema": {
+          "const": "toolkit.github-program.holder-attestation.v1"
+        },
+        "attestation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "algorithm": {
+          "const": "HMAC-SHA-256"
+        },
+        "key_id": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 32,
+          "pattern": "^[a-f0-9]{32}(?![\\s\\S])"
+        },
+        "platform": {
+          "enum": [
+            "windows",
+            "linux"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 201,
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}(?![\\s\\S])"
+        },
+        "parent_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "child_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "allocation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "run_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "lease_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "fence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "fence_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "authority_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "start_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "broker_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "process_id_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "process_start_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "boot_id_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "pid_namespace_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "process_incarnation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "lease_issued_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "lease_expires_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "attestation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "attestation_tag": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        }
+      },
+      "$defs": {
+        "id": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 32
+        }
+      },
+      "$comment": "Broker-local constraints; shape provenance holder-attestation-v1.schema.json blob c93101fc5bc807425f2fe8c3cc203a0ee3e44564"
+    },
+    "brokerPreRecovery": {
+      "title": "Toolkit GitHub Programme Pre-Recovery Evidence v1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "request_id",
+        "repository",
+        "parent_issue",
+        "child_issue",
+        "lock",
+        "namespace_digest",
+        "old_allocation_id",
+        "old_run_id",
+        "old_allocation_digest",
+        "old_run_digest",
+        "old_lease_id",
+        "old_fence_id",
+        "old_fence_sequence",
+        "old_lease_issued_at",
+        "old_lease_expires_at",
+        "old_lease_tip_event_id",
+        "old_lease_tip_event_digest",
+        "old_receipt_tip_id",
+        "old_receipt_tip_sequence",
+        "old_receipt_tip_digest",
+        "old_receipt_chain_digest",
+        "zero_operation_count",
+        "zero_operation_event_count",
+        "zero_operation_inventory_digest",
+        "authority_digest",
+        "source_digest",
+        "start_digest",
+        "old_holder_classification",
+        "old_holder_identity_digest",
+        "old_holder_attestation_digest",
+        "recovery_peer_platform",
+        "recovery_peer_identity_digest",
+        "recovery_peer_process_incarnation_digest",
+        "broker_identity_digest",
+        "broker_key_id",
+        "observed_at",
+        "authority_observed_at",
+        "source_observed_at",
+        "start_observed_at",
+        "store_observed_at",
+        "holder_observed_at"
+      ],
+      "properties": {
+        "schema": {
+          "const": "toolkit.github-program.pre-recovery-evidence.v1"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 201,
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}(?![\\s\\S])"
+        },
+        "parent_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "child_issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "namespace_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_allocation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_run_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_lease_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_fence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_fence_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "old_lease_issued_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "old_lease_expires_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "old_lease_tip_event_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_lease_tip_event_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_receipt_tip_id": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_receipt_tip_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "old_receipt_tip_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_receipt_chain_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "zero_operation_count": {
+          "const": 0
+        },
+        "zero_operation_event_count": {
+          "const": 0
+        },
+        "zero_operation_inventory_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "authority_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "source_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "start_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_holder_classification": {
+          "const": "ORPHAN_NONADOPTABLE"
+        },
+        "old_holder_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_holder_attestation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "recovery_peer_platform": {
+          "enum": [
+            "windows",
+            "linux"
+          ]
+        },
+        "recovery_peer_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "recovery_peer_process_incarnation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "broker_identity_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "broker_key_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "authority_observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "source_observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "start_observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "store_observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "holder_observed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        }
+      },
+      "$defs": {
+        "id": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 32
+        }
+      },
+      "$comment": "Broker-local constraints; shape provenance pre-recovery-evidence-v1.schema.json blob 45cffb72c282ca2067d72012267c6e0e57272d91"
+    },
+    "brokerRecovery": {
+      "title": "Toolkit GitHub Programme Recovery Record v1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "recovery_record_id",
+        "request_id",
+        "namespace_digest",
+        "old_allocation_id",
+        "old_run_id",
+        "old_lease_id",
+        "old_fence_id",
+        "old_fence_sequence",
+        "pre_recovery_evidence",
+        "pre_recovery_evidence_digest",
+        "terminal_receipt_id",
+        "terminal_receipt_digest",
+        "release_event_id",
+        "release_event_digest",
+        "replacement_allocation_id",
+        "replacement_allocation_digest",
+        "replacement_run_id",
+        "replacement_run_digest",
+        "replacement_lease_id",
+        "replacement_fence_id",
+        "replacement_fence_sequence",
+        "replacement_holder_attestation_id",
+        "replacement_holder_attestation_digest",
+        "new_high_water",
+        "authority_digest",
+        "source_digest",
+        "start_digest",
+        "committed_at",
+        "recovery_record_digest"
+      ],
+      "properties": {
+        "schema": {
+          "const": "toolkit.github-program.recovery-record.v1"
+        },
+        "recovery_record_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "namespace_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "old_allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_lease_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_fence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "old_fence_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "pre_recovery_evidence": {
+          "$ref": "#/$defs/brokerPreRecovery"
+        },
+        "pre_recovery_evidence_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "terminal_receipt_id": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "terminal_receipt_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "release_event_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "release_event_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "replacement_allocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "replacement_allocation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "replacement_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "replacement_run_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "replacement_lease_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "replacement_fence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "replacement_fence_sequence": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "replacement_holder_attestation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]*(?![\\s\\S])"
+        },
+        "replacement_holder_attestation_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "new_high_water": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "authority_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "source_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "start_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "committed_at": {
+          "type": "string",
+          "minLength": 24,
+          "maxLength": 24,
+          "pattern": "^(?:[0-9]{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12][0-9]|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z(?![\\s\\S])"
+        },
+        "recovery_record_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        }
+      },
+      "$defs": {
+        "id": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]{1,100}/[a-z0-9_.-]{1,100}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 32
+        }
+      },
+      "$comment": "Broker-local constraints; shape provenance recovery-record-v1.schema.json blob 59c2e717741c5ac9146281a996d5ab30207e638c"
+    }
+  }
+}
