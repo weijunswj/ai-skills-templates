@@ -6,7 +6,6 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
-const Ajv = require('ajv/dist/2020').default;
 
 const v4 = require('../scripts/toolkit-github-program-state-v4.cjs');
 const v5 = require('../scripts/toolkit-github-program-state-v5.cjs');
@@ -21,6 +20,84 @@ const BASE = 'c'.repeat(40);
 const DIGEST = 'd'.repeat(64);
 const repositoryRoot = path.resolve(__dirname, '../..');
 const cleanupRoots = new Set();
+
+function schemaRef(root, reference) {
+  if (reference === '#') return root;
+  return reference.slice(2).split('/').map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce((value, part) => value?.[part], root);
+}
+
+function schemaValueEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function validateJsonSchema(value, schema, root, location = '$', errors = []) {
+  if (!schema || typeof schema !== 'object') return errors;
+  if (schema.$ref) return validateJsonSchema(value, schemaRef(root, schema.$ref), root, location, errors);
+  if (schema.allOf) for (const branch of schema.allOf) validateJsonSchema(value, branch, root, location, errors);
+  if (schema.oneOf) {
+    const matches = schema.oneOf.filter((branch) => validateJsonSchema(value, branch, root, location, []).length === 0);
+    if (matches.length !== 1) errors.push(`${location}: oneOf matched ${matches.length} branches`);
+    return errors;
+  }
+  if (schema.anyOf) {
+    const matches = schema.anyOf.some((branch) => validateJsonSchema(value, branch, root, location, []).length === 0);
+    if (!matches) errors.push(`${location}: anyOf matched no branches`);
+    return errors;
+  }
+  if (schema.const !== undefined && !schemaValueEqual(value, schema.const)) errors.push(`${location}: const mismatch`);
+  if (schema.enum && !schema.enum.some((entry) => schemaValueEqual(value, entry))) errors.push(`${location}: enum mismatch`);
+  if (schema.type) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    const matches = types.some((type) => type === 'null' ? value === null
+      : type === 'array' ? Array.isArray(value)
+        : type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value)
+          : type === 'integer' ? Number.isInteger(value)
+            : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+              : type === 'boolean' ? typeof value === 'boolean'
+                : type === 'string' ? typeof value === 'string' : true);
+    if (!matches) {
+      errors.push(`${location}: type mismatch`);
+      return errors;
+    }
+  }
+  if (typeof value === 'string') {
+    if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${location}: shorter than minLength`);
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${location}: longer than maxLength`);
+    if (schema.pattern && !new RegExp(schema.pattern).test(value)) errors.push(`${location}: pattern mismatch`);
+    if (schema.format === 'date-time' && !Number.isFinite(Date.parse(value))) errors.push(`${location}: date-time mismatch`);
+  }
+  if (typeof value === 'number') {
+    if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${location}: below minimum`);
+    if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${location}: above maximum`);
+  }
+  if (Array.isArray(value)) {
+    if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${location}: fewer than minItems`);
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${location}: more than maxItems`);
+    if (schema.items) value.forEach((entry, index) => validateJsonSchema(entry, schema.items, root, `${location}[${index}]`, errors));
+  }
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    for (const required of schema.required || []) if (!Object.prototype.hasOwnProperty.call(value, required)) errors.push(`${location}: missing ${required}`);
+    const properties = schema.properties || {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (properties[key]) validateJsonSchema(entry, properties[key], root, `${location}.${key}`, errors);
+      else if (schema.additionalProperties === false) errors.push(`${location}: unexpected ${key}`);
+      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+        validateJsonSchema(entry, schema.additionalProperties, root, `${location}.${key}`, errors);
+      }
+    }
+  }
+  return errors;
+}
+
+function schemaValidator(schema) {
+  const validate = (value) => {
+    validate.errors = validateJsonSchema(value, schema, schema);
+    return validate.errors.length === 0;
+  };
+  validate.errors = [];
+  return validate;
+}
 
 function secureWindowsDirectory(root) {
   if (process.platform !== 'win32') return;
@@ -414,7 +491,7 @@ test('v5 preserves additive extensions and owner or unmanaged body bytes', async
   });
   assert.equal(preview.ok, true, JSON.stringify(preview));
   const migrationSchema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/github-program-reconciler/programme-migration-v2.schema.json'), 'utf8'));
-  const validateMigration = new Ajv({ strict: false }).compile(migrationSchema);
+  const validateMigration = schemaValidator(migrationSchema);
   assert.equal(validateMigration(preview), true, JSON.stringify(validateMigration.errors));
   const unexpected = { ...preview, unexpected_property: true };
   assert.equal(validateMigration(unexpected), false);
