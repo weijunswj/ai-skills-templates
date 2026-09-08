@@ -376,8 +376,10 @@ test('real canonical SQLite readReceiptById fails closed on a tampered durable r
   } finally {
     tamperDb.close();
   }
-  const reopened = createProgrammeReceiptStore(storeOptions);
-  assertCode(() => reopened.readReceiptById(appended.receipt.receipt_id), 'GPR_RECEIPT_TAMPERED');
+  assertCode(() => {
+    const reopened = createProgrammeReceiptStore(storeOptions);
+    return reopened.readReceiptById(appended.receipt.receipt_id);
+  }, 'GPR_RECEIPT_TAMPERED');
 });
 
 test('allocator high-water and operation-independent fencing survive restart', async () => {

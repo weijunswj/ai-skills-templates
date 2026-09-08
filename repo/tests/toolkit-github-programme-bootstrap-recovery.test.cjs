@@ -1628,7 +1628,7 @@ test('v5 resolves a retained v3 event without snapshot locators through the real
     body_digest: '1'.repeat(64),
     updated_at: '2026-09-07T00:00:00.000Z',
     update_identity_digest: '2'.repeat(64),
-    scope_digest: harnessA.scope.scope_digest,
+    scope_digest: harnessA.scope.grant.scope_digest,
   };
   const start = {
     base_sha: BASE,
