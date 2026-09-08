@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -945,6 +946,66 @@ test('v5 bootstrap validation rejects missing, malformed, stale, unknown-major, 
   assert.equal(v5.validateControllerBootstrap({ ...good, parent_issue: bootstrapFixture.wrong_parent_issue }, { parent_issue: 240 }).reason, 'bootstrap-parent-mismatch');
 });
 
+test('v5 resolves the checked-in bootstrap contract by canonical JSON digest', () => {
+  const bootstrapPath = path.join(repositoryRoot, '.github/ai-agent-toolkit-programme.json');
+  const checkedInBootstrap = JSON.parse(fs.readFileSync(bootstrapPath, 'utf8'));
+  const pin = checkedInBootstrap.toolkit_contract;
+  assert.match(pin.revision, /^[0-9a-f]{40}$/);
+
+  const objectCheck = spawnSync('git', ['cat-file', '-e', `${pin.revision}:${pin.path}`], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(objectCheck.status, 0, objectCheck.stderr);
+  const contractResult = spawnSync('git', ['show', `${pin.revision}:${pin.path}`], {
+    cwd: repositoryRoot,
+    encoding: null,
+  });
+  assert.equal(contractResult.status, 0, contractResult.stderr?.toString());
+  assert.ok(Buffer.isBuffer(contractResult.stdout));
+
+  const contractBytes = contractResult.stdout;
+  const contract = JSON.parse(contractBytes.toString('utf8'));
+  const canonicalDigest = v5.digest(contract);
+  const rawFileDigest = crypto.createHash('sha256').update(contractBytes).digest('hex');
+  assert.equal(canonicalDigest, '50c1b3eb438ac22e3da52367ae08f76d5abc622e8c8da75312b4f36673f3c494');
+  assert.notEqual(rawFileDigest, canonicalDigest);
+
+  const resolved = v5.resolvePinnedContract(checkedInBootstrap, {
+    repository: checkedInBootstrap.repository,
+    parent_issue: checkedInBootstrap.parent_issue,
+    resolved_contract: {
+      repository: pin.repository,
+      revision: pin.revision,
+      path: pin.path,
+      bytes: contractBytes,
+    },
+  });
+  assert.equal(resolved.ok, true, JSON.stringify(resolved));
+  assert.equal(resolved.code, 'PINNED_CONTRACT_RESOLVED');
+  assert.equal(resolved.contract_digest, canonicalDigest);
+  assert.equal(pin.sha256, canonicalDigest);
+
+  const rawHashBootstrap = {
+    ...checkedInBootstrap,
+    toolkit_contract: { ...pin, sha256: rawFileDigest },
+  };
+  const rejected = v5.resolvePinnedContract(rawHashBootstrap, {
+    repository: checkedInBootstrap.repository,
+    parent_issue: checkedInBootstrap.parent_issue,
+    resolved_contract: {
+      repository: pin.repository,
+      revision: pin.revision,
+      path: pin.path,
+      bytes: contractBytes,
+    },
+  });
+  assert.equal(rejected.ok, false, JSON.stringify(rejected));
+  assert.equal(rejected.reason, 'toolkit-contract-digest-mismatch');
+  assert.equal(rejected.expected, rawFileDigest);
+  assert.equal(rejected.actual, canonicalDigest);
+});
+
 test('v5 keeps the independently expected bootstrap revision through current, migration, and apply paths', () => {
   const expectedRevision = '7cbdb78aac022386b17696f6930fe4f06d274fd1';
   const staleRevision = '460a2460e5e8eaebebd7d2dc4c9f8e4bec0dd125';
@@ -1677,13 +1738,16 @@ test('v5 resolves a retained v3 event without snapshot locators through the real
       created_at: transitionA.created_at,
     });
     assert.deepEqual(persistedA.receipt, transitionA);
-    store.appendReceipt(sessionA, {
+    const persistedTerminal = store.appendReceipt(sessionA, {
       receipt_type: 'EXECUTOR_TERMINAL',
       payload: { classification: 'EXECUTOR_TERMINAL' },
       created_at: new Date().toISOString(),
     });
     const historicalChain = store.readReceiptChain(sessionA.run_id);
-    assert.equal(historicalChain.at(-1).receipt_type, 'EXECUTOR_TERMINAL');
+    const durableTerminal = historicalChain.at(-1);
+    assert.equal(persistedTerminal.receipt.receipt_type, 'EXECUTOR_TERMINAL');
+    assert.equal(persistedTerminal.receipt.receipt_id, durableTerminal.receipt_id);
+    assert.equal(durableTerminal.receipt_type, 'EXECUTOR_TERMINAL');
 
     const sessionB = await store.startRun({
       lock: 'g3-real-active-lock', authority, start, candidate: null, lease_ms: 60000,
@@ -1769,7 +1833,18 @@ test('v5 resolves a retained v3 event without snapshot locators through the real
       .map((receipt) => receipt.receipt_id);
     assert.deepEqual(new Set(lookupIds), new Set(historicalIds));
     assert.equal(chainReads.includes(sessionA.run_id), true, JSON.stringify(chainReads));
-    assert.equal(v5.createProgrammeRuntimeV5({ store: programmeStore }).recover({ run_id: sessionA.run_id }).status, 'TERMINAL');
+    const managedEventsBeforeRecovery = JSON.stringify(current.managed_events);
+    const recovery = v5.createProgrammeRuntimeV5({ store: programmeStore }).recover({ run_id: sessionA.run_id });
+    assert.equal(recovery.ok, true, JSON.stringify(recovery));
+    assert.equal(recovery.status, 'TERMINAL_UNCONSUMED');
+    assert.equal(recovery.code, 'RECOVERY_TERMINAL_UNCONSUMED');
+    assert.equal(recovery.terminal_persisted, true);
+    assert.equal(recovery.durable_receipt_id, durableTerminal.receipt_id);
+    assert.equal(recovery.durable_receipt_type, 'EXECUTOR_TERMINAL');
+    assert.equal(recovery.replay_allowed, false);
+    assert.equal(recovery.advances_state, false);
+    assert.equal(writerCalls, 1);
+    assert.equal(JSON.stringify(current.managed_events), managedEventsBeforeRecovery);
     assert.equal(JSON.stringify(current.managed_events[0]), JSON.stringify(previewA.expected_snapshot.managed_events[0]));
   } catch (error) {
     if (skipReceiptGuard(t, error)) return;
