@@ -521,6 +521,35 @@ test('successful stale preview has exactly two ordered body operations', () => {
   assert.equal(preview.self_retirement_fence.exact_target_only, true);
 });
 
+test('standalone child sole_current must agree with nested relationship evidence', () => {
+  const validEvidence = makeEvidence();
+  const validValidation = programme.validateEvidence(validEvidence, decision);
+  assert.equal(validValidation.ok, true, validValidation.code);
+  const validPreview = programme.projectionBootstrapRecovery.preview({ decision, evidence: validEvidence });
+  assert.equal(validPreview.ok, true, validPreview.code);
+  assert.equal(validPreview.operation_count, 2);
+  assert.deepEqual(validPreview.operation_order, [359, 240]);
+
+  const contradictory = clone(validEvidence);
+  contradictory.child.sole_current = false;
+  contradictory.pagination.child = programme.buildPaginationEvidence('child', contradictory);
+  const contradictoryEvidence = withEvidenceDigest(contradictory);
+  assert.equal(contradictoryEvidence.child.relationships.sole_current, true);
+  assert.equal(contradictoryEvidence.child.sole_current, false);
+  assert.notEqual(contradictoryEvidence.evidence_digest, validEvidence.evidence_digest);
+  for (const field of Object.keys(validEvidence.child)) {
+    if (field !== 'sole_current') assert.deepEqual(contradictoryEvidence.child[field], validEvidence.child[field], field);
+  }
+
+  const validation = programme.validateEvidence(contradictoryEvidence, decision);
+  assert.equal(validation.ok, false);
+  assert.equal(validation.code, 'RECOVERY_CHILD_EVIDENCE_INVALID');
+  const preview = programme.projectionBootstrapRecovery.preview({ decision, evidence: contradictoryEvidence });
+  assert.equal(preview.ok, false);
+  assert.equal(preview.code, 'RECOVERY_CHILD_EVIDENCE_INVALID');
+  assert.equal(preview.operations, undefined);
+});
+
 test('source revision movement fails closed symmetrically while locked child evidence remains valid', () => {
   const locked = makeEvidence();
   const lockedValidation = programme.validateEvidence(locked, decision);

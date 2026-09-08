@@ -1487,6 +1487,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
     || !isRecord(value.child.relationships)
     || !exactKeys(value.child.relationships, ['child_issue', 'child_is_native_sub_issue', 'parent_issue', 'sole_current'])
     || !same(value.child.relationships, { child_issue: CHILD_ISSUE, child_is_native_sub_issue: true, parent_issue: PARENT_ISSUE, sole_current: true })
+    || value.child.sole_current !== true
     || !same(value.child.dependencies, [])
     || !validateSnapshotState(value.child.state, expectedChildSnapshotState(
       value.child.canonical_digest === SOURCE_CANONICAL_DIGEST
