@@ -32,21 +32,11 @@ function parsedSources() {
   assert.equal(child.ok, true, child.code);
   return { parent, child };
 }
-function page(items) { return { complete: true, cursor: null, items, pages: 1 }; }
-function pagination() {
-  return {
-    parent: page(1),
-    child: page(1),
-    native_children: page(6),
-    current_label: page(1),
-    pr366: page(1),
-    pr379: page(1),
-    reviews: page(1),
-    threads: page(0),
-    comments: page(6),
-    checks: page(6),
-    web_authority: page(6),
-  };
+function pagination(evidence) {
+  return Object.fromEntries(programme.PAGINATION_KEYS.map((key) => [
+    key,
+    programme.buildPaginationEvidence(key, evidence),
+  ]));
 }
 function webAuthority() {
   const records = [...decision.web_authority.controlling, ...decision.web_authority.predecessor];
@@ -136,7 +126,7 @@ function makeEvidence(snapshot = 'BEFORE_CHILD', continuation = null) {
   const child = useTargetChild ? targetChild : source.child;
   const parentState = useTargetParent ? targetState : source.parent.state;
   const childState = useTargetParent || useTargetChild ? snapshotState(targetState) : snapshotState(source.parent.state);
-  return withEvidenceDigest({
+  const evidence = {
     schema: programme.EVIDENCE_SCHEMA,
     recovery_root: programme.RECOVERY_ROOT,
     lock: programme.LOCK,
@@ -178,7 +168,7 @@ function makeEvidence(snapshot = 'BEFORE_CHILD', continuation = null) {
     pr_366: pr366Facts(),
     pr_379: pr379Facts(),
     web_authority: webAuthority(),
-    pagination: pagination(),
+    pagination: null,
     collector: {
       kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
       identity: 'github-web-readonly-adapter',
@@ -189,7 +179,9 @@ function makeEvidence(snapshot = 'BEFORE_CHILD', continuation = null) {
     authority_digest: decision.web_authority.digest,
     continuation,
     evidence_digest: null,
-  });
+  };
+  evidence.pagination = pagination(evidence);
+  return withEvidenceDigest(evidence);
 }
 function continuationFromPreview(preview) {
   const operation = preview.operations[0];
@@ -231,6 +223,44 @@ test('held CURRENT with zero normal lanes requires the eligible blocking hold', 
   const withoutRecovery = clone(target);
   delete withoutRecovery.recovery;
   assert.equal(programme.validateCanonicalStateV5(withoutRecovery).code, 'V5_CURRENT_ZERO_LANE_HOLD_REQUIRED');
+  const hold = target.children.find((item) => item.issue === 359).holds[0];
+  assert.deepEqual(hold, {
+    id: programme.RECOVERY_ROOT,
+    root: programme.RECOVERY_ROOT,
+    lock: programme.LOCK,
+    kind: 'BLOCKING',
+    scope: 'PROGRAMME_PROJECTION_RECOVERY',
+    active: true,
+    blocks_normal_lanes: true,
+    evidence_ref: programme.HOLD_EVIDENCE_REF,
+    summary: 'Managed v5 parent and child projections are stale and remain held pending separately authorised recovery.',
+  });
+  assert.equal(target.evidence_refs.some((item) => item.id === programme.HOLD_EVIDENCE_REF
+    && item.kind === 'WEB' && item.reference === 'github:issue-comment:359:5580530088'), true);
+  for (const field of ['root', 'lock', 'kind', 'scope', 'evidence_ref']) {
+    const malformed = clone(target);
+    delete malformed.children.find((item) => item.issue === 359).holds[0][field];
+    assert.equal(programme.validateCanonicalStateV5(malformed).ok, false, field);
+  }
+  for (const [field, value] of [
+    ['root', 'wrong-root'],
+    ['lock', 'wrong-lock'],
+    ['kind', 'ADVISORY'],
+    ['scope', 'OTHER_SCOPE'],
+    ['active', false],
+    ['blocks_normal_lanes', false],
+    ['evidence_ref', 'dangling-evidence'],
+  ]) {
+    const malformed = clone(target);
+    malformed.children.find((item) => item.issue === 359).holds[0][field] = value;
+    assert.equal(programme.validateCanonicalStateV5(malformed).ok, false, field);
+  }
+  const nonWebEvidence = clone(target);
+  nonWebEvidence.evidence_refs.find((item) => item.id === programme.HOLD_EVIDENCE_REF).kind = 'COMMIT';
+  assert.equal(programme.validateCanonicalStateV5(nonWebEvidence).ok, false);
+  const conflictingHolds = clone(target);
+  conflictingHolds.children.find((item) => item.issue === 359).holds.push(clone(hold));
+  assert.equal(programme.validateCanonicalStateV5(conflictingHolds).ok, false);
 });
 
 test('fixed retained and historical PR semantics are exact', () => {
@@ -246,6 +276,7 @@ test('fixed retained and historical PR semantics are exact', () => {
     github_state: 'CLOSED',
     merged: false,
     pr: 366,
+    retention_evidence_ref: null,
     retirement_evidence_ref: programme.RECOVERY_EVIDENCE_REF,
     role: 'INTERMEDIATE',
     status: 'RETIRED',
@@ -259,6 +290,7 @@ test('fixed retained and historical PR semantics are exact', () => {
     github_state: 'OPEN',
     merged: false,
     pr: 379,
+    retention_evidence_ref: programme.RETENTION_EVIDENCE_REF,
     retirement_evidence_ref: null,
     role: 'INTERMEDIATE',
     status: 'RETAINED',
@@ -269,6 +301,19 @@ test('fixed retained and historical PR semantics are exact', () => {
   const malformedCandidate = clone(target);
   delete malformedCandidate.children.find((item) => item.issue === 359).pr_registry[1].candidate.tree;
   assert.equal(programme.validateCanonicalStateV5(malformedCandidate).ok, false);
+  for (const replacement of [null, 'dangling-retention-evidence', 'non-web-retention']) {
+    const malformedRetention = clone(target);
+    malformedRetention.children.find((item) => item.issue === 359).pr_registry[1].retention_evidence_ref = replacement;
+    if (replacement === 'non-web-retention') {
+      malformedRetention.evidence_refs.find((item) => item.id === programme.RETENTION_EVIDENCE_REF).kind = 'COMMIT';
+    }
+    assert.equal(programme.validateCanonicalStateV5(malformedRetention).ok, false, replacement);
+  }
+  const malformed366 = clone(target);
+  malformed366.children.find((item) => item.issue === 359).pr_registry[0].retention_evidence_ref = programme.RETENTION_EVIDENCE_REF;
+  assert.equal(programme.validateCanonicalStateV5(malformed366).ok, false);
+  assert.equal(target.evidence_refs.some((item) => item.id === programme.RETENTION_EVIDENCE_REF
+    && item.kind === 'WEB' && item.reference === 'github:issue-comment:379:5580538176'), true);
 });
 
 test('old root is typed terminal non-convergence and parked root is not launched', () => {
@@ -353,11 +398,42 @@ test('unrelated bytes outside managed blocks are preserved', () => {
 
 test('incomplete, stale, contradictory, and unpaginated evidence fail closed', () => {
   const evidence = makeEvidence();
+  assert.equal(programme.validateEvidence(evidence, decision).ok, true);
   assert.equal(programme.validateEvidence(replaceEvidence(evidence, ['pagination', 'comments', 'complete'], false), decision).ok, false);
   assert.equal(programme.validateEvidence(replaceEvidence(evidence, ['parent', 'complete'], false), decision).ok, false);
   assert.equal(programme.validateEvidence(replaceEvidence(evidence, ['parent', 'canonical_digest'], 'f'.repeat(64)), decision).ok, false);
   assert.equal(programme.validateEvidence(replaceEvidence(evidence, ['authority_digest'], 'f'.repeat(64)), decision).ok, false);
   assert.equal(programme.validateEvidence(replaceEvidence(evidence, ['collector', 'authenticated'], false), decision).ok, false);
+});
+
+test('pagination evidence proves identity, counts, ordered pages, progression, totals, and inventory', () => {
+  const evidence = makeEvidence();
+  const mutate = (pathParts, replacement) => programme.validateEvidence(replaceEvidence(evidence, pathParts, replacement), decision).ok;
+  assert.equal(mutate(['pagination', 'parent', 'endpoint_or_query_identity'], 'github:issues/other'), false);
+  assert.equal(mutate(['pagination', 'parent', 'page_size'], 50), false);
+  assert.equal(mutate(['pagination', 'parent', 'page_count'], 2), false);
+  assert.equal(mutate(['pagination', 'parent', 'retrieved_count'], 0), false);
+  assert.equal(mutate(['pagination', 'parent', 'ordered_page_digests', 0, 'digest'], 'f'.repeat(64)), false);
+  assert.equal(mutate(['pagination', 'parent', 'inventory_digest'], 'f'.repeat(64)), false);
+  assert.equal(mutate(['pagination', 'parent', 'progression', 'pages', 0, 'page'], 2), false);
+  assert.equal(mutate(['pagination', 'parent', 'progression', 'pages', 0, 'next_url'], 'https://api.github.com/issues?page=2'), false);
+  assert.equal(mutate(['pagination', 'parent', 'terminal_state', 'has_next_page'], true), false);
+  assert.equal(mutate(['pagination', 'parent', 'terminal_state', 'next_url'], 'https://api.github.com/issues?page=2'), false);
+  assert.equal(mutate(['pagination', 'parent', 'server_total', 'value'], 999), false);
+  assert.equal(mutate(['pagination', 'threads', 'server_total'], { status: 'AVAILABLE', value: 0 }), false);
+  assert.equal(mutate(['pagination', 'threads', 'server_total'], { status: 'UNAVAILABLE' }), false);
+  assert.equal(mutate(['pagination', 'review_thread_comments', 'complete'], false), false);
+  const reordered = clone(evidence);
+  reordered.pagination.parent.page_count = 2;
+  reordered.pagination.parent.ordered_page_digests.push({ page: 2, digest: 'f'.repeat(64) });
+  reordered.pagination.parent.progression.pages = [
+    { page: 1, next_url: 'https://api.github.com/issues?page=2' },
+    { page: 2, next_url: null },
+  ];
+  assert.equal(programme.validateEvidence(withEvidenceDigest(reordered), decision).ok, false);
+  const completeOnly = clone(evidence);
+  completeOnly.pagination.parent = { complete: true };
+  assert.equal(programme.validateEvidence(withEvidenceDigest(completeOnly), decision).ok, false);
 });
 
 test('PR movement, check/review/thread/comment movement, labels, and native relationship movement fail closed', () => {
@@ -442,6 +518,17 @@ test('receipt subsystem remains unchanged and the binding is truthful idempotent
   assert.doesNotThrow(() => receipt.validateOperationDescriptor(descriptor));
   assert.equal(descriptor.operation_kind, 'IDEMPOTENT_SET');
   assert.equal(descriptor.safety_class, 'IDEMPOTENT');
+  assert.equal(descriptor.cas_digest, programme.digestValue({
+    mode: programme.WRITE_SAFETY_MODE,
+    authority_digest: decision.web_authority.digest,
+    source_body_digest: programme.SOURCE_CHILD_BODY_DIGEST,
+    source_revision: programme.SOURCE_CHILD_REVISION,
+  }));
+  assert.equal(descriptor.adapter_identity_digest, programme.digestValue({
+    adapter: 'github-web-readonly-adapter',
+    mode: programme.WRITE_SAFETY_MODE,
+    provider_cas_claim: false,
+  }));
   assert.equal(receipt.OPERATION_KINDS.includes('CONDITIONAL_PROVIDER_UPDATE'), true);
   assert.equal(receipt.SAFETY_CLASSES.includes('CAS'), true);
   assert.equal(programme.WRITE_SAFETY_MODE, 'WEB_EXCLUSIVE_SINGLE_WRITER_RECOVERY_WINDOW');

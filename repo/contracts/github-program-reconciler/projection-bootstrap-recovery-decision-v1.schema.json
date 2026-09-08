@@ -206,6 +206,7 @@
         "completes_child",
         "epoch_id",
         "candidate",
+        "retention_evidence_ref",
         "facts_digest"
       ],
       "properties": {
@@ -268,6 +269,9 @@
               "const": "2.11.0"
             }
           }
+        },
+        "retention_evidence_ref": {
+          "const": "web-pr379-retained-5580538176"
         },
         "facts_digest": {
           "type": "string",

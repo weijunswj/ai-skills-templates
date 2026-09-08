@@ -22,6 +22,10 @@ const EVIDENCE_SCHEMA = 'toolkit.github-program.projection-bootstrap-recovery-ev
 const BOOTSTRAP_SCHEMA = 'toolkit.github-program.controller-bootstrap.v1';
 const RECOVERY_OPERATION_SCHEMA = 'toolkit.github-program.projection-bootstrap-recovery-operation.v1';
 const RECOVERY_EVIDENCE_REF = 'recovery-g2-web-authority';
+const HOLD_EVIDENCE_REF = 'web-recovery-g1-accepted-5580530088';
+const HOLD_EVIDENCE_REFERENCE = 'github:issue-comment:359:5580530088';
+const RETENTION_EVIDENCE_REF = 'web-pr379-retained-5580538176';
+const RETENTION_EVIDENCE_REFERENCE = 'github:issue-comment:379:5580538176';
 const SOURCE_CANONICAL_DIGEST = 'a09fdafa6b77ad85624298ceea488a5c342d00a0700218de62ba2276ed050280';
 const SOURCE_PARENT_BODY_DIGEST = 'a1e16640c3cdb20ed5e94e0c2c86c0bd763ff135565bd81d4aaaaa9e2a81afae';
 const SOURCE_CHILD_BODY_DIGEST = '8ba74c91078b9acdae69ce3a5f2877ea677cab57fe16a402520aef8abbf4d960';
@@ -37,7 +41,7 @@ const PR366_HEAD = 'a7dcb69da43100c5411076008307a221e89b720f';
 const PR366_TREE = '2c88782fa274e502fb6c8c5126d55470112f38e9';
 const PR366_BASE_SHA = 'e86a2d74fd771f6500aa02fe0892940933bf7647';
 const PR366_VERSION = '2.12.0';
-const TARGET_CANONICAL_DIGEST = '5913c0a93471f4fb0380ec777f538b3543167ec183b3dc891d430a920ef0077a';
+const TARGET_CANONICAL_DIGEST = '1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa';
 
 const AUTHORITY_CONTROLLING = Object.freeze([
   Object.freeze({ issue: CHILD_ISSUE, comment_id: 5580972753, body_digest: 'e9054376b3c26a640034496f1cfb5c2605c04ed9083dc04000b6832dd3aa6e5e' }),
@@ -169,11 +173,15 @@ function oldRootDisposition() {
 function parkedRootDisposition() { return { root: PARKED_ROOT, status: 'NOT_LAUNCHED' }; }
 function recoveryHold() {
   return {
-    id: 'projection-bootstrap-recovery-hold',
+    id: RECOVERY_ROOT,
+    root: RECOVERY_ROOT,
+    lock: LOCK,
     kind: 'BLOCKING',
-    summary: 'Web-exclusive recovery window holds CURRENT #359 with zero normal lanes.',
-    evidence_ref: RECOVERY_EVIDENCE_REF,
+    scope: 'PROGRAMME_PROJECTION_RECOVERY',
     active: true,
+    blocks_normal_lanes: true,
+    evidence_ref: HOLD_EVIDENCE_REF,
+    summary: 'Managed v5 parent and child projections are stale and remain held pending separately authorised recovery.',
   };
 }
 function recoveryState() {
@@ -200,6 +208,7 @@ function retainedRegistryEntry() {
     github_state: 'OPEN',
     merged: false,
     pr: 379,
+    retention_evidence_ref: RETENTION_EVIDENCE_REF,
     retirement_evidence_ref: null,
     role: 'INTERMEDIATE',
     status: 'RETAINED',
@@ -215,6 +224,7 @@ function retired366RegistryEntry() {
     github_state: 'CLOSED',
     merged: false,
     pr: 366,
+    retention_evidence_ref: null,
     retirement_evidence_ref: RECOVERY_EVIDENCE_REF,
     role: 'INTERMEDIATE',
     status: 'RETIRED',
@@ -271,6 +281,7 @@ function makeDecisionTemplate() {
       role: 'INTERMEDIATE',
       completes_child: false,
       epoch_id: 'E3',
+      retention_evidence_ref: RETENTION_EVIDENCE_REF,
       candidate: retainedCandidate(),
       facts_digest: factsDigest(reviewFacts, [], commentFacts, checkFacts),
     },
@@ -352,29 +363,35 @@ function validateFinality(value) {
 }
 function validateHold(value) {
   return isRecord(value)
-    && exactKeys(value, ['active', 'evidence_ref', 'id', 'kind', 'summary'])
+    && exactKeys(value, ['active', 'blocks_normal_lanes', 'evidence_ref', 'id', 'kind', 'lock', 'root', 'scope', 'summary'])
     && typeof value.active === 'boolean'
+    && typeof value.blocks_normal_lanes === 'boolean'
     && isSafeId(value.evidence_ref)
     && isSafeId(value.id)
     && isSafeId(value.kind)
+    && isSafeId(value.lock, 240)
+    && isSafeId(value.root, 240)
+    && isSafeId(value.scope, 240)
     && typeof value.summary === 'string';
 }
 function validateRegistryEntry(value, target = false) {
   const required = ['accepted_evidence_ref', 'completes_child', 'epoch_id', 'pr', 'retirement_evidence_ref', 'role', 'status'];
-  const optional = ['candidate', 'draft', 'github_state', 'merged'];
+  const optional = ['candidate', 'draft', 'github_state', 'merged', 'retention_evidence_ref'];
   if (!hasOnly(value, required, optional)
     || (value.accepted_evidence_ref !== null && !isSafeId(value.accepted_evidence_ref))
     || typeof value.completes_child !== 'boolean'
     || !isSafeId(value.epoch_id)
     || !isIssue(value.pr)
     || (value.retirement_evidence_ref !== null && !isSafeId(value.retirement_evidence_ref))
+    || (Object.prototype.hasOwnProperty.call(value, 'retention_evidence_ref')
+      && value.retention_evidence_ref !== null && !isSafeId(value.retention_evidence_ref))
     || value.role !== 'INTERMEDIATE'
     || !['ACTIVE', 'ACCEPTED', 'RETIRED', 'RETAINED'].includes(value.status)) return false;
   if (Object.prototype.hasOwnProperty.call(value, 'draft') && typeof value.draft !== 'boolean') return false;
   if (Object.prototype.hasOwnProperty.call(value, 'merged') && typeof value.merged !== 'boolean') return false;
   if (Object.prototype.hasOwnProperty.call(value, 'github_state') && !['OPEN', 'CLOSED', 'MERGED'].includes(value.github_state)) return false;
   if (Object.prototype.hasOwnProperty.call(value, 'candidate') && value.candidate !== null && !validateCandidate(value.candidate)) return false;
-  if (target && !exactKeys(value, ['accepted_evidence_ref', 'candidate', 'completes_child', 'draft', 'epoch_id', 'github_state', 'merged', 'pr', 'retirement_evidence_ref', 'role', 'status'])) return false;
+  if (target && !exactKeys(value, ['accepted_evidence_ref', 'candidate', 'completes_child', 'draft', 'epoch_id', 'github_state', 'merged', 'pr', 'retention_evidence_ref', 'retirement_evidence_ref', 'role', 'status'])) return false;
   return true;
 }
 function validateChild(value) {
@@ -492,10 +509,15 @@ function validateRecoveryState(value) {
     && value.parked_root.root === PARKED_ROOT
     && value.parked_root.status === 'NOT_LAUNCHED';
 }
-function eligibleRecoveryHold(child) {
+function hasWebEvidence(state, id, reference) {
+  return Array.isArray(state?.evidence_refs)
+    && state.evidence_refs.filter((item) => item.id === id && item.kind === 'WEB' && item.reference === reference).length === 1;
+}
+function eligibleRecoveryHold(child, state) {
   return Array.isArray(child?.holds)
     && child.holds.length === 1
-    && same(child.holds[0], recoveryHold());
+    && same(child.holds[0], recoveryHold())
+    && hasWebEvidence(state, HOLD_EVIDENCE_REF, HOLD_EVIDENCE_REFERENCE);
 }
 function validateCanonicalStateV5(value) {
   const required = ['active_lanes', 'children', 'concurrency_authority', 'design_lock', 'evidence_refs', 'extensions', 'historical_transitions', 'parent', 'predecessor_contract_digest', 'prs', 'repository', 'schema'];
@@ -542,7 +564,7 @@ function validateCanonicalStateV5(value) {
   if (value.active_lanes.length > value.concurrency_authority.max_active_lanes) return failure('V5_STATE_INVALID', { reason: 'lane_limit' });
   if (value.active_lanes.length === 0) {
     if (!Object.prototype.hasOwnProperty.call(value, 'recovery') || !validateRecoveryState(value.recovery)
-      || current[0].finality.state !== 'HELD' || !eligibleRecoveryHold(current[0])) {
+      || current[0].finality.state !== 'HELD' || !eligibleRecoveryHold(current[0], value)) {
       return failure('V5_CURRENT_ZERO_LANE_HOLD_REQUIRED');
     }
   }
@@ -550,7 +572,7 @@ function validateCanonicalStateV5(value) {
     if (!validateRecoveryState(value.recovery)
       || value.active_lanes.length !== 0
       || value.children.find((child) => child.issue === CHILD_ISSUE).finality.state !== 'HELD'
-      || !eligibleRecoveryHold(value.children.find((child) => child.issue === CHILD_ISSUE))) {
+      || !eligibleRecoveryHold(value.children.find((child) => child.issue === CHILD_ISSUE), value)) {
       return failure('V5_RECOVERY_STATE_INVALID');
     }
     const registry = value.children.find((child) => child.issue === CHILD_ISSUE).pr_registry;
@@ -563,6 +585,9 @@ function validateCanonicalStateV5(value) {
       || !same(byPr.get(379), retainedRegistryEntry())) {
       return failure('V5_RECOVERY_STATE_INVALID', { reason: 'pr_registry_semantics' });
     }
+    if (!hasWebEvidence(value, RETENTION_EVIDENCE_REF, RETENTION_EVIDENCE_REFERENCE)) {
+      return failure('V5_RECOVERY_STATE_INVALID', { reason: 'retention_evidence' });
+    }
     if (TARGET_CANONICAL_DIGEST !== null && digestValue(value) !== TARGET_CANONICAL_DIGEST) {
       return failure('V5_RECOVERY_TARGET_NOT_EXACT');
     }
@@ -570,6 +595,54 @@ function validateCanonicalStateV5(value) {
   return success('V5_STATE_VALID', { state: clone(value), canonical_digest: digestValue(value) });
 }
 
+function recoveryAuthorityEvidence(entry) {
+  if (entry.issue === CHILD_ISSUE && entry.comment_id === 5580530088) {
+    return {
+      id: HOLD_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: HOLD_EVIDENCE_REFERENCE,
+      summary: 'Accepted G1 recovery-hold authority body bound by digest.',
+    };
+  }
+  if (entry.issue === 379 && entry.comment_id === 5580538176) {
+    return {
+      id: RETENTION_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: RETENTION_EVIDENCE_REFERENCE,
+      summary: 'Accepted retained PR #379 chronology body bound by digest.',
+    };
+  }
+  return {
+    id: 'recovery-authority-' + String(entry.comment_id),
+    kind: 'WEB',
+    reference: 'github:issue-comment:' + String(entry.issue) + ':' + String(entry.comment_id),
+    summary: 'Accepted recovery authority body bound by digest.',
+  };
+}
+function recoveryPredecessorEvidence(entry) {
+  if (entry.issue === CHILD_ISSUE && entry.comment_id === 5580530088) {
+    return {
+      id: HOLD_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: HOLD_EVIDENCE_REFERENCE,
+      summary: 'Accepted G1 recovery-hold authority body bound by digest.',
+    };
+  }
+  if (entry.issue === 379 && entry.comment_id === 5580538176) {
+    return {
+      id: RETENTION_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: RETENTION_EVIDENCE_REFERENCE,
+      summary: 'Accepted retained PR #379 chronology body bound by digest.',
+    };
+  }
+  return {
+    id: 'recovery-predecessor-' + String(entry.comment_id),
+    kind: 'WEB',
+    reference: 'github:issue-comment:' + String(entry.issue) + ':' + String(entry.comment_id),
+    summary: 'Predecessor non-convergence evidence bound by digest.',
+  };
+}
 function buildRecoveryTargetState(sourceState) {
   const valid = validateCanonicalStateV5(sourceState);
   if (!valid.ok || Object.prototype.hasOwnProperty.call(sourceState, 'recovery')) return null;
@@ -608,18 +681,8 @@ function buildRecoveryTargetState(sourceState) {
   }
   next.evidence_refs = [
     ...next.evidence_refs,
-    ...DECISION_TEMPLATE.web_authority.controlling.map((entry) => ({
-      id: 'recovery-authority-' + String(entry.comment_id),
-      kind: 'WEB',
-      reference: 'github:issue-comment:' + String(entry.issue) + ':' + String(entry.comment_id),
-      summary: 'Accepted recovery authority body bound by digest.',
-    })),
-    ...DECISION_TEMPLATE.web_authority.predecessor.map((entry) => ({
-      id: 'recovery-predecessor-' + String(entry.comment_id),
-      kind: 'WEB',
-      reference: 'github:issue-comment:' + String(entry.issue) + ':' + String(entry.comment_id),
-      summary: 'Predecessor non-convergence evidence bound by digest.',
-    })),
+    ...DECISION_TEMPLATE.web_authority.controlling.map(recoveryAuthorityEvidence),
+    ...DECISION_TEMPLATE.web_authority.predecessor.map(recoveryPredecessorEvidence),
   ];
   next.recovery = recoveryState();
   return next;
@@ -634,7 +697,7 @@ function childSnapshotState(state) {
     finality: child.finality.state,
     gate_state: state.recovery ? 'HELD' : lane ? lane.gate_state : 'NONE',
     normal_active_lanes: state.active_lanes.length,
-    active_blocking_recovery_hold: Boolean(state.recovery && eligibleRecoveryHold(child)),
+    active_blocking_recovery_hold: Boolean(state.recovery && eligibleRecoveryHold(child, state)),
   };
 }
 function projectionPayload(state, kind) {
@@ -672,7 +735,7 @@ function projectionPayload(state, kind) {
     gate: state.recovery ? 'NONE' : 'G4',
     gate_state: state.recovery ? 'HELD' : 'ACTIVE',
     normal_active_lanes: state.active_lanes.length,
-    active_blocking_recovery_hold: Boolean(state.recovery && eligibleRecoveryHold(child)),
+    active_blocking_recovery_hold: Boolean(state.recovery && eligibleRecoveryHold(child, state)),
     e3_status: state.recovery ? 'UNACCEPTED' : 'ACTIVE',
     e4_status: 'PENDING',
     retained_pr: state.recovery ? 379 : null,
@@ -835,6 +898,8 @@ function managedContent(kind, state) {
       recovery ? '- Active blocking recovery hold: YES' : '- Active blocking recovery hold: NO',
       recovery ? '- Write safety: ' + WRITE_SAFETY_MODE : '- No recovery window is active.',
       recovery ? '- Provider CAS claim: NO' : '',
+      recovery ? '- Hold evidence: ' + HOLD_EVIDENCE_REF : '',
+      recovery ? '- #379 retention evidence: ' + RETENTION_EVIDENCE_REF : '',
       '',
       '## Root dispositions',
       recovery ? '- Old root: ' + OLD_ROOT + ' / NON_CONVERGENT / terminal=true / repair budget=2/2 / further repair authorised=false' : '- None',
@@ -905,6 +970,7 @@ function managedContent(kind, state) {
     '- Active blocking recovery hold: YES',
     '- Write safety: ' + WRITE_SAFETY_MODE,
     '- Provider CAS claim: NO',
+    '- Hold evidence: ' + HOLD_EVIDENCE_REF,
     '',
     '## Epochs / Locks',
     '| Epoch | State |',
@@ -926,6 +992,7 @@ function managedContent(kind, state) {
     '## Root dispositions',
     '- Old root: ' + OLD_ROOT + ' / NON_CONVERGENT / terminal=true / repair budget=2/2 / further repair authorised=false',
     '- Parked root: ' + PARKED_ROOT + ' / NOT_LAUNCHED',
+    '- #379 retention evidence: ' + RETENTION_EVIDENCE_REF,
     '',
     '## ELI5',
     'The current child is held safely with no normal work lane while the parent and child views are repaired together.',
@@ -1031,31 +1098,143 @@ function validatePR366(value) {
     && value.base_sha === PR366_BASE_SHA
     && value.complete === true;
 }
-function validatePage(value, expectedItems) {
-  return isRecord(value)
-    && exactKeys(value, ['complete', 'cursor', 'items', 'pages'])
-    && value.complete === true
-    && value.cursor === null
-    && Number.isSafeInteger(value.pages) && value.pages >= 1
-    && value.items === expectedItems;
-}
-const PAGINATION_COUNTS = Object.freeze({
-  parent: 1,
-  child: 1,
-  native_children: 6,
-  current_label: 1,
-  pr366: 1,
-  pr379: 1,
-  reviews: 1,
-  threads: 0,
-  comments: 6,
-  checks: 6,
-  web_authority: 6,
+const PAGINATION_COLLECTIONS = Object.freeze({
+  parent: Object.freeze({ endpoint: 'github:issues/240', items: 1, server_total: 'AVAILABLE' }),
+  child: Object.freeze({ endpoint: 'github:issues/359', items: 1, server_total: 'AVAILABLE' }),
+  native_children: Object.freeze({ endpoint: 'github:issues/240/sub_issues', items: 6, server_total: 'AVAILABLE' }),
+  current_label: Object.freeze({ endpoint: 'github:issues/359/labels', items: 1, server_total: 'AVAILABLE' }),
+  pr366: Object.freeze({ endpoint: 'github:pulls/366', items: 1, server_total: 'AVAILABLE' }),
+  pr379: Object.freeze({ endpoint: 'github:pulls/379', items: 1, server_total: 'AVAILABLE' }),
+  reviews: Object.freeze({ endpoint: 'github:pulls/379/reviews', items: 1, server_total: 'AVAILABLE' }),
+  threads: Object.freeze({ endpoint: 'github:pulls/379/review-threads', items: 0, server_total: 'UNAVAILABLE' }),
+  review_thread_comments: Object.freeze({ endpoint: 'github:pulls/379/review-thread-comments', items: 0, server_total: 'UNAVAILABLE' }),
+  comments: Object.freeze({ endpoint: 'github:issues/379/comments', items: 6, server_total: 'AVAILABLE' }),
+  checks: Object.freeze({ endpoint: 'github:commits/' + FROZEN_HEAD + '/check-runs', items: 6, server_total: 'AVAILABLE' }),
+  web_authority: Object.freeze({ endpoint: 'github:web-authority:issues/240,359;pull/379', items: 6, server_total: 'UNAVAILABLE' }),
 });
-function validatePagination(value) {
-  const keys = Object.keys(PAGINATION_COUNTS);
-  if (!isRecord(value) || !exactKeys(value, keys)) return false;
-  return keys.every((key) => validatePage(value[key], PAGINATION_COUNTS[key]));
+const PAGINATION_KEYS = Object.freeze(Object.keys(PAGINATION_COLLECTIONS));
+const PAGINATION_PAGE_SIZE = 100;
+function paginationInventory(key, evidence) {
+  if (!isRecord(evidence)) return null;
+  switch (key) {
+    case 'parent':
+      return isRecord(evidence.parent) ? {
+        issue: evidence.parent.issue,
+        body_digest: evidence.parent.body_digest,
+        canonical_digest: evidence.parent.canonical_digest,
+        revision: evidence.parent.revision,
+        native_children: evidence.parent.native_children,
+        relationships: evidence.parent.relationships,
+      } : null;
+    case 'child':
+      return isRecord(evidence.child) ? {
+        issue: evidence.child.issue,
+        body_digest: evidence.child.body_digest,
+        canonical_digest: evidence.child.canonical_digest,
+        revision: evidence.child.revision,
+        labels: evidence.child.labels,
+        native_parent: evidence.child.native_parent,
+        relationships: evidence.child.relationships,
+        sole_current: evidence.child.sole_current,
+        dependencies: evidence.child.dependencies,
+      } : null;
+    case 'native_children':
+      return evidence.parent?.native_children || null;
+    case 'current_label':
+      return evidence.child?.labels || null;
+    case 'pr366':
+      return evidence.pr_366 || null;
+    case 'pr379':
+      return evidence.pr_379 || null;
+    case 'reviews':
+      return Array.isArray(evidence.pr_379?.reviews) ? normalizedReviewFacts(evidence.pr_379.reviews) : null;
+    case 'threads':
+      return Array.isArray(evidence.pr_379?.threads) ? evidence.pr_379.threads : null;
+    case 'review_thread_comments':
+      return Array.isArray(evidence.pr_379?.threads) && evidence.pr_379.threads.length === 0 ? [] : null;
+    case 'comments':
+      return Array.isArray(evidence.pr_379?.comments) ? normalizedCommentFacts(evidence.pr_379.comments) : null;
+    case 'checks':
+      return Array.isArray(evidence.pr_379?.checks) ? evidence.pr_379.checks : null;
+    case 'web_authority':
+      return Array.isArray(evidence.web_authority)
+        ? evidence.web_authority.map(({ issue, comment_id, body_digest }) => ({ issue, comment_id, body_digest }))
+        : null;
+    default:
+      return null;
+  }
+}
+function buildPaginationEvidence(key, evidence) {
+  const definition = PAGINATION_COLLECTIONS[key];
+  const inventory = paginationInventory(key, evidence);
+  if (!definition || inventory === null) return null;
+  const pageDigest = digestValue({ endpoint_or_query_identity: definition.endpoint, page: 1, inventory });
+  return {
+    complete: true,
+    endpoint_or_query_identity: definition.endpoint,
+    page_size: PAGINATION_PAGE_SIZE,
+    page_count: 1,
+    ordered_page_digests: [{ page: 1, digest: pageDigest }],
+    retrieved_count: definition.items,
+    server_total: definition.server_total === 'AVAILABLE'
+      ? { status: 'AVAILABLE', value: definition.items }
+      : { status: 'UNAVAILABLE', value: null },
+    progression: { style: 'LINK', pages: [{ page: 1, next_url: null }] },
+    terminal_state: { has_next_page: false, next_url: null },
+    inventory_digest: digestValue(inventory),
+  };
+}
+function validatePage(value, key, evidence) {
+  const definition = PAGINATION_COLLECTIONS[key];
+  const inventory = paginationInventory(key, evidence);
+  if (!definition || inventory === null || !isRecord(value)
+    || !exactKeys(value, [
+      'complete', 'endpoint_or_query_identity', 'inventory_digest', 'ordered_page_digests',
+      'page_count', 'page_size', 'progression', 'retrieved_count', 'server_total', 'terminal_state',
+    ])
+    || value.complete !== true
+    || value.endpoint_or_query_identity !== definition.endpoint
+    || value.page_size !== PAGINATION_PAGE_SIZE
+    || !Number.isSafeInteger(value.page_count) || value.page_count !== 1
+    || !Number.isSafeInteger(value.retrieved_count) || value.retrieved_count !== definition.items
+    || !Array.isArray(value.ordered_page_digests) || value.ordered_page_digests.length !== value.page_count
+    || !value.ordered_page_digests.every((page, index) => isRecord(page)
+      && exactKeys(page, ['digest', 'page'])
+      && page.page === index + 1
+      && isDigest(page.digest))
+    || value.ordered_page_digests[0]?.digest !== digestValue({
+      endpoint_or_query_identity: definition.endpoint,
+      page: 1,
+      inventory,
+    })
+    || !isRecord(value.server_total)
+    || !exactKeys(value.server_total, ['status', 'value'])
+    || value.server_total.status !== definition.server_total
+    || !['AVAILABLE', 'UNAVAILABLE'].includes(value.server_total.status)
+    || (value.server_total.status === 'AVAILABLE'
+      && (!Number.isSafeInteger(value.server_total.value) || value.server_total.value !== value.retrieved_count))
+    || (value.server_total.status === 'UNAVAILABLE' && value.server_total.value !== null)
+    || !isRecord(value.progression)
+    || !exactKeys(value.progression, ['pages', 'style'])
+    || value.progression.style !== 'LINK'
+    || !Array.isArray(value.progression.pages)
+    || value.progression.pages.length !== value.page_count
+    || !value.progression.pages.every((page, index) => isRecord(page)
+      && exactKeys(page, ['next_url', 'page'])
+      && page.page === index + 1
+      && (page.next_url === null || (typeof page.next_url === 'string' && page.next_url.length > 0 && !/[\r\n]/.test(page.next_url))))
+    || value.progression.pages[0]?.next_url !== null
+    || !isRecord(value.terminal_state)
+    || !exactKeys(value.terminal_state, ['has_next_page', 'next_url'])
+    || value.terminal_state.has_next_page !== false
+    || value.terminal_state.next_url !== null
+    || value.progression.pages[value.progression.pages.length - 1]?.next_url !== value.terminal_state.next_url
+    || value.inventory_digest !== digestValue(inventory)) return false;
+  return true;
+}
+function validatePagination(value, evidence) {
+  if (!isRecord(value) || !exactKeys(value, PAGINATION_KEYS)) return false;
+  return PAGINATION_KEYS.every((key) => validatePage(value[key], key, evidence));
 }
 function validateCollector(value) {
   return isRecord(value)
@@ -1216,7 +1395,6 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
     || value.parent_issue !== PARENT_ISSUE
     || value.child_issue !== CHILD_ISSUE
     || !isDigest(value.authority_digest)
-    || !validatePagination(value.pagination)
     || !validateCollector(value.collector)
     || !isDigest(value.evidence_digest)) return failure('RECOVERY_EVIDENCE_INVALID');
   if (value.authority_digest !== decisionInput.web_authority.digest) return failure('RECOVERY_AUTHORITY_DIGEST_MISMATCH');
@@ -1317,6 +1495,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
   if (!validatePR366(value.pr_366)) return failure('RECOVERY_PR366_INVALID');
   const pr379Valid = validatePR379(value.pr_379);
   if (!pr379Valid.ok) return pr379Valid;
+  if (!validatePagination(value.pagination, value)) return failure('RECOVERY_PAGINATION_INVALID');
   if (value.continuation !== null) {
     if (classification === 'BEFORE_CHILD') return failure('RECOVERY_CONTINUATION_UNEXPECTED');
     const parentTargetBody = materialize(parentParsed, rendered.parent);
@@ -1625,6 +1804,10 @@ module.exports = Object.freeze({
   SOURCE_CHILD_REVISION,
   TARGET_CANONICAL_DIGEST,
   RECOVERY_EVIDENCE_REF,
+  HOLD_EVIDENCE_REF,
+  RETENTION_EVIDENCE_REF,
+  PAGINATION_COLLECTIONS,
+  PAGINATION_KEYS,
   FROZEN_HEAD,
   FROZEN_TREE,
   FROZEN_BRANCH,
@@ -1650,6 +1833,7 @@ module.exports = Object.freeze({
   parseChildV5Body,
   parseProgrammeV5Body,
   validateEvidence,
+  buildPaginationEvidence,
   classifyPartialState,
   buildReceiptOperationDescriptor,
   verifyBootstrapWorkspaceProof,

@@ -189,13 +189,20 @@
               "additionalProperties": false,
               "required": [
                 "active",
+                "blocks_normal_lanes",
                 "evidence_ref",
                 "id",
                 "kind",
+                "lock",
+                "root",
+                "scope",
                 "summary"
               ],
               "properties": {
                 "active": {
+                  "type": "boolean"
+                },
+                "blocks_normal_lanes": {
                   "type": "boolean"
                 },
                 "evidence_ref": {
@@ -205,6 +212,15 @@
                   "type": "string"
                 },
                 "kind": {
+                  "type": "string"
+                },
+                "lock": {
+                  "type": "string"
+                },
+                "root": {
+                  "type": "string"
+                },
+                "scope": {
                   "type": "string"
                 },
                 "summary": {
@@ -322,6 +338,12 @@
                 "pr": {
                   "type": "integer",
                   "minimum": 1
+                },
+                "retention_evidence_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "retirement_evidence_ref": {
                   "type": [
