@@ -1,0 +1,27 @@
+{
+  "schema": "toolkit.github-program.controller-bootstrap.v1",
+  "profile": "github-managed-programme",
+  "repository": "weijunswj/ai-agent-toolkit",
+  "parent_issue": 240,
+  "programme_state_schema": "toolkit.github-program.state.v5",
+  "surface_contract_schema": "toolkit.github-program.surface.v5",
+  "toolkit_package_version": "2.10.8",
+  "toolkit_contract": {
+    "repository": "weijunswj/ai-agent-toolkit",
+    "revision": "0094d4b2c10e78ee7f13903a886342fcd5c48903",
+    "path": "repo/contracts/github-program-reconciler/programme-surface-contract-v5.json",
+    "sha256": "5dd7331ac16d0c5636e8aed02fa7a90d11b51472cdedc0d86688c8448082f6d3"
+  },
+  "conformance": {
+    "actual_workspace_bytes": true,
+    "canonical_json": true,
+    "historical_git_object_required": false,
+    "resolver": "unchanged",
+    "source_revision_pinned": true
+  },
+  "compatibility": {
+    "fail_closed_on_unknown_major": true,
+    "provider_cas_claim": false,
+    "receipt_source_changed": false
+  }
+}
