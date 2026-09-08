@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { spawnSync } = require('node:child_process');
+const { DatabaseSync } = require('node:sqlite');
 const test = require('node:test');
 
 const receiptRuntimePath = path.resolve(__dirname, '../scripts/toolkit-github-program-receipt.cjs');
@@ -335,6 +336,48 @@ test('restart and fresh child process read the durable receipt chain', async () 
   ], { cwd: repositoryRoot, encoding: 'utf8', windowsHide: true });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).chain.length, 2);
+});
+
+test('real canonical SQLite store resolves an exact receipt by indexed ID without enumeration', async () => {
+  const { store, session } = await startedStore();
+  const appended = store.appendReceipt(session, {
+    receipt_type: 'TRANSITION_PREVIEW', payload: { classification: 'LOOKUP' }, created_at: nowIso()
+  });
+  const receipt = store.readReceiptById(appended.receipt.receipt_id);
+  assert.deepEqual(receipt, appended.receipt);
+  assert.equal(typeof store.readAllReceipts, 'undefined');
+
+  const db = new DatabaseSync(store.databasePath, { readOnly: true });
+  try {
+    const primary = db.prepare('PRAGMA index_list(receipts)').all()
+      .map((index) => db.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all()
+        .map((column) => column.name));
+    assert.equal(primary.some((columns) => columns.length === 1 && columns[0] === 'receipt_id'), true);
+  } finally {
+    db.close();
+  }
+  assertCode(() => store.readReceiptById('not-a-receipt-id'), 'GPR_RECEIPT_ID_INVALID');
+  assertCode(() => store.readReceiptById('A'.repeat(64)), 'GPR_RECEIPT_ID_INVALID');
+  assertCode(() => store.readReceiptById('f'.repeat(64)), 'GPR_RECEIPT_NOT_FOUND');
+  assertCode(() => store.readReceiptById('0'.repeat(64), 'caller-run'), 'GPR_RECEIPT_ID_INVALID');
+});
+
+test('real canonical SQLite readReceiptById fails closed on a tampered durable row', async () => {
+  const { store, session, storeOptions } = await startedStore();
+  const appended = store.appendReceipt(session, {
+    receipt_type: 'TRANSITION_PREVIEW', payload: { classification: 'TAMPER' }, created_at: nowIso()
+  });
+  const tamperDb = new DatabaseSync(store.databasePath);
+  try {
+    tamperDb.exec('DROP TRIGGER receipts_no_update');
+    tamperDb.prepare('UPDATE receipts SET canonical_json=? WHERE receipt_id=?')
+      .run('{"tampered":true}', appended.receipt.receipt_id);
+    tamperDb.exec("CREATE TRIGGER receipts_no_update BEFORE UPDATE ON receipts BEGIN SELECT RAISE(ABORT, 'GPR_APPEND_ONLY'); END;");
+  } finally {
+    tamperDb.close();
+  }
+  const reopened = createProgrammeReceiptStore(storeOptions);
+  assertCode(() => reopened.readReceiptById(appended.receipt.receipt_id), 'GPR_RECEIPT_TAMPERED');
 });
 
 test('allocator high-water and operation-independent fencing survive restart', async () => {

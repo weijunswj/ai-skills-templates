@@ -293,6 +293,24 @@
     "candidate_immutable_after_introduction": true,
     "terminal_append_and_release_atomic": true
   },
+  "receipt_lookup": {
+    "public_api": "readReceiptById(receiptId)",
+    "argument_count": 1,
+    "receipt_id_format": "lowercase_sha256_hex",
+    "query": "SELECT * FROM receipts WHERE receipt_id = ?",
+    "indexed_by": "receipts.receipt_id PRIMARY KEY",
+    "create": false,
+    "read_only": true,
+    "query_only": true,
+    "canonical_namespace_bound": true,
+    "caller_supplied_run_id": false,
+    "caller_supplied_repository_or_parent": false,
+    "run_locator_source": "returned_durable_receipt.run_id",
+    "enumeration": false,
+    "snapshot_fallback": false,
+    "not_found": "GPR_RECEIPT_NOT_FOUND",
+    "malformed_id": "GPR_RECEIPT_ID_INVALID"
+  },
   "pre_pr_start": {
     "exact_repository": true,
     "exact_base_sha": true,

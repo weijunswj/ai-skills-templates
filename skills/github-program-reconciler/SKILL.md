@@ -1,21 +1,22 @@
 ---
 name: github-program-reconciler
-description: Explicit-only GitHub programme parent/direct-child governance and truthful PR-review and Deferred Findings reconciliation. E2 renames the product only; current N5 runtime semantics remain unchanged until their separately authorised redesign.
+description: Explicit-only GitHub programme parent/direct-child governance, v5 canonical bootstrap recovery, truthful PR-review and Deferred Findings reconciliation. The v5 surface is fail-closed, source-of-truth bound, and keeps Programme Apply and Web finality outside the skill.
 ---
 
 # GitHub Program Reconciler
 
 This skill is explicit-only. Its OpenAI metadata sets `allow_implicit_invocation: false`.
-Use it only when the user explicitly asks for the current-main N5 governance and
-truthful PR-review reconciler contract for a repository-scoped task. Ordinary
-GitHub inspection belongs to the GitHub skill, ordinary coding belongs to the
-coding agent, and final Web/controller work remains outside this skill.
+Use it only when the user explicitly asks for the current-main N5 governance,
+the accepted v5 canonical programme/bootstrap recovery surface, or truthful
+PR-review reconciler contract for a repository-scoped task. Ordinary GitHub
+inspection belongs to the GitHub skill, ordinary coding belongs to the coding
+agent, and final Web/controller work remains outside this skill.
 
 ## Scope
 
 The supported intents are `inspect`, `preview`, `initialise`, `migrate`,
 `validate`, `reconcile`, `show`, and `remove` for one canonical parent and its
-direct sibling children. The v3 tracker has exactly one flat pending queue,
+direct sibling children. The v3 compatibility tracker has exactly one flat pending queue,
 at most one Current child, deterministic queue order, unique lifecycle
 membership, and a current-state projection rather than an ever-growing event
 log. Parent Markdown is a managed deterministic block; do not improvise or
@@ -38,6 +39,39 @@ must return a complete server-authoritative body, revision/ETag metadata when
 available, and a complete readback. Incomplete retrieval, missing/duplicate or
 ambiguous entries, parse uncertainty, concurrent movement, unrelated-byte
 drift, unverified body limits, and incomplete reconciliation fail closed.
+
+## v5 canonical programme/bootstrap recovery
+
+The accepted v5 Design A surface is implemented through the same shared
+toolkit-github-governance-review-reconciler.cjs compatibility facade, with
+the allowlisted v4 predecessor state module used only as migration input.
+Never create or restore repo/scripts/toolkit-github-program-reconciler.cjs.
+The existing repo/scripts/toolkit-github-program-receipt.cjs and
+repo/contracts/github-program-receipt/ remain the sole durable receipt source;
+do not add a duplicate receipt schema or runtime.
+
+V5 derives the parent, child, and PR projections from one canonical state,
+requires exact repository/parent and candidate/PR bindings, independently
+verifies trusted PR and native-relationship scopes, preserves owner bytes, and
+fails closed on incomplete inspection, concurrent movement, lifecycle
+contradictions, body-budget violations, stale or malformed bootstrap, and
+unknown package majors. V4-to-v5 migration and already-v5 recovery are
+previewed deterministically. Transition history and operational receipts stay
+separate: receipt transition details bind through the existing receipt
+payload.detail_digest, preview operations bind through payload.operation_digest,
+and receipt persistence/readback precede any future dependent Apply. For retained
+v3 events, enumerate receipt_id and consumed_receipt_ids in their stored order,
+deduplicate only the read plan, resolve each historical ID with the canonical
+readReceiptById(receiptId) API, take run_id only from that returned durable
+receipt, and read each derived chain once per unique run. Snapshot locator data,
+caller-selected runs, receipt enumeration, and best-effort continuation are not
+authoritative and must fail closed.
+
+This skill does not perform Programme Apply, bootstrap-file Apply, managed
+issue/PR body rewriting, labels or native-relationship mutation, receipt
+persistence, provider/runtime mutation, Ready, merge, review-thread mutation,
+or Web finality. G3 repository-source publication remains subject to the
+explicit Web authority and exact closed path scope.
 
 ## Authority and consent
 
@@ -183,8 +217,9 @@ are in scope. Do not copy or revive PR #310 or #318 implementation machinery.
 ## Safety and output
 
 Do not access providers or live systems, create workflows or MCP tools, mutate
-review state, publish, mark Ready, merge, change A1-A4, propagate #342, touch
-#348, or perform N6-N14 work from this skill. Reject raw secrets, private paths,
+review state, perform Programme Apply or bootstrap-file Apply, publish managed
+bodies, mark Ready, merge, change A1-A4, propagate #342, touch #348, or perform
+N6-N14 work from this skill. Reject raw secrets, private paths,
 private connector data, raw code blobs, credentials, and unredacted runtime
 evidence. Secret values must never appear in output.
 

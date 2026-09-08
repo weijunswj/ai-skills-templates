@@ -1,0 +1,8 @@
+{
+  "parent_prefix": "Owner parent prose before the managed dashboard.\n\n",
+  "parent_suffix": "\n\nOwner parent prose after the managed dashboard.",
+  "child_prefix": "Owner child notes before the managed projection.\n",
+  "child_suffix": "\nOwner child notes after the managed projection.",
+  "pr_prefix": "Owner PR notes before the managed projection.\n",
+  "pr_suffix": "\nOwner PR notes after the managed projection."
+}

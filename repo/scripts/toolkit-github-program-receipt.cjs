@@ -1683,6 +1683,31 @@ function readChainDb(db, runId, allowEmpty = false) {
   return validateReceiptChain(receipts);
 }
 
+function readReceiptByIdDb(db, receiptId, namespace) {
+  const row = db.prepare('SELECT * FROM receipts WHERE receipt_id = ?').get(receiptId);
+  if (!row) fail('GPR_RECEIPT_NOT_FOUND');
+  let receipt;
+  try { receipt = JSON.parse(row.canonical_json); } catch (_) { fail('GPR_RECEIPT_TAMPERED'); }
+  if (row.receipt_id !== receipt.receipt_id
+    || row.run_id !== receipt.run_id
+    || row.sequence !== receipt.sequence
+    || row.receipt_type !== receipt.receipt_type
+    || row.prior_receipt_id !== receipt.prior_receipt_id
+    || row.canonical_json !== canonicalSerialize(receipt)
+    || row.receipt_digest !== digestValue(receiptPayload(receipt))
+    || row.receipt_digest !== receipt.receipt_id) fail('GPR_RECEIPT_TAMPERED');
+  const checked = validateReceiptObject(receipt);
+  const allocation = db.prepare('SELECT * FROM allocations WHERE allocation_id = ?').get(checked.allocation_id);
+  const run = db.prepare('SELECT * FROM runs WHERE run_id = ?').get(checked.run_id);
+  if (!allocation || !run) fail('GPR_RECEIPT_TAMPERED');
+  const bindings = canonicalAllocationBindings(allocation, 'GPR_RECEIPT_TAMPERED');
+  verifyReceiptCanonicalBinding(checked, allocation, run, namespace, bindings, 'GPR_RECEIPT_TAMPERED');
+  const chain = readChainDb(db, checked.run_id);
+  const member = chain.find((entry) => entry.receipt_id === receiptId);
+  if (!member || canonicalSerialize(member) !== canonicalSerialize(checked)) fail('GPR_RECEIPT_TAMPERED');
+  return member;
+}
+
 function appendV3ReceiptWithChainDigest(db, value) {
   return transaction(db, () => {
     if (Number(oneValue(db, 'PRAGMA user_version', 'user_version')) !== V3_USER_VERSION) {
@@ -2167,7 +2192,7 @@ function verifyFinalV3Database(db, namespace, databasePath = null, options = {})
   return true;
 }
 
-function verifyDatabase(db, namespace, digest, databasePath, expectedFingerprint) {
+function verifyDatabase(db, namespace, digest, databasePath, expectedFingerprint, options = {}) {
   if (fs.statSync(databasePath).size > LIMITS.databaseBytes) fail('GPR_DATABASE_LIMIT');
   if (Number(oneValue(db, 'PRAGMA application_id', 'application_id')) !== APPLICATION_ID
     || Number(oneValue(db, 'PRAGMA user_version', 'user_version')) !== USER_VERSION) fail('GPR_SCHEMA_MISMATCH');
@@ -2187,11 +2212,12 @@ function verifyDatabase(db, namespace, digest, databasePath, expectedFingerprint
   const max = db.prepare('SELECT COALESCE(MAX(fence_sequence), 0) AS value FROM allocations').get().value;
   if (!state || state.high_water !== max) fail('GPR_ALLOCATOR_TAMPERED');
   verifyRowDigests(db);
+  if (options.skipReceiptChainEnumeration === true) return;
   const runIds = db.prepare('SELECT run_id FROM runs ORDER BY run_id').all();
   for (const row of runIds) readChainDb(db, row.run_id, true);
 }
 
-function openVerified(config, create = true, readOnly = false) {
+function openVerified(config, create = true, readOnly = false, options = {}) {
   assertRuntimeSupport();
   const databasePath = config.databasePath;
   const existed = fs.existsSync(databasePath);
@@ -2211,7 +2237,7 @@ function openVerified(config, create = true, readOnly = false) {
       createDatabase(db, config.namespace, config.namespaceDigest, isoAt(), expectedFingerprint);
       if (process.platform !== 'win32') fs.chmodSync(databasePath, 0o600);
     }
-    verifyDatabase(db, config.namespace, config.namespaceDigest, databasePath, expectedFingerprint);
+    verifyDatabase(db, config.namespace, config.namespaceDigest, databasePath, expectedFingerprint, options);
     return db;
   } catch (error) {
     try { db.close(); } catch (_) { /* Preserve the original failure. */ }
@@ -2897,6 +2923,11 @@ function createProgrammeReceiptStore(options) {
       if (!isSafeId(runId)) fail('GPR_RUN_ID_INVALID');
       const db = openVerified(config, false);
       try { return readChainDb(db, runId); } finally { db.close(); }
+    },
+    readReceiptById(receiptId) {
+      if (arguments.length !== 1 || !isDigest(receiptId)) fail('GPR_RECEIPT_ID_INVALID');
+      const db = openVerified(config, false, true, { skipReceiptChainEnumeration: true });
+      try { return readReceiptByIdDb(db, receiptId, config.namespace); } finally { db.close(); }
     },
     classifyRecovery(runId, now = Date.now()) {
       if (!isSafeId(runId)) fail('GPR_RUN_ID_INVALID');

@@ -683,6 +683,41 @@ function validateContracts(errors) {
   }
 }
 
+function validateProgrammeRecoveryContracts(errors) {
+  const contractPath = 'repo/contracts/github-program-reconciler/programme-surface-contract-v5.json';
+  if (existsRel(contractPath)) {
+    try {
+      const contract = readJson(contractPath);
+      if (contract.$schema !== 'toolkit.github-program.surface.v5') fail(errors, contractPath + ' must be the v5 surface contract');
+      if (contract.run_receipts?.sole_durable_source !== 'existing-github-program-receipt') fail(errors, contractPath + ' must retain the existing receipt subsystem');
+      if (contract.run_receipts?.schema_path !== 'repo/contracts/github-program-receipt/run-receipt-v1.schema.json') fail(errors, contractPath + ' must point to the current receipt contract');
+      if (JSON.stringify(contract).includes('repo/contracts/github-program-reconciler/run-receipt-v1.schema.json')) fail(errors, contractPath + ' must not contain the historical duplicate receipt path');
+    } catch (error) {
+      fail(errors, contractPath + ' recovery contract validation failed: ' + error.message);
+    }
+  }
+  const bootstrapPath = '.github/ai-agent-toolkit-programme.json';
+  if (existsRel(bootstrapPath)) {
+    try {
+      const bootstrap = readJson(bootstrapPath);
+      if (bootstrap.schema !== 'toolkit.github-program.controller-bootstrap.v1'
+        || bootstrap.profile !== 'github-managed-programme'
+        || bootstrap.programme_state_schema !== 'toolkit.github-program.state.v5'
+        || bootstrap.surface_contract_schema !== 'toolkit.github-program.surface.v5') fail(errors, bootstrapPath + ' must be a v5 controller bootstrap');
+      if (!/^\d+\.\d+\.\d+$/.test(bootstrap.toolkit_package_version || '')) fail(errors, bootstrapPath + ' must contain a semver Toolkit version');
+      if (bootstrap.toolkit_contract?.repository !== 'weijunswj/ai-agent-toolkit'
+        || bootstrap.toolkit_contract?.path !== contractPath
+        || !/^[a-f0-9]{40}$/.test(bootstrap.toolkit_contract?.revision || '')
+        || !/^[a-f0-9]{64}$/.test(bootstrap.toolkit_contract?.sha256 || '')) fail(errors, bootstrapPath + ' must contain an immutable contract pin');
+      if (bootstrap.conformance?.required_class !== 'CURRENT_MANAGED'
+        || JSON.stringify(bootstrap.conformance?.migration_from || []) !== JSON.stringify(['toolkit.github-program.state.v4'])
+        || bootstrap.compatibility?.fail_closed_on_unknown_major !== true) fail(errors, bootstrapPath + ' must be fail-closed and v4-compatible');
+    } catch (error) {
+      fail(errors, bootstrapPath + ' recovery bootstrap validation failed: ' + error.message);
+    }
+  }
+}
+
 function validateLegacyReferences(errors) {
   const excluded = new Set(['repo/scripts/validate-toolkit.cjs', 'repo/scripts/audit-published-surfaces.cjs']);
   for (const entry of listFiles()) {
@@ -740,6 +775,7 @@ function validate() {
   validateManagedSurfaces(errors);
   validateSourceWatch(errors);
   validateContracts(errors);
+  validateProgrammeRecoveryContracts(errors);
   validateLegacyReferences(errors);
   validateExecutables(errors);
   validateNoSecrets(errors);
