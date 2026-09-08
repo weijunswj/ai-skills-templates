@@ -521,6 +521,44 @@ test('successful stale preview has exactly two ordered body operations', () => {
   assert.equal(preview.self_retirement_fence.exact_target_only, true);
 });
 
+test('source revision movement fails closed symmetrically while locked child evidence remains valid', () => {
+  const locked = makeEvidence();
+  const lockedValidation = programme.validateEvidence(locked, decision);
+  assert.equal(lockedValidation.ok, true, lockedValidation.code);
+  assert.equal(locked.child.revision, '2026-09-08T07:21:42Z');
+  const lockedPreview = programme.projectionBootstrapRecovery.preview({ decision, evidence: locked });
+  assert.equal(lockedPreview.ok, true, lockedPreview.code);
+  assert.equal(lockedPreview.operation_count, 2);
+  assert.deepEqual(lockedPreview.operation_order, [359, 240]);
+
+  const parentMoved = clone(locked);
+  parentMoved.parent.revision = '2026-09-08T07:22:00Z';
+  parentMoved.pagination.parent = programme.buildPaginationEvidence('parent', parentMoved);
+  const parentMovedEvidence = withEvidenceDigest(parentMoved);
+  const parentMovedValidation = programme.validateEvidence(parentMovedEvidence, decision);
+  assert.equal(parentMovedValidation.ok, false);
+  assert.equal(parentMovedValidation.code, 'RECOVERY_PARENT_SOURCE_STALE');
+
+  const childMoved = clone(locked);
+  childMoved.child.revision = '2026-09-08T07:22:00Z';
+  childMoved.pagination.child = programme.buildPaginationEvidence('child', childMoved);
+  const childMovedEvidence = withEvidenceDigest(childMoved);
+  for (const field of [
+    'issue', 'raw_body', 'body_digest', 'canonical_digest', 'labels', 'native_parent',
+    'relationships', 'sole_current', 'dependencies', 'state', 'projection',
+    'prefix_digest', 'suffix_digest', 'complete',
+  ]) assert.deepEqual(childMovedEvidence.child[field], locked.child[field], field);
+  assert.equal(childMovedEvidence.child.revision, '2026-09-08T07:22:00Z');
+  assert.notDeepEqual(childMovedEvidence.pagination.child, locked.pagination.child);
+  const childMovedValidation = programme.validateEvidence(childMovedEvidence, decision);
+  assert.equal(childMovedValidation.ok, false);
+  assert.equal(childMovedValidation.code, 'RECOVERY_CHILD_SOURCE_STALE');
+  const movedPreview = programme.projectionBootstrapRecovery.preview({ decision, evidence: childMovedEvidence });
+  assert.equal(movedPreview.ok, false);
+  assert.equal(movedPreview.code, 'RECOVERY_CHILD_SOURCE_STALE');
+  assert.equal(movedPreview.operations, undefined);
+});
+
 test('identical inputs render and preview deterministically', () => {
   const source = parsedSources();
   const target = programme.buildRecoveryTargetState(source.parent.state);

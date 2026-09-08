@@ -1508,6 +1508,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
     && value.parent.canonical_digest !== SOURCE_CANONICAL_DIGEST) return failure('RECOVERY_PROJECTION_CANONICAL_MISMATCH');
   const sourceChild = value.child.canonical_digest === SOURCE_CANONICAL_DIGEST;
   if (sourceChild && (value.child.body_digest !== decisionInput.source.child_body_sha256
+    || value.child.revision !== decisionInput.source.child_revision
     || value.child.prefix_digest !== decisionInput.source.child_prefix_digest
     || value.child.suffix_digest !== decisionInput.source.child_suffix_digest)) return failure('RECOVERY_CHILD_SOURCE_STALE');
   const targetState = sourceParent ? buildRecoveryTargetState(value.parent.state) : value.parent.state;
