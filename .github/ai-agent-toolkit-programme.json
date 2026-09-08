@@ -8,7 +8,7 @@
   "toolkit_package_version": "2.10.8",
   "toolkit_contract": {
     "repository": "weijunswj/ai-agent-toolkit",
-    "revision": "91523b87d0ec37a9eb6b70aab1fb31ecd39a4163",
+    "revision": "b498c82613448537a5e32b230b60027e74f6d38c",
     "path": "repo/contracts/github-program-reconciler/programme-surface-contract-v5.json",
     "sha256": "5dd7331ac16d0c5636e8aed02fa7a90d11b51472cdedc0d86688c8448082f6d3"
   },
