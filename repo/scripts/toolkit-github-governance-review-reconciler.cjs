@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const a1 = require('./toolkit-control-plane/control-plane-kernel.cjs');
 const canonicalA2 = require('./toolkit-capability-registry.cjs');
+const programmeV5 = require('./toolkit-github-program-state-v5.cjs');
 
 const CONTRACT_VERSION = 'toolkit.n5.github-governance-review-reconciler.v3';
 const REVIEW_INVENTORY_VERSION = 'toolkit.n5.review-inventory.v1';
@@ -1508,7 +1509,21 @@ function createRuntime(options = {}) {
       releaseOwner(key, token);
     }
   }
-  return Object.freeze({ inspect, preview, initialise, migrate, validate, reconcile, show, remove, reviewInventory: buildReviewInventory, classifyFinding, registerDeferredFinding, governanceReadiness: autoCodeReadiness });
+  return Object.freeze({
+    inspect,
+    preview,
+    initialise,
+    migrate,
+    validate,
+    reconcile,
+    show,
+    remove,
+    reviewInventory: buildReviewInventory,
+    classifyFinding,
+    registerDeferredFinding,
+    governanceReadiness: autoCodeReadiness,
+    programmeV5: Object.freeze({ projectionBootstrapRecovery: programmeV5.projectionBootstrapRecovery }),
+  });
 }
 
 module.exports = Object.freeze({
@@ -1521,6 +1536,7 @@ module.exports = Object.freeze({
   buildReviewInventory, evaluateMateriality, classifyFinding, normalizeFindingEvidence, authorizeReviewMutation, resolveFinding,
   registerDeferredFinding, validateDeferredFindingRecord, revalidateDeferredFinding, projectA4Review, codexReviewState, autoCodeReadiness, adjudicateHistoricalPr310,
   findingEvidenceDigest, deferredRootDigest, reviewEvidenceDigest, durableEvidenceDigest, normalizeDurableEvidence, parseLegacyParent, rejectHistoricalRevival, nextAction, createRuntime,
+  programmeV5, projectionBootstrapRecovery: programmeV5.projectionBootstrapRecovery,
 });
 function representedPrNumbers(state) {
   const values = [];

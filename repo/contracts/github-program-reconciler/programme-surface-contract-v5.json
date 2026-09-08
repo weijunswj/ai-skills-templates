@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "toolkit.github-program.surface.v5",
+  "schema": "toolkit.github-program.surface.v5",
+  "additionalProperties": false,
+  "repository": "weijunswj/ai-agent-toolkit",
+  "design_lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+  "toolkit_package_version": "2.10.8",
+  "canonical_state": {
+    "schema": "toolkit.github-program.state.v5",
+    "parent_issue": 240,
+    "current_child_issue": 359,
+    "current_zero_lane_requires_active_blocking_recovery_hold": true,
+    "unknown_major_fails_closed": true
+  },
+  "managed_blocks": {
+    "parent": {
+      "issue": 240,
+      "marker": "GITHUB-PROGRAM-PARENT",
+      "version": "v5",
+      "parser": "PARENT_V5",
+      "renderer": "PARENT_V5",
+      "preserve_unmanaged_bytes": true
+    },
+    "child": {
+      "issue": 359,
+      "marker": "GITHUB-PROGRAM-CHILD",
+      "version": "v5",
+      "parser": "CHILD_V5",
+      "renderer": "CHILD_V5",
+      "preserve_unmanaged_bytes": true
+    },
+    "pr": {
+      "parser": "PR_V5_NOT_REQUIRED",
+      "renderer": "PR_RENDERER_NOT_REQUIRED",
+      "mutation": false
+    }
+  },
+  "projection_bootstrap_recovery": {
+    "decision_schema": "toolkit.github-program.projection-bootstrap-recovery-decision.v1",
+    "evidence_schema": "toolkit.github-program.projection-bootstrap-recovery-evidence.v1",
+    "recovery_root": "E3-V5-PROGRAMME-PROJECTION-BOOTSTRAP-RECOVERY-001",
+    "lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+    "allowed_operation_count_from_stale_state": 2,
+    "allowed_operation_order": [
+      359,
+      240
+    ],
+    "allowed_body_targets": [
+      359,
+      240
+    ],
+    "no_general_state_control": true,
+    "no_pr_body_renderer": true
+  },
+  "write_safety": {
+    "mode": "WEB_EXCLUSIVE_SINGLE_WRITER_RECOVERY_WINDOW",
+    "provider_cas_available": false,
+    "provider_cas_claim": false,
+    "fresh_prewrite_evidence_revision_rebinding": true,
+    "postwrite_exact_readback": true,
+    "residual_external_race_disclosed": true
+  },
+  "receipt_binding": {
+    "schema": "toolkit.github-program.run-receipt.v1",
+    "operation_kind": "IDEMPOTENT_SET",
+    "safety_class": "IDEMPOTENT",
+    "provider_cas_claim": false,
+    "source_changed": false
+  },
+  "bootstrap_proof": {
+    "uses_actual_checked_in_bootstrap": true,
+    "uses_current_workspace_surface_contract_bytes": true,
+    "uses_canonical_json": true,
+    "uses_canonical_contract_digest": true,
+    "historical_git_object_required": false,
+    "resolver": "unchanged"
+  },
+  "prohibitions": {
+    "desired_state_api": false,
+    "arbitrary_patch": false,
+    "arbitrary_transition": false,
+    "provider_client": false,
+    "provider_cas": false,
+    "programme_apply": false,
+    "pr_body_mutation": false,
+    "pr_renderer": false,
+    "normal_lane_creation": false,
+    "workflow_or_fetch_depth_change": false,
+    "repair3": false
+  }
+}
