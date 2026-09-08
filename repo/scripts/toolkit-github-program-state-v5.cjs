@@ -1099,21 +1099,22 @@ function validatePR366(value) {
     && value.complete === true;
 }
 const PAGINATION_COLLECTIONS = Object.freeze({
-  parent: Object.freeze({ endpoint: 'github:issues/240', items: 1, server_total: 'AVAILABLE' }),
-  child: Object.freeze({ endpoint: 'github:issues/359', items: 1, server_total: 'AVAILABLE' }),
-  native_children: Object.freeze({ endpoint: 'github:issues/240/sub_issues', items: 6, server_total: 'AVAILABLE' }),
-  current_label: Object.freeze({ endpoint: 'github:issues/359/labels', items: 1, server_total: 'AVAILABLE' }),
-  pr366: Object.freeze({ endpoint: 'github:pulls/366', items: 1, server_total: 'AVAILABLE' }),
-  pr379: Object.freeze({ endpoint: 'github:pulls/379', items: 1, server_total: 'AVAILABLE' }),
-  reviews: Object.freeze({ endpoint: 'github:pulls/379/reviews', items: 1, server_total: 'AVAILABLE' }),
-  threads: Object.freeze({ endpoint: 'github:pulls/379/review-threads', items: 0, server_total: 'UNAVAILABLE' }),
-  review_thread_comments: Object.freeze({ endpoint: 'github:pulls/379/review-thread-comments', items: 0, server_total: 'UNAVAILABLE' }),
-  comments: Object.freeze({ endpoint: 'github:issues/379/comments', items: 6, server_total: 'AVAILABLE' }),
-  checks: Object.freeze({ endpoint: 'github:commits/' + FROZEN_HEAD + '/check-runs', items: 6, server_total: 'AVAILABLE' }),
-  web_authority: Object.freeze({ endpoint: 'github:web-authority:issues/240,359;pull/379', items: 6, server_total: 'UNAVAILABLE' }),
+  parent: Object.freeze({ endpoint: 'github:issues/240', items: 1, transport_mode: 'DIRECT', server_total: 'UNAVAILABLE' }),
+  child: Object.freeze({ endpoint: 'github:issues/359', items: 1, transport_mode: 'DIRECT', server_total: 'UNAVAILABLE' }),
+  native_children: Object.freeze({ endpoint: 'github:issues/240/sub_issues', items: 6, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  current_label: Object.freeze({ endpoint: 'github:issues/359/labels', items: 1, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  pr366: Object.freeze({ endpoint: 'github:pulls/366', items: 1, transport_mode: 'DIRECT', server_total: 'UNAVAILABLE' }),
+  pr379: Object.freeze({ endpoint: 'github:pulls/379', items: 1, transport_mode: 'DIRECT', server_total: 'UNAVAILABLE' }),
+  reviews: Object.freeze({ endpoint: 'github:pulls/379/reviews', items: 1, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  threads: Object.freeze({ endpoint: 'github:pulls/379/review-threads', items: 0, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  review_thread_comments: Object.freeze({ endpoint: 'github:pulls/379/review-thread-comments', items: 0, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  comments: Object.freeze({ endpoint: 'github:issues/379/comments', items: 6, transport_mode: 'LINK', server_total: 'UNAVAILABLE' }),
+  checks: Object.freeze({ endpoint: 'github:commits/' + FROZEN_HEAD + '/check-runs', items: 6, transport_mode: 'LINK', server_total: 'AVAILABLE' }),
+  web_authority: Object.freeze({ endpoint: 'github:web-authority:issues/240,359;pull/379', items: 6, transport_mode: 'DIRECT', server_total: 'UNAVAILABLE' }),
 });
 const PAGINATION_KEYS = Object.freeze(Object.keys(PAGINATION_COLLECTIONS));
 const PAGINATION_PAGE_SIZE = 100;
+const CHECK_RUNS_TOTAL_FIELD = 'total_count';
 function paginationInventory(key, evidence) {
   if (!isRecord(evidence)) return null;
   switch (key) {
@@ -1164,39 +1165,88 @@ function paginationInventory(key, evidence) {
       return null;
   }
 }
+function validateProviderEvidence(value) {
+  return isRecord(value)
+    && exactKeys(value, ['check_runs'])
+    && isRecord(value.check_runs)
+    && exactKeys(value.check_runs, ['endpoint_or_query_identity', 'field', 'value'])
+    && value.check_runs.endpoint_or_query_identity === PAGINATION_COLLECTIONS.checks.endpoint
+    && value.check_runs.field === CHECK_RUNS_TOTAL_FIELD
+    && Number.isSafeInteger(value.check_runs.value)
+    && value.check_runs.value >= 0;
+}
+function providerTotalCount(key, evidence) {
+  if (key !== 'checks' || !isRecord(evidence?.provider_evidence?.check_runs)) return null;
+  const value = evidence.provider_evidence.check_runs.value;
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+function inventoryCount(inventory) {
+  return Array.isArray(inventory) ? inventory.length : inventory === null ? null : 1;
+}
 function buildPaginationEvidence(key, evidence) {
   const definition = PAGINATION_COLLECTIONS[key];
   const inventory = paginationInventory(key, evidence);
-  if (!definition || inventory === null) return null;
+  const retrievedCount = inventoryCount(inventory);
+  if (!definition || inventory === null || !Number.isSafeInteger(retrievedCount)) return null;
+  const providerTotal = definition.server_total === 'AVAILABLE' ? providerTotalCount(key, evidence) : null;
+  const isLink = definition.transport_mode === 'LINK';
   const pageDigest = digestValue({ endpoint_or_query_identity: definition.endpoint, page: 1, inventory });
   return {
     complete: true,
     endpoint_or_query_identity: definition.endpoint,
-    page_size: PAGINATION_PAGE_SIZE,
+    transport_mode: definition.transport_mode,
+    page_size: isLink ? PAGINATION_PAGE_SIZE : null,
     page_count: 1,
     ordered_page_digests: [{ page: 1, digest: pageDigest }],
-    retrieved_count: definition.items,
-    server_total: definition.server_total === 'AVAILABLE'
-      ? { status: 'AVAILABLE', value: definition.items }
-      : { status: 'UNAVAILABLE', value: null },
-    progression: { style: 'LINK', pages: [{ page: 1, next_url: null }] },
-    terminal_state: { has_next_page: false, next_url: null },
+    retrieved_count: retrievedCount,
+    provider_total_count: providerTotal,
+    server_total: providerTotal === null
+      ? { status: 'UNAVAILABLE', value: null }
+      : { status: 'AVAILABLE', value: providerTotal },
+    progression: isLink ? { style: 'LINK', pages: [{ page: 1, next_url: null }] } : null,
+    terminal_state: isLink ? { has_next_page: false, next_url: null } : null,
     inventory_digest: digestValue(inventory),
   };
+}
+function validateLinkProgression(value) {
+  return isRecord(value.progression)
+    && exactKeys(value.progression, ['pages', 'style'])
+    && value.progression.style === 'LINK'
+    && Array.isArray(value.progression.pages)
+    && value.progression.pages.length === value.page_count
+    && value.progression.pages.every((page, index) => isRecord(page)
+      && exactKeys(page, ['next_url', 'page'])
+      && page.page === index + 1
+      && (page.next_url === null || (typeof page.next_url === 'string' && page.next_url.length > 0 && !/[\r\n]/.test(page.next_url))))
+    && value.progression.pages[0]?.next_url === null
+    && isRecord(value.terminal_state)
+    && exactKeys(value.terminal_state, ['has_next_page', 'next_url'])
+    && value.terminal_state.has_next_page === false
+    && value.terminal_state.next_url === null
+    && value.progression.pages[value.progression.pages.length - 1]?.next_url === value.terminal_state.next_url;
+}
+function validateDirectTransport(value) {
+  return value.page_size === null && value.progression === null && value.terminal_state === null;
 }
 function validatePage(value, key, evidence) {
   const definition = PAGINATION_COLLECTIONS[key];
   const inventory = paginationInventory(key, evidence);
+  const retrievedCount = inventoryCount(inventory);
+  const providerTotal = definition ? providerTotalCount(key, evidence) : null;
+  const isLink = definition?.transport_mode === 'LINK';
   if (!definition || inventory === null || !isRecord(value)
     || !exactKeys(value, [
       'complete', 'endpoint_or_query_identity', 'inventory_digest', 'ordered_page_digests',
-      'page_count', 'page_size', 'progression', 'retrieved_count', 'server_total', 'terminal_state',
+      'page_count', 'page_size', 'progression', 'provider_total_count', 'retrieved_count',
+      'server_total', 'terminal_state', 'transport_mode',
     ])
     || value.complete !== true
     || value.endpoint_or_query_identity !== definition.endpoint
-    || value.page_size !== PAGINATION_PAGE_SIZE
+    || value.transport_mode !== definition.transport_mode
+    || (isLink ? value.page_size !== PAGINATION_PAGE_SIZE : !validateDirectTransport(value))
     || !Number.isSafeInteger(value.page_count) || value.page_count !== 1
     || !Number.isSafeInteger(value.retrieved_count) || value.retrieved_count !== definition.items
+    || value.retrieved_count !== retrievedCount
     || !Array.isArray(value.ordered_page_digests) || value.ordered_page_digests.length !== value.page_count
     || !value.ordered_page_digests.every((page, index) => isRecord(page)
       && exactKeys(page, ['digest', 'page'])
@@ -1207,28 +1257,19 @@ function validatePage(value, key, evidence) {
       page: 1,
       inventory,
     })
+    || value.provider_total_count !== providerTotal
     || !isRecord(value.server_total)
     || !exactKeys(value.server_total, ['status', 'value'])
     || value.server_total.status !== definition.server_total
     || !['AVAILABLE', 'UNAVAILABLE'].includes(value.server_total.status)
     || (value.server_total.status === 'AVAILABLE'
-      && (!Number.isSafeInteger(value.server_total.value) || value.server_total.value !== value.retrieved_count))
-    || (value.server_total.status === 'UNAVAILABLE' && value.server_total.value !== null)
-    || !isRecord(value.progression)
-    || !exactKeys(value.progression, ['pages', 'style'])
-    || value.progression.style !== 'LINK'
-    || !Array.isArray(value.progression.pages)
-    || value.progression.pages.length !== value.page_count
-    || !value.progression.pages.every((page, index) => isRecord(page)
-      && exactKeys(page, ['next_url', 'page'])
-      && page.page === index + 1
-      && (page.next_url === null || (typeof page.next_url === 'string' && page.next_url.length > 0 && !/[\r\n]/.test(page.next_url))))
-    || value.progression.pages[0]?.next_url !== null
-    || !isRecord(value.terminal_state)
-    || !exactKeys(value.terminal_state, ['has_next_page', 'next_url'])
-    || value.terminal_state.has_next_page !== false
-    || value.terminal_state.next_url !== null
-    || value.progression.pages[value.progression.pages.length - 1]?.next_url !== value.terminal_state.next_url
+      && (providerTotal === null
+        || !Number.isSafeInteger(value.server_total.value)
+        || value.server_total.value !== providerTotal
+        || value.server_total.value !== value.retrieved_count))
+    || (value.server_total.status === 'UNAVAILABLE'
+      && (value.server_total.value !== null || providerTotal !== null))
+    || (isLink ? !validateLinkProgression(value) : !validateDirectTransport(value))
     || value.inventory_digest !== digestValue(inventory)) return false;
   return true;
 }
@@ -1382,7 +1423,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
   const required = [
     'schema', 'recovery_root', 'lock', 'decision_digest', 'snapshot', 'repository',
     'parent_issue', 'child_issue', 'parent', 'child', 'pr_366', 'pr_379',
-    'web_authority', 'pagination', 'collector', 'authority_digest', 'continuation',
+    'web_authority', 'pagination', 'provider_evidence', 'collector', 'authority_digest', 'continuation',
     'evidence_digest',
   ];
   if (!isRecord(value) || !exactKeys(value, required)
@@ -1396,6 +1437,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
     || value.child_issue !== CHILD_ISSUE
     || !isDigest(value.authority_digest)
     || !validateCollector(value.collector)
+    || !validateProviderEvidence(value.provider_evidence)
     || !isDigest(value.evidence_digest)) return failure('RECOVERY_EVIDENCE_INVALID');
   if (value.authority_digest !== decisionInput.web_authority.digest) return failure('RECOVERY_AUTHORITY_DIGEST_MISMATCH');
   const webValid = validateWebAuthority(value.web_authority, decisionInput);
@@ -1808,6 +1850,7 @@ module.exports = Object.freeze({
   RETENTION_EVIDENCE_REF,
   PAGINATION_COLLECTIONS,
   PAGINATION_KEYS,
+  CHECK_RUNS_TOTAL_FIELD,
   FROZEN_HEAD,
   FROZEN_TREE,
   FROZEN_BRANCH,
@@ -1833,6 +1876,7 @@ module.exports = Object.freeze({
   parseChildV5Body,
   parseProgrammeV5Body,
   validateEvidence,
+  validateProviderEvidence,
   buildPaginationEvidence,
   classifyPartialState,
   buildReceiptOperationDescriptor,

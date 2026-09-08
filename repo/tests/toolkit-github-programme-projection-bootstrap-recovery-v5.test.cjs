@@ -169,6 +169,13 @@ function makeEvidence(snapshot = 'BEFORE_CHILD', continuation = null) {
     pr_379: pr379Facts(),
     web_authority: webAuthority(),
     pagination: null,
+    provider_evidence: {
+      check_runs: {
+        endpoint_or_query_identity: programme.PAGINATION_COLLECTIONS.checks.endpoint,
+        field: programme.CHECK_RUNS_TOTAL_FIELD,
+        value: 6,
+      },
+    },
     collector: {
       kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
       identity: 'github-web-readonly-adapter',
@@ -415,10 +422,11 @@ test('pagination evidence proves identity, counts, ordered pages, progression, t
   assert.equal(mutate(['pagination', 'parent', 'retrieved_count'], 0), false);
   assert.equal(mutate(['pagination', 'parent', 'ordered_page_digests', 0, 'digest'], 'f'.repeat(64)), false);
   assert.equal(mutate(['pagination', 'parent', 'inventory_digest'], 'f'.repeat(64)), false);
-  assert.equal(mutate(['pagination', 'parent', 'progression', 'pages', 0, 'page'], 2), false);
-  assert.equal(mutate(['pagination', 'parent', 'progression', 'pages', 0, 'next_url'], 'https://api.github.com/issues?page=2'), false);
-  assert.equal(mutate(['pagination', 'parent', 'terminal_state', 'has_next_page'], true), false);
-  assert.equal(mutate(['pagination', 'parent', 'terminal_state', 'next_url'], 'https://api.github.com/issues?page=2'), false);
+  assert.equal(mutate(['pagination', 'native_children', 'progression', 'pages', 0, 'page'], 2), false);
+  assert.equal(mutate(['pagination', 'parent', 'transport_mode'], 'LINK'), false);
+  assert.equal(mutate(['pagination', 'parent', 'progression'], { style: 'LINK', pages: [{ page: 1, next_url: null }] }), false);
+  assert.equal(mutate(['pagination', 'comments', 'terminal_state', 'has_next_page'], true), false);
+  assert.equal(mutate(['pagination', 'comments', 'terminal_state', 'next_url'], 'https://api.github.com/issues?page=2'), false);
   assert.equal(mutate(['pagination', 'parent', 'server_total', 'value'], 999), false);
   assert.equal(mutate(['pagination', 'threads', 'server_total'], { status: 'AVAILABLE', value: 0 }), false);
   assert.equal(mutate(['pagination', 'threads', 'server_total'], { status: 'UNAVAILABLE' }), false);
@@ -426,14 +434,54 @@ test('pagination evidence proves identity, counts, ordered pages, progression, t
   const reordered = clone(evidence);
   reordered.pagination.parent.page_count = 2;
   reordered.pagination.parent.ordered_page_digests.push({ page: 2, digest: 'f'.repeat(64) });
-  reordered.pagination.parent.progression.pages = [
-    { page: 1, next_url: 'https://api.github.com/issues?page=2' },
-    { page: 2, next_url: null },
-  ];
+  reordered.pagination.parent.progression = {
+    style: 'LINK',
+    pages: [
+      { page: 1, next_url: 'https://api.github.com/issues?page=2' },
+      { page: 2, next_url: null },
+    ],
+  };
   assert.equal(programme.validateEvidence(withEvidenceDigest(reordered), decision).ok, false);
   const completeOnly = clone(evidence);
   completeOnly.pagination.parent = { complete: true };
   assert.equal(programme.validateEvidence(withEvidenceDigest(completeOnly), decision).ok, false);
+});
+
+test('pagination transport and provider totals remain truthful', () => {
+  const evidence = makeEvidence();
+  const mutate = (pathParts, replacement) => programme.validateEvidence(replaceEvidence(evidence, pathParts, replacement), decision).ok;
+  for (const key of ['parent', 'child', 'pr366', 'pr379', 'web_authority']) {
+    assert.equal(evidence.pagination[key].transport_mode, 'DIRECT', key);
+    assert.equal(evidence.pagination[key].page_size, null, key);
+    assert.equal(evidence.pagination[key].progression, null, key);
+    assert.equal(evidence.pagination[key].terminal_state, null, key);
+    assert.equal(evidence.pagination[key].provider_total_count, null, key);
+    assert.deepEqual(evidence.pagination[key].server_total, { status: 'UNAVAILABLE', value: null }, key);
+    assert.equal(mutate(['pagination', key, 'server_total'], { status: 'AVAILABLE', value: evidence.pagination[key].retrieved_count }), false, key);
+    assert.equal(mutate(['pagination', key, 'provider_total_count'], evidence.pagination[key].retrieved_count), false, key);
+  }
+  for (const key of ['native_children', 'current_label', 'reviews', 'threads', 'review_thread_comments', 'comments', 'checks']) {
+    assert.equal(evidence.pagination[key].transport_mode, 'LINK', key);
+    assert.equal(evidence.pagination[key].page_size, 100, key);
+    assert.equal(evidence.pagination[key].progression.style, 'LINK', key);
+    assert.equal(evidence.pagination[key].terminal_state.has_next_page, false, key);
+  }
+  assert.deepEqual(evidence.pagination.checks.server_total, { status: 'AVAILABLE', value: 6 });
+  assert.equal(evidence.pagination.checks.provider_total_count, 6);
+  assert.equal(evidence.provider_evidence.check_runs.value, 6);
+  assert.equal(mutate(['pagination', 'checks', 'server_total'], { status: 'UNAVAILABLE', value: null }), false);
+  assert.equal(mutate(['provider_evidence', 'check_runs', 'value'], 7), false);
+  assert.equal(mutate(['pagination', 'checks', 'provider_total_count'], 7), false);
+  assert.equal(mutate(['pagination', 'comments', 'server_total'], { status: 'AVAILABLE', value: 6 }), false);
+  assert.equal(mutate(['pagination', 'comments', 'provider_total_count'], 6), false);
+  assert.equal(mutate(['pagination', 'parent', 'page_size'], 100), false);
+  assert.equal(mutate(['pagination', 'parent', 'progression'], { style: 'LINK', pages: [{ page: 1, next_url: null }] }), false);
+  assert.equal(mutate(['pagination', 'comments', 'page_size'], null), false);
+  assert.equal(mutate(['pagination', 'comments', 'progression'], null), false);
+  assert.equal(mutate(['pagination', 'comments', 'terminal_state'], null), false);
+  const missingProviderTotal = clone(evidence);
+  delete missingProviderTotal.provider_evidence.check_runs.value;
+  assert.equal(programme.validateEvidence(withEvidenceDigest(missingProviderTotal), decision).ok, false);
 });
 
 test('PR movement, check/review/thread/comment movement, labels, and native relationship movement fail closed', () => {
