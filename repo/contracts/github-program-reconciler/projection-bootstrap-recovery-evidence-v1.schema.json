@@ -43,7 +43,7 @@
       "enum": [
         "BEFORE_CHILD",
         "CHILD_WRITTEN_PARENT_STALE",
-        "PARENT_WRITTEN_ACK_LOST"
+        "PARENT_AND_CHILD_TARGET_OBSERVED"
       ]
     },
     "repository": {

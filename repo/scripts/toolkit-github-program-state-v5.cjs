@@ -1313,7 +1313,7 @@ function classifySnapshot(parentDigest, childDigest, targetDigest) {
   const childTarget = childDigest === targetDigest;
   if (parentSource && childSource) return 'BEFORE_CHILD';
   if (parentSource && childTarget) return 'CHILD_WRITTEN_PARENT_STALE';
-  if (parentTarget && childTarget) return 'PARENT_WRITTEN_ACK_LOST';
+  if (parentTarget && childTarget) return 'PARENT_AND_CHILD_TARGET_OBSERVED';
   return null;
 }
 function classifyPartialState(input = {}) {
@@ -1431,7 +1431,7 @@ function validateEvidence(value, decisionInput = DECISION_TEMPLATE) {
     || value.recovery_root !== RECOVERY_ROOT
     || value.lock !== LOCK
     || value.decision_digest !== decisionValid.decision_digest
-    || !['BEFORE_CHILD', 'CHILD_WRITTEN_PARENT_STALE', 'PARENT_WRITTEN_ACK_LOST'].includes(value.snapshot)
+    || !['BEFORE_CHILD', 'CHILD_WRITTEN_PARENT_STALE', 'PARENT_AND_CHILD_TARGET_OBSERVED'].includes(value.snapshot)
     || value.repository !== REPOSITORY
     || value.parent_issue !== PARENT_ISSUE
     || value.child_issue !== CHILD_ISSUE
@@ -1683,7 +1683,7 @@ function previewRecovery(input = {}) {
   if (parsed.classification === 'CHILD_WRITTEN_PARENT_STALE') {
     if (input.evidence.continuation.preview_id !== previewId) return failure('RECOVERY_CONTINUATION_PREVIEW_MISMATCH');
   }
-  const zeroDelta = parsed.classification === 'PARENT_WRITTEN_ACK_LOST';
+  const zeroDelta = parsed.classification === 'PARENT_AND_CHILD_TARGET_OBSERVED';
   const response = {
     ok: true,
     code: zeroDelta ? 'PROGRAMME_ZERO_DELTA' : 'PROJECTION_BOOTSTRAP_RECOVERY_PREVIEW_READY',
