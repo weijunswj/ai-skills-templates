@@ -1544,6 +1544,9 @@ function markerPayload(body, expression) {
   return matches.length === 1 ? matches[0][1] : null;
 }
 function parseParentV5Body(body, options = {}) {
+  if (isHumanPresentationBody(body, 'parent') || hasHumanPresentationResidue(body, 'parent')) {
+    return parseHumanParentBody(body, options);
+  }
   if (options.complete === false || typeof body !== 'string') return failure('PARENT_V5_BODY_INCOMPLETE');
   const split = splitManagedBlock(body, 'parent');
   if (!split) return failure('PARENT_V5_PARSE_UNCERTAIN');
@@ -1572,6 +1575,9 @@ function parseParentV5Body(body, options = {}) {
   });
 }
 function parseChildV5Body(body, options = {}) {
+  if (isHumanPresentationBody(body, 'child') || hasHumanPresentationResidue(body, 'child')) {
+    return parseHumanChildBody(body, options);
+  }
   if (options.complete === false || typeof body !== 'string') return failure('CHILD_V5_BODY_INCOMPLETE');
   const split = splitManagedBlock(body, 'child');
   if (!split) return failure('CHILD_V5_PARSE_UNCERTAIN');
@@ -3567,7 +3573,7 @@ function validateControllerBootstrap(value) {
     || value.parent_issue !== PARENT_ISSUE
     || value.programme_state_schema !== STATE_SCHEMA
     || value.surface_contract_schema !== SURFACE_SCHEMA
-    || value.toolkit_package_version !== '2.10.8'
+    || value.toolkit_package_version !== '2.10.9'
     || !isRecord(value.toolkit_contract)
     || !exactKeys(value.toolkit_contract, ['repository', 'revision', 'path', 'sha256'])
     || value.toolkit_contract.repository !== REPOSITORY
@@ -3610,6 +3616,1427 @@ function verifyBootstrapWorkspaceProof(input = {}) {
   });
 }
 
+// The presentation layer below is deliberately generic.  It projects a
+// canonical state into human-readable views, but never replaces or embeds
+// that canonical state.  The older v5 renderer above remains the compatibility
+// path for historical E3 byte and digest proofs.
+const HUMAN_PRESENTATION_SCHEMA = 'github.program.presentation.v1';
+const HUMAN_PRESENTATION_VERSION = 'v1';
+const HUMAN_PR_PRESENTATION_SCHEMA = 'github.program.pr-presentation.v1';
+const HUMAN_HISTORY_DECISION_SCHEMA = 'toolkit.github-program.human-surface-conformance-decision.v1';
+const HUMAN_HISTORY_EVIDENCE_SCHEMA = 'toolkit.github-program.human-surface-conformance-evidence.v1';
+const HUMAN_PRESENTATION_MARKERS = Object.freeze({
+  parent: Object.freeze({
+    begin: '<!-- MANAGED-PROGRAM-PARENT:BEGIN human-v1 -->',
+    end: '<!-- MANAGED-PROGRAM-PARENT:END human-v1 -->',
+    data: '<!-- MANAGED-PROGRAM-PRESENTATION human-v1 ',
+  }),
+  child: Object.freeze({
+    begin: '<!-- MANAGED-PROGRAM-CHILD:BEGIN human-v1 -->',
+    end: '<!-- MANAGED-PROGRAM-CHILD:END human-v1 -->',
+    data: '<!-- MANAGED-PROGRAM-PRESENTATION human-v1 ',
+  }),
+  pr: Object.freeze({
+    begin: '<!-- MANAGED-PROGRAM-PR:BEGIN human-v1 -->',
+    end: '<!-- MANAGED-PROGRAM-PR:END human-v1 -->',
+    data: '<!-- MANAGED-PROGRAM-PRESENTATION human-v1 ',
+  }),
+});
+const TOOLKIT_HUMAN_PRESENTATION_MARKERS = Object.freeze({
+  parent: Object.freeze({
+    begin: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:BEGIN human-v1 -->',
+    end: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:END human-v1 -->',
+    data: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PRESENTATION human-v1 ',
+  }),
+  child: Object.freeze({
+    begin: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:BEGIN human-v1 -->',
+    end: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:END human-v1 -->',
+    data: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PRESENTATION human-v1 ',
+  }),
+  pr: Object.freeze({
+    begin: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PR:BEGIN human-v1 -->',
+    end: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PR:END human-v1 -->',
+    data: '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PRESENTATION human-v1 ',
+  }),
+});
+const HUMAN_HISTORY_ALLOWED_PATHS = Object.freeze([
+  'prs',
+  'children[*].pr_registry',
+  'evidence_refs',
+  'historical_transitions',
+]);
+const PRESENTATION_MODEL_KEYS = Object.freeze([
+  'boundaries', 'children', 'completed_work', 'current_child', 'goal',
+  'next_action', 'parent_issue', 'repository', 'schema', 'source', 'status',
+  'title', 'version',
+]);
+const PRESENTATION_STATUS_KEYS = Object.freeze([
+  'accepted_history', 'active_gate', 'active_hold', 'canonical_main',
+  'current_child', 'finality', 'lifecycle', 'next_phase',
+]);
+const PRESENTATION_CHILD_KEYS = Object.freeze([
+  'boundaries', 'done_when', 'eli5', 'epochs', 'finality', 'issue', 'lifecycle',
+  'objective', 'order', 'out_of_scope', 'pr_history', 'scope', 'state',
+  'summary', 'title',
+]);
+const PRESENTATION_EPOCH_KEYS = Object.freeze([
+  'evidence_ref', 'id', 'name', 'outcome', 'purpose', 'state', 'why',
+]);
+const PRESENTATION_PR_HISTORY_KEYS = Object.freeze([
+  'child_issue', 'epoch_id', 'outcome', 'pr', 'what_it_was_for', 'why',
+]);
+const PRESENTATION_PR_KEYS = Object.freeze([
+  'applicability', 'candidate', 'changes', 'eli5', 'final_status', 'number',
+  'optional', 'out_of_scope', 'position', 'schema', 'scope', 'source',
+  'summary', 'validation', 'version', 'why',
+]);
+
+function presentationError(code, message) {
+  const error = new Error(message || code);
+  error.code = code;
+  return error;
+}
+function presentationText(value, field, required = true) {
+  if (value === undefined || value === null) {
+    if (!required) return null;
+    throw presentationError('HUMAN_PRESENTATION_TEXT_INVALID', field + ' is required');
+  }
+  if (typeof value !== 'string' || value.length > 8192 || /[\r\n]/.test(value)) {
+    throw presentationError('HUMAN_PRESENTATION_TEXT_INVALID', field + ' is not a safe single-line string');
+  }
+  if (/```/.test(value)
+    || /(?:^|[\s(])(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|private[_ -]?key|client[_ -]?secret|authorization)\s*[:=]/i.test(value)
+    || /(?:^|[\s(])(?:file:\/\/|[A-Za-z]:[\\/]|\/(?:Users|home|root|private|etc|var|tmp)(?:[\\/]|$))/i.test(value)) {
+    throw presentationError('HUMAN_PRESENTATION_UNSAFE_TEXT', field + ' contains a private value, path, or fenced content');
+  }
+  return value;
+}
+function presentationArray(value, field) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw presentationError('HUMAN_PRESENTATION_ARRAY_INVALID', field + ' must be an array');
+  return value.map((item, index) => presentationText(item, field + '[' + String(index) + ']'));
+}
+function presentationId(value, field, nullable = true) {
+  if (value === null || value === undefined) {
+    if (nullable) return null;
+    throw presentationError('HUMAN_PRESENTATION_ID_INVALID', field + ' is required');
+  }
+  if (!isSafeId(value, 512)) throw presentationError('HUMAN_PRESENTATION_ID_INVALID', field + ' is not a safe id');
+  return value;
+}
+function presentationIssue(value, field, nullable = false) {
+  if ((value === null || value === undefined) && nullable) return null;
+  if (!isIssue(value)) throw presentationError('HUMAN_PRESENTATION_ISSUE_INVALID', field + ' is not a positive issue number');
+  return value;
+}
+function presentationStateName(value, field, fallback = 'PENDING') {
+  const candidate = value === undefined || value === null || value === '' ? fallback : String(value).toUpperCase();
+  if (!/^[A-Z][A-Z0-9 _/-]{0,80}$/.test(candidate)) {
+    throw presentationError('HUMAN_PRESENTATION_STATE_INVALID', field + ' is not a safe state');
+  }
+  return candidate;
+}
+function presentationDigest(value, field, nullable = false) {
+  if (value === null || value === undefined) {
+    if (nullable) return null;
+    throw presentationError('HUMAN_PRESENTATION_DIGEST_INVALID', field + ' is required');
+  }
+  if (!isDigest(value)) throw presentationError('HUMAN_PRESENTATION_DIGEST_INVALID', field + ' is not a digest');
+  return value;
+}
+function presentationCell(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/[\r\n]/g, ' ').replace(/\|/g, '\\|');
+}
+function presentationBullets(values, empty = 'None recorded.') {
+  const list = Array.isArray(values) ? values : [];
+  return list.length ? list.map((item) => '- ' + item) : [empty];
+}
+function presentationMarkerStyle(options = {}) {
+  if (options.markers === TOOLKIT_HUMAN_PRESENTATION_MARKERS || options.toolkit === true) return TOOLKIT_HUMAN_PRESENTATION_MARKERS;
+  if (options.markers === HUMAN_PRESENTATION_MARKERS) return HUMAN_PRESENTATION_MARKERS;
+  if (isRecord(options.markers) && options.markers.parent && options.markers.child && options.markers.pr) return options.markers;
+  return HUMAN_PRESENTATION_MARKERS;
+}
+function countText(body, value) {
+  let count = 0;
+  let offset = 0;
+  while (typeof body === 'string' && (offset = body.indexOf(value, offset)) >= 0) {
+    count += 1;
+    offset += value.length;
+  }
+  return count;
+}
+function markerFamilyPresent(body, markers, kind) {
+  const marker = markers[kind];
+  return typeof body === 'string' && (body.includes(marker.begin) || body.includes(marker.end) || body.includes(marker.data));
+}
+function humanMarkerVersionResidue(body, kind) {
+  if (typeof body !== 'string') return false;
+  const token = kind.toUpperCase();
+  return new RegExp('(?:MANAGED-PROGRAM-' + token + '|AI-AGENT-TOOLKIT:GITHUB-PROGRAM-' + token + '):(?:BEGIN|END)\\s+human-', 'i').test(body)
+    || new RegExp('(?:MANAGED-PROGRAM-PRESENTATION|AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PRESENTATION)\\s+human-', 'i').test(body);
+}
+function humanUnknownVersionResidue(body, kind) {
+  if (typeof body !== 'string') return false;
+  const token = kind.toUpperCase();
+  return new RegExp('(?:MANAGED-PROGRAM-' + token + '|AI-AGENT-TOOLKIT:GITHUB-PROGRAM-' + token + '):(?:BEGIN|END)\\s+human-(?!v1(?:\\s|-->|$))[A-Za-z0-9_-]+', 'i').test(body)
+    || new RegExp('(?:MANAGED-PROGRAM-PRESENTATION|AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PRESENTATION)\\s+human-(?!v1(?:\\s|$))[A-Za-z0-9_-]+', 'i').test(body);
+}
+function hasHumanPresentationResidue(body, kind) {
+  return markerFamilyPresent(body, HUMAN_PRESENTATION_MARKERS, kind)
+    || markerFamilyPresent(body, TOOLKIT_HUMAN_PRESENTATION_MARKERS, kind)
+    || humanMarkerVersionResidue(body, kind);
+}
+function isHumanPresentationBody(body, kind) {
+  return markerFamilyPresent(body, HUMAN_PRESENTATION_MARKERS, kind)
+    || markerFamilyPresent(body, TOOLKIT_HUMAN_PRESENTATION_MARKERS, kind);
+}
+function genericEvidenceMap(state) {
+  const values = Array.isArray(state?.evidence_refs) ? state.evidence_refs : [];
+  const map = new Map();
+  for (const [index, item] of values.entries()) {
+    if (!isRecord(item) || !isSafeId(item.id, 512)) {
+      throw presentationError('HUMAN_EVIDENCE_INVALID', 'evidence_refs[' + String(index) + '] has an unsafe id');
+    }
+    if (map.has(item.id)) throw presentationError('HUMAN_EVIDENCE_DUPLICATE', item.id);
+    const summary = presentationText(item.summary, 'evidence_refs[' + String(index) + '].summary');
+    const reference = presentationText(item.reference ?? item.ref ?? item.id, 'evidence_refs[' + String(index) + '].reference');
+    const kind = presentationText(item.kind ?? 'AUTHORITY', 'evidence_refs[' + String(index) + '].kind');
+    map.set(item.id, { id: item.id, kind, reference, summary });
+  }
+  return map;
+}
+function genericCandidate(value, field = 'candidate', nullable = true) {
+  if (value === null || value === undefined) {
+    if (nullable) return null;
+    throw presentationError('HUMAN_CANDIDATE_INVALID', field + ' is required');
+  }
+  if (!isRecord(value)) throw presentationError('HUMAN_CANDIDATE_INVALID', field + ' must be an object');
+  const allowed = ['repository', 'branch', 'base_ref', 'base_sha', 'head', 'tree', 'version'];
+  if (Object.keys(value).some((key) => !allowed.includes(key))) throw presentationError('HUMAN_CANDIDATE_INVALID', field + ' contains an unknown field');
+  const result = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) result[key] = presentationText(value[key], field + '.' + key);
+  }
+  if (!result.repository || !result.branch || !result.base_ref || !result.head || !result.tree) {
+    throw presentationError('HUMAN_CANDIDATE_INVALID', field + ' is missing a lineage identity');
+  }
+  return result;
+}
+function genericFinality(child) {
+  const value = isRecord(child?.finality) ? child.finality.state : child?.finality;
+  return presentationStateName(value, 'child.finality', 'UNSPECIFIED');
+}
+function genericActiveHolds(state, currentChild) {
+  const holds = [];
+  const add = (value) => {
+    if (!Array.isArray(value)) return;
+    for (const hold of value) {
+      if (isRecord(hold) && hold.active === true && hold.blocks_normal_lanes === true) holds.push(hold);
+    }
+  };
+  add(state?.holds);
+  add(currentChild?.holds);
+  if (isRecord(state?.recovery) && state.recovery.active_blocking_recovery_hold === true) {
+    holds.push({
+      id: state.recovery.root ?? 'recovery-hold',
+      evidence_ref: state.recovery.hold_evidence_ref ?? null,
+      summary: state.recovery.summary ?? 'An authority-defined recovery hold is active.',
+    });
+  }
+  const seen = new Set();
+  return holds.filter((hold) => {
+    const id = String(hold.id ?? hold.root ?? 'hold');
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).map((hold) => ({
+    id: presentationText(String(hold.id ?? hold.root ?? 'hold'), 'active_hold.id'),
+    evidence_ref: hold.evidence_ref === null || hold.evidence_ref === undefined ? null : presentationId(hold.evidence_ref, 'active_hold.evidence_ref'),
+    summary: presentationText(hold.summary ?? 'An authority-defined blocking hold is active.', 'active_hold.summary'),
+  }));
+}
+function genericActiveLanes(state) {
+  if (state?.active_lanes === undefined || state?.active_lanes === null) return [];
+  if (!Array.isArray(state.active_lanes)) throw presentationError('HUMAN_LANES_INVALID', 'active_lanes must be an array');
+  return state.active_lanes.map((lane, index) => {
+    if (!isRecord(lane)) throw presentationError('HUMAN_LANES_INVALID', 'active_lanes[' + String(index) + '] must be an object');
+    return {
+      child_issue: presentationIssue(lane.child_issue ?? lane.child, 'active_lanes[' + String(index) + '].child_issue'),
+      epoch_id: presentationText(String(lane.epoch_id ?? lane.epoch ?? 'ACTIVE'), 'active_lanes[' + String(index) + '].epoch_id'),
+      gate: presentationText(String(lane.gate ?? lane.gate_id ?? 'ACTIVE'), 'active_lanes[' + String(index) + '].gate'),
+      result: lane.gate_result === null || lane.gate_result === undefined ? null : presentationText(String(lane.gate_result), 'active_lanes[' + String(index) + '].gate_result'),
+    };
+  });
+}
+function genericCanonicalMain(state) {
+  const value = isRecord(state?.canonical_main) ? state.canonical_main : isRecord(state?.main) ? state.main : null;
+  if (!value) return null;
+  const result = { branch: null, sha: null, tree: null, source: null };
+  for (const key of ['branch', 'sha', 'tree', 'source']) {
+    if (value[key] !== undefined && value[key] !== null) result[key] = presentationText(String(value[key]), 'canonical_main.' + key);
+  }
+  if (!result.branch && !result.sha && !result.tree) return null;
+  return result;
+}
+function genericEpochState(epoch, lane, evidenceMap) {
+  const disposition = epoch.terminal_disposition ?? epoch.disposition ?? null;
+  const evidenceRef = epoch.evidence_ref ?? epoch.evidence ?? null;
+  const normalizedDisposition = disposition === null || disposition === undefined
+    ? null
+    : presentationStateName(disposition, 'epoch.terminal_disposition');
+  let state = normalizedDisposition;
+  if (!state) state = lane ? 'ACTIVE' : presentationStateName(epoch.state ?? epoch.status, 'epoch.state', 'PENDING');
+  if (normalizedDisposition && !evidenceRef) throw presentationError('HUMAN_EPOCH_EVIDENCE_MISSING', epoch.id + ' has a terminal disposition without evidence');
+  const evidence = evidenceRef ? evidenceMap.get(evidenceRef) : null;
+  if (evidenceRef && !evidence) throw presentationError('HUMAN_EPOCH_EVIDENCE_MISSING', epoch.id + ' references missing evidence ' + String(evidenceRef));
+  const why = evidence?.summary ?? (epoch.why === undefined ? '' : presentationText(epoch.why, 'epoch.why', false));
+  const outcome = normalizedDisposition
+    ? normalizedDisposition
+    : state === 'ACTIVE'
+      ? (lane?.result ? 'Active: ' + presentationText(String(lane.result), 'active_lane.result') : 'In progress.')
+      : 'Pending: ' + presentationText(epoch.purpose ?? epoch.objective ?? 'This phase', 'epoch.purpose') + ' remains to be completed.';
+  return {
+    evidence_ref: evidenceRef === null || evidenceRef === undefined ? null : presentationId(evidenceRef, 'epoch.evidence_ref'),
+    id: presentationId(epoch.id, 'epoch.id', false),
+    name: presentationText(epoch.name ?? epoch.id, 'epoch.name'),
+    outcome: presentationText(outcome, 'epoch.outcome'),
+    purpose: presentationText(epoch.purpose ?? epoch.objective ?? 'Programme phase', 'epoch.purpose'),
+    state,
+    why: presentationText(why || outcome, 'epoch.why'),
+  };
+}
+function genericPrOutcome(entry) {
+  const status = presentationStateName(entry.status, 'pr_registry.status', 'RECORDED');
+  const provider = entry.github_state ? presentationStateName(entry.github_state, 'pr_registry.github_state') : null;
+  if (status === 'ACCEPTED' && provider === 'MERGED') return 'ACCEPTED / MERGED';
+  if (status === 'RETIRED' && provider === 'CLOSED') return 'RETIRED / CLOSED';
+  if (status === 'RETAINED') return provider ? 'RETAINED / ' + provider : 'RETAINED';
+  return provider ? status + ' / ' + provider : status;
+}
+function genericPrRegistryEntry(entry, descriptorMap, evidenceMap, options, childIssue) {
+  if (!isRecord(entry) || !isIssue(entry.pr)) throw presentationError('HUMAN_PR_REGISTRY_INVALID', 'registry entry has no PR number');
+  const descriptor = descriptorMap.get(entry.pr);
+  if (!descriptor) throw presentationError('HUMAN_PR_DESCRIPTOR_MISSING', 'No canonical PR descriptor for #' + String(entry.pr));
+  const purpose = descriptor.purpose ?? descriptor.summary;
+  if (descriptor.purpose === undefined && options.allow_pr_summary_fallback !== true) {
+    throw presentationError('HUMAN_PR_PURPOSE_MISSING', 'PR #' + String(entry.pr) + ' has no authoritative purpose');
+  }
+  const evidenceRef = entry.accepted_evidence_ref || entry.retirement_evidence_ref || entry.retention_evidence_ref || null;
+  const evidence = evidenceRef ? evidenceMap.get(evidenceRef) : null;
+  if (evidenceRef && !evidence) throw presentationError('HUMAN_PR_EVIDENCE_MISSING', 'PR #' + String(entry.pr) + ' references missing evidence');
+  const outcome = genericPrOutcome(entry);
+  const fallback = options.allow_pr_summary_fallback === true ? descriptor.summary : 'Disposition recorded in the canonical registry.';
+  return {
+    child_issue: childIssue,
+    epoch_id: presentationText(String(entry.epoch_id ?? 'programme'), 'pr_registry.epoch_id'),
+    outcome,
+    pr: entry.pr,
+    what_it_was_for: presentationText(purpose, 'pr #' + String(entry.pr) + '.purpose'),
+    why: presentationText(evidence?.summary ?? fallback, 'pr #' + String(entry.pr) + '.why'),
+  };
+}
+function genericNextAction(currentChild, children, activeHold, activeLanes, epochs) {
+  if (activeHold) return { kind: 'BLOCKING_HOLD', source: activeHold.id, text: 'Maintain the active blocking hold and wait for the authority-defined next window.' };
+  if (activeLanes.length) {
+    const lane = activeLanes[0];
+    return { kind: 'ACTIVE_LANE', source: lane.epoch_id, text: 'Continue the active ' + lane.epoch_id + ' / ' + lane.gate + ' lane for child #' + String(lane.child_issue) + '.' };
+  }
+  if (currentChild) {
+    const pending = epochs.find((epoch) => !['ACCEPTED', 'REJECTED', 'AMEND'].includes(epoch.state));
+    if (pending) return { kind: 'PENDING_EPOCH', source: pending.id, text: 'Complete or obtain authority for ' + pending.id + ' - ' + pending.name + '.' };
+  }
+  const queued = children.find((child) => child.lifecycle === 'QUEUED');
+  if (queued) return { kind: 'QUEUED_CHILD', source: String(queued.issue), text: 'Begin queued child #' + String(queued.issue) + ' - ' + queued.title + ' when its dependencies are terminal.' };
+  return { kind: 'PROGRAMME_COMPLETE', source: 'programme', text: 'The programme is complete; no further child or phase is pending.' };
+}
+function genericPrDescriptor(value, options, index) {
+  if (!isRecord(value) || !isIssue(value.number)) {
+    throw presentationError('HUMAN_PR_DESCRIPTOR_INVALID', 'prs[' + String(index) + '] has no positive number');
+  }
+  const purpose = value.purpose ?? (options.allow_pr_summary_fallback === true ? value.summary : null);
+  if (purpose === null || purpose === undefined) throw presentationError('HUMAN_PR_PURPOSE_MISSING', 'PR #' + String(value.number) + ' has no authoritative purpose');
+  return {
+    changed_surfaces: presentationArray(value.changed_surfaces ?? value.changes, 'pr #' + String(value.number) + '.changed_surfaces'),
+    child_issue: presentationIssue(value.child_issue, 'pr #' + String(value.number) + '.child_issue'),
+    design_constraints: presentationArray(value.design_constraints, 'pr #' + String(value.number) + '.design_constraints'),
+    eli5: value.eli5 === undefined || value.eli5 === null ? null : presentationText(value.eli5, 'pr #' + String(value.number) + '.eli5'),
+    evidence_refs: Array.isArray(value.evidence_refs) ? value.evidence_refs.map((item) => presentationId(item, 'pr #' + String(value.number) + '.evidence_refs')) : [],
+    number: value.number,
+    out_of_scope: presentationArray(value.out_of_scope, 'pr #' + String(value.number) + '.out_of_scope'),
+    purpose: presentationText(purpose, 'pr #' + String(value.number) + '.purpose'),
+    scope: presentationArray(value.scope, 'pr #' + String(value.number) + '.scope'),
+    summary: presentationText(value.summary ?? purpose, 'pr #' + String(value.number) + '.summary'),
+    validation_requirements: presentationArray(value.validation_requirements ?? value.validation, 'pr #' + String(value.number) + '.validation_requirements'),
+    candidate: value.candidate === undefined ? null : genericCandidate(value.candidate, 'pr #' + String(value.number) + '.candidate'),
+  };
+}
+function presentationChildRef(value, field, nullable = true) {
+  if (value === null || value === undefined) return nullable ? null : presentationError('HUMAN_PRESENTATION_CHILD_INVALID', field + ' is required');
+  if (!isRecord(value)) throw presentationError('HUMAN_PRESENTATION_CHILD_INVALID', field + ' must be an object');
+  return {
+    issue: presentationIssue(value.issue, field + '.issue'),
+    title: presentationText(value.title, field + '.title'),
+  };
+}
+function buildPresentationModel(state, options = {}) {
+  if (!isRecord(state)) throw presentationError('HUMAN_PRESENTATION_STATE_INVALID', 'state must be an object');
+  if (!isRecord(state.parent)) throw presentationError('HUMAN_PRESENTATION_STATE_INVALID', 'state.parent is required');
+  const repository = presentationText(state.repository ?? state.parent.repository, 'repository');
+  const parentIssue = presentationIssue(state.parent.issue ?? state.parent_issue, 'parent.issue');
+  const title = presentationText(state.parent.title ?? state.title, 'parent.title');
+  const goal = presentationText(state.parent.goal ?? state.goal ?? title, 'parent.goal');
+  if (!Array.isArray(state.children)) throw presentationError('HUMAN_PRESENTATION_STATE_INVALID', 'state.children must be an array');
+  const evidenceMap = genericEvidenceMap(state);
+  const descriptorMap = new Map();
+  for (const [index, descriptor] of (Array.isArray(state.prs) ? state.prs : []).entries()) {
+    const normalized = genericPrDescriptor(descriptor, options, index);
+    if (descriptorMap.has(normalized.number)) throw presentationError('HUMAN_PR_DESCRIPTOR_DUPLICATE', '#' + String(normalized.number));
+    descriptorMap.set(normalized.number, normalized);
+  }
+  const childrenInput = state.children.map((child, index) => {
+    if (!isRecord(child)) throw presentationError('HUMAN_CHILD_INVALID', 'children[' + String(index) + '] must be an object');
+    return child;
+  });
+  const issues = new Set();
+  const orders = new Set();
+  const normalizedChildren = childrenInput.map((child, index) => {
+    const issue = presentationIssue(child.issue, 'children[' + String(index) + '].issue');
+    const order = Number.isSafeInteger(child.order) ? child.order : index + 1;
+    if (order < 1 || orders.has(order)) throw presentationError('HUMAN_CHILD_ORDER_INVALID', 'child order is duplicated or not positive');
+    if (issues.has(issue)) throw presentationError('HUMAN_CHILD_DUPLICATE', '#' + String(issue));
+    orders.add(order);
+    issues.add(issue);
+    return { child, issue, order };
+  }).sort((left, right) => left.order - right.order).map(({ child, issue, order }) => {
+    const lifecycle = presentationStateName(child.lifecycle ?? child.state, 'child.lifecycle', 'QUEUED');
+    const titleValue = presentationText(child.title, 'child #' + String(issue) + '.title');
+    const summary = presentationText(child.summary ?? child.objective ?? titleValue, 'child #' + String(issue) + '.summary');
+    const objective = presentationText(child.objective ?? summary, 'child #' + String(issue) + '.objective');
+    const scope = presentationArray(child.scope, 'child #' + String(issue) + '.scope');
+    const boundaries = presentationArray(child.boundaries, 'child #' + String(issue) + '.boundaries');
+    const outOfScope = presentationArray(child.out_of_scope, 'child #' + String(issue) + '.out_of_scope');
+    const doneWhen = presentationArray(child.done_when, 'child #' + String(issue) + '.done_when');
+    const epochsInput = Array.isArray(child.epochs) ? child.epochs : [];
+    const lane = genericActiveLanes(state).find((item) => item.child_issue === issue) || null;
+    const epochs = epochsInput.map((epoch, epochIndex) => {
+      if (!isRecord(epoch)) throw presentationError('HUMAN_EPOCH_INVALID', 'child #' + String(issue) + '.epochs[' + String(epochIndex) + '] must be an object');
+      return genericEpochState(epoch, lane && (lane.epoch_id === epoch.id || lane.epoch_id === String(epoch.id)) ? lane : null, evidenceMap);
+    });
+    const prHistory = (Array.isArray(child.pr_registry) ? child.pr_registry : []).map((entry) => genericPrRegistryEntry(entry, descriptorMap, evidenceMap, options, issue));
+    return {
+      boundaries,
+      done_when: doneWhen,
+      eli5: presentationText(child.eli5 ?? summary, 'child #' + String(issue) + '.eli5'),
+      epochs,
+      finality: genericFinality(child),
+      issue,
+      lifecycle,
+      objective,
+      order,
+      out_of_scope: outOfScope,
+      pr_history: prHistory,
+      scope,
+      state: lifecycle,
+      summary,
+      title: titleValue,
+    };
+  });
+  const currentChildren = normalizedChildren.filter((child) => child.lifecycle === 'CURRENT');
+  if (currentChildren.length > 1) throw presentationError('HUMAN_CURRENT_CHILD_DUPLICATE', 'more than one current child is present');
+  const currentChild = currentChildren[0] || null;
+  const activeLanes = genericActiveLanes(state);
+  const activeHolds = genericActiveHolds(state, childrenInput.find((child) => child.issue === currentChild?.issue));
+  const activeHold = activeHolds[0] || null;
+  const activeLane = activeLanes[0] || null;
+  const acceptedHistory = currentChild
+    ? currentChild.epochs.filter((epoch) => epoch.state === 'ACCEPTED').map((epoch) => ({ epoch: epoch.id, name: epoch.name, summary: epoch.why }))
+    : [];
+  const pendingEpoch = currentChild?.epochs.find((epoch) => !['ACCEPTED', 'REJECTED', 'AMEND'].includes(epoch.state)) || null;
+  const nextPhase = pendingEpoch ? { id: pendingEpoch.id, name: pendingEpoch.name, purpose: pendingEpoch.purpose, state: pendingEpoch.state } : null;
+  const lifecycle = activeHold ? 'HELD' : currentChild ? 'ACTIVE' : normalizedChildren.every((child) => child.lifecycle === 'COMPLETED') ? 'COMPLETE' : 'PENDING';
+  const parentFinality = currentChild?.finality ?? (lifecycle === 'COMPLETE' ? 'MERGED' : 'UNSPECIFIED');
+  const parentBoundaries = isRecord(state.boundaries)
+    ? { in_scope: presentationArray(state.boundaries.in_scope ?? state.boundaries.scope, 'boundaries.in_scope'), out_of_scope: presentationArray(state.boundaries.out_of_scope, 'boundaries.out_of_scope') }
+    : { in_scope: presentationArray(state.scope ?? [goal], 'boundaries.in_scope'), out_of_scope: presentationArray(state.out_of_scope, 'boundaries.out_of_scope') };
+  const currentRef = currentChild ? { issue: currentChild.issue, title: currentChild.title } : null;
+  const model = {
+    boundaries: parentBoundaries,
+    children: normalizedChildren,
+    completed_work: normalizedChildren.filter((child) => child.lifecycle === 'COMPLETED').map((child) => ({ issue: child.issue, title: child.title, summary: child.summary })),
+    current_child: currentRef,
+    goal,
+    next_action: genericNextAction(currentChild, normalizedChildren, activeHold, activeLanes, currentChild?.epochs || []),
+    parent_issue: parentIssue,
+    repository,
+    schema: HUMAN_PRESENTATION_SCHEMA,
+    source: {
+      schema: presentationText(String(state.schema ?? 'canonical-state'), 'source.schema'),
+      digest: digestValue(state),
+    },
+    status: {
+      accepted_history: acceptedHistory,
+      active_gate: activeLane ? { child_issue: activeLane.child_issue, epoch_id: activeLane.epoch_id, gate: activeLane.gate, result: activeLane.result } : null,
+      active_hold: activeHold,
+      canonical_main: genericCanonicalMain(state),
+      current_child: currentRef,
+      finality: parentFinality,
+      lifecycle,
+      next_phase: nextPhase,
+    },
+    title,
+    version: HUMAN_PRESENTATION_VERSION,
+  };
+  const valid = validatePresentationModel(model);
+  if (!valid.ok) throw presentationError(valid.code, valid.reason || valid.code);
+  return deepFreeze(model);
+}
+function validatePresentationModel(value) {
+  try {
+    if (!isRecord(value) || !exactKeys(value, PRESENTATION_MODEL_KEYS)
+      || value.schema !== HUMAN_PRESENTATION_SCHEMA || value.version !== HUMAN_PRESENTATION_VERSION
+      || !isIssue(value.parent_issue) || !presentationText(value.repository, 'repository')
+      || !presentationText(value.title, 'title') || !presentationText(value.goal, 'goal')
+      || !isRecord(value.source) || !exactKeys(value.source, ['digest', 'schema'])
+      || !presentationText(value.source.schema, 'source.schema') || !isDigest(value.source.digest)
+      || !isRecord(value.boundaries) || !exactKeys(value.boundaries, ['in_scope', 'out_of_scope'])
+      || !isStringArray(value.boundaries.in_scope) || !isStringArray(value.boundaries.out_of_scope)
+      || !isRecord(value.next_action) || !exactKeys(value.next_action, ['kind', 'source', 'text'])
+      || !presentationText(value.next_action.kind, 'next_action.kind') || !presentationText(value.next_action.source, 'next_action.source')
+      || !presentationText(value.next_action.text, 'next_action.text') || !Array.isArray(value.completed_work)
+      || value.completed_work.some((item) => !isRecord(item) || !exactKeys(item, ['issue', 'summary', 'title'])
+        || !isIssue(item.issue) || !presentationText(item.title, 'completed_work.title') || !presentationText(item.summary, 'completed_work.summary'))
+      || !Array.isArray(value.children)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'top-level' });
+    const refValid = (ref) => ref === null || (isRecord(ref) && exactKeys(ref, ['issue', 'title']) && isIssue(ref.issue) && presentationText(ref.title, 'child_ref.title'));
+    if (!refValid(value.current_child) || !isRecord(value.status) || !exactKeys(value.status, PRESENTATION_STATUS_KEYS)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'status-shape' });
+    if (!refValid(value.status.current_child) || !presentationStateName(value.status.lifecycle, 'status.lifecycle')
+      || !presentationStateName(value.status.finality, 'status.finality') || !Array.isArray(value.status.accepted_history)
+      || value.status.accepted_history.some((item) => !isRecord(item) || !exactKeys(item, ['epoch', 'name', 'summary'])
+        || !presentationId(item.epoch, 'accepted_history.epoch', false) || !presentationText(item.name, 'accepted_history.name') || !presentationText(item.summary, 'accepted_history.summary'))) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'accepted-history' });
+    if (value.status.active_hold !== null && (!isRecord(value.status.active_hold) || !exactKeys(value.status.active_hold, ['evidence_ref', 'id', 'summary'])
+      || !presentationId(value.status.active_hold.id, 'active_hold.id', false)
+      || (value.status.active_hold.evidence_ref !== null && !presentationId(value.status.active_hold.evidence_ref, 'active_hold.evidence_ref'))
+      || !presentationText(value.status.active_hold.summary, 'active_hold.summary'))) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'active-hold' });
+    if (value.status.active_gate !== null && (!isRecord(value.status.active_gate) || !exactKeys(value.status.active_gate, ['child_issue', 'epoch_id', 'gate', 'result'])
+      || !isIssue(value.status.active_gate.child_issue) || !presentationId(value.status.active_gate.epoch_id, 'active_gate.epoch_id', false)
+      || !presentationId(value.status.active_gate.gate, 'active_gate.gate', false) || !presentationText(value.status.active_gate.result ?? '', 'active_gate.result'))) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'active-gate' });
+    if (value.status.canonical_main !== null && (!isRecord(value.status.canonical_main) || !exactKeys(value.status.canonical_main, ['branch', 'sha', 'source', 'tree'])
+      || !presentationText(value.status.canonical_main.branch ?? '', 'canonical_main.branch')
+      || !presentationText(value.status.canonical_main.sha ?? '', 'canonical_main.sha')
+      || !presentationText(value.status.canonical_main.tree ?? '', 'canonical_main.tree')
+      || !presentationText(value.status.canonical_main.source ?? '', 'canonical_main.source'))) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'canonical-main' });
+    if (value.status.next_phase !== null && (!isRecord(value.status.next_phase) || !exactKeys(value.status.next_phase, ['id', 'name', 'purpose', 'state'])
+      || !presentationId(value.status.next_phase.id, 'next_phase.id', false) || !presentationText(value.status.next_phase.name, 'next_phase.name')
+      || !presentationText(value.status.next_phase.purpose, 'next_phase.purpose') || !presentationStateName(value.status.next_phase.state, 'next_phase.state'))) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'next-phase' });
+    const issues = new Set();
+    const orders = new Set();
+    for (const child of value.children) {
+      if (!isRecord(child) || !exactKeys(child, PRESENTATION_CHILD_KEYS) || !isIssue(child.issue) || issues.has(child.issue)
+        || !Number.isSafeInteger(child.order) || child.order < 1 || orders.has(child.order)
+        || !presentationText(child.title, 'child.title') || !presentationText(child.summary, 'child.summary')
+        || !presentationText(child.objective, 'child.objective') || !presentationText(child.eli5, 'child.eli5')
+        || !presentationStateName(child.lifecycle, 'child.lifecycle') || !presentationStateName(child.state, 'child.state')
+        || !presentationStateName(child.finality, 'child.finality') || !isStringArray(child.scope)
+        || !isStringArray(child.boundaries) || !isStringArray(child.out_of_scope) || !isStringArray(child.done_when)
+        || !Array.isArray(child.epochs) || !Array.isArray(child.pr_history)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'child-shape' });
+      issues.add(child.issue); orders.add(child.order);
+      for (const epoch of child.epochs) {
+        if (!isRecord(epoch)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-record' });
+        if (!exactKeys(epoch, PRESENTATION_EPOCH_KEYS)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-keys' });
+        if (!presentationId(epoch.id, 'epoch.id', false)) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-id' });
+        if (!presentationText(epoch.name, 'epoch.name') || !presentationText(epoch.purpose, 'epoch.purpose')) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-copy' });
+        if (!presentationStateName(epoch.state, 'epoch.state') || !presentationText(epoch.outcome, 'epoch.outcome')) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-status' });
+        if (!presentationText(epoch.why, 'epoch.why')) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-why' });
+        if (epoch.evidence_ref !== null && !presentationId(epoch.evidence_ref, 'epoch.evidence_ref')) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'epoch-evidence' });
+      }
+      for (const item of child.pr_history) {
+        if (!isRecord(item) || !exactKeys(item, PRESENTATION_PR_HISTORY_KEYS) || !isIssue(item.pr) || !isIssue(item.child_issue)
+          || !presentationId(item.epoch_id, 'pr_history.epoch_id', false) || !presentationText(item.what_it_was_for, 'pr_history.what_it_was_for')
+          || !presentationText(item.outcome, 'pr_history.outcome') || !presentationText(item.why, 'pr_history.why')) return failure('HUMAN_PRESENTATION_MODEL_INVALID', { reason: 'pr-history' });
+      }
+    }
+    return success('HUMAN_PRESENTATION_MODEL_VALID', { model: clone(value), canonical_digest: digestValue(value) });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PRESENTATION_MODEL_INVALID', { reason: error.message });
+  }
+}
+function normalizePresentationModel(value, options = {}) {
+  if (isRecord(value) && value.schema === HUMAN_PRESENTATION_SCHEMA && value.version === HUMAN_PRESENTATION_VERSION) {
+    const valid = validatePresentationModel(value);
+    if (!valid.ok) throw presentationError(valid.code, valid.reason || valid.code);
+    return deepFreeze(clone(value));
+  }
+  return buildPresentationModel(value, options);
+}
+function presentationPayload(model) {
+  const prModel = model.schema === HUMAN_PR_PRESENTATION_SCHEMA;
+  return {
+    model: clone(model),
+    model_digest: digestValue(model),
+    schema: prModel ? HUMAN_PR_PRESENTATION_SCHEMA : HUMAN_PRESENTATION_SCHEMA,
+    source_digest: prModel ? model.source.descriptor_digest : model.source.digest,
+    version: HUMAN_PRESENTATION_VERSION,
+  };
+}
+function presentationDataLine(markers, kind, model) {
+  return markers[kind].data + base64url(JSON.stringify(presentationPayload(model))) + ' -->';
+}
+function renderParentPresentationBlock(model, markers) {
+  const lines = [
+    markers.parent.begin,
+    '# ' + model.title,
+    '',
+    '## Current programme status',
+    '- Repository: ' + model.repository,
+    '- Programme lifecycle: ' + model.status.lifecycle,
+    '- Programme finality: ' + model.status.finality,
+    '- Current child: ' + (model.current_child ? '#' + String(model.current_child.issue) + ' - ' + model.current_child.title : 'None'),
+  ];
+  if (model.status.accepted_history.length) {
+    lines.push('- Accepted history: ' + model.status.accepted_history.map((item) => item.epoch + ' - ' + item.name).join('; '));
+  }
+  if (model.status.next_phase) lines.push('- Next phase: ' + model.status.next_phase.id + ' - ' + model.status.next_phase.name);
+  if (model.status.canonical_main) {
+    const main = model.status.canonical_main;
+    lines.push('- Canonical main: ' + [main.branch, main.sha ? main.sha.slice(0, 12) : null].filter(Boolean).join(' @ '));
+  }
+  if (model.status.active_hold) lines.push('- Active hold: ' + model.status.active_hold.summary);
+  if (model.status.active_gate) lines.push('- Active gate: ' + model.status.active_gate.epoch_id + ' / ' + model.status.active_gate.gate);
+  lines.push(
+    '',
+    '## Immediate next',
+    '- ' + model.next_action.text,
+    '',
+    '## Children / work packages',
+    '| State | Child | Purpose / position |',
+    '| --- | --- | --- |',
+    ...model.children.map((child) => '| ' + presentationCell(child.state) + ' | #' + String(child.issue) + ' - ' + presentationCell(child.title) + ' | ' + presentationCell(child.summary) + ' |'),
+  );
+  if (model.completed_work.length) {
+    lines.push('', '## Completed work', '- Completed work is closed and remains visible in the work-package table above.');
+  }
+  lines.push(
+    '',
+    '## Programme boundaries',
+    '- Goal: ' + model.goal,
+    '### In scope',
+    ...presentationBullets(model.boundaries.in_scope),
+    '### Out of scope',
+    ...presentationBullets(model.boundaries.out_of_scope),
+    presentationDataLine(markers, 'parent', model),
+    markers.parent.end,
+  );
+  return lines.join('\n');
+}
+function renderChildPresentationBlock(model, markers, options = {}) {
+  const wantedIssue = options.child_issue === undefined ? model.current_child?.issue : options.child_issue;
+  const child = model.children.find((item) => item.issue === wantedIssue) || model.children[0];
+  if (!child) throw presentationError('HUMAN_CHILD_INVALID', 'no child is available for child rendering');
+  const lines = [
+    markers.child.begin,
+    '# ' + child.title,
+    '',
+    '## Status / Summary',
+    '- Child: #' + String(child.issue),
+    '- State: ' + child.state,
+    '- Lifecycle: ' + child.lifecycle,
+    '- Finality: ' + child.finality,
+    child.summary,
+    '',
+    '## Objective',
+    child.objective,
+    '',
+    '## Scope / Boundaries / Completion shape',
+    '### Scope',
+    ...presentationBullets(child.scope),
+    '### Boundaries',
+    ...presentationBullets(child.boundaries),
+    '### Out of scope',
+    ...presentationBullets(child.out_of_scope),
+    '### Done when',
+    ...presentationBullets(child.done_when),
+    '',
+    '## Epochs / phases',
+    '| Epoch | Name | Purpose | State | Outcome / why |',
+    '| --- | --- | --- | --- | --- |',
+    ...child.epochs.map((epoch) => '| ' + presentationCell(epoch.id) + ' | ' + presentationCell(epoch.name) + ' | ' + presentationCell(epoch.purpose) + ' | ' + presentationCell(epoch.state) + ' | ' + presentationCell(epoch.why || epoch.outcome) + ' |'),
+    '',
+    '## PR history',
+    '| PR | What it was for | Outcome | Why / disposition |',
+    '| --- | --- | --- | --- |',
+    ...child.pr_history.map((item) => '| #' + String(item.pr) + ' | ' + presentationCell(item.what_it_was_for) + ' | ' + presentationCell(item.outcome) + ' | ' + presentationCell(item.why) + ' |'),
+    '',
+    '## What remains / Immediate next',
+    '- ' + model.next_action.text,
+  ];
+  if (options.include_eli5 !== false) lines.push('', '## ELI5', child.eli5);
+  lines.push(presentationDataLine(markers, 'child', model), markers.child.end);
+  return lines.join('\n');
+}
+function renderPresentationModel(value, kind, options = {}) {
+  try {
+    if (!['parent', 'child'].includes(kind)) return failure('HUMAN_PRESENTATION_KIND_INVALID');
+    const model = normalizePresentationModel(value, options);
+    const markers = presentationMarkerStyle(options);
+    const body = kind === 'parent'
+      ? renderParentPresentationBlock(model, markers)
+      : renderChildPresentationBlock(model, markers, options);
+    return success('HUMAN_PRESENTATION_READY', {
+      body,
+      kind,
+      model: clone(model),
+      model_digest: digestValue(model),
+      source_digest: model.source.digest,
+    });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PRESENTATION_INVALID', { reason: error.message });
+  }
+}
+
+function splitHumanManagedBlock(body, kind, options = {}) {
+  if (typeof body !== 'string') return failure('HUMAN_PRESENTATION_BODY_INCOMPLETE');
+  const styles = [HUMAN_PRESENTATION_MARKERS, TOOLKIT_HUMAN_PRESENTATION_MARKERS].filter((markers) => markerFamilyPresent(body, markers, kind));
+  if (styles.length > 1) return failure('HUMAN_PRESENTATION_MIXED_MARKERS');
+  if (humanUnknownVersionResidue(body, kind)) return failure('HUMAN_PRESENTATION_VERSION_UNKNOWN');
+  if (humanMarkerVersionResidue(body, kind) && !styles.length) return failure('HUMAN_PRESENTATION_VERSION_UNKNOWN');
+  const markers = styles[0] || presentationMarkerStyle(options);
+  const marker = markers[kind];
+  const beginCount = countText(body, marker.begin);
+  const endCount = countText(body, marker.end);
+  const dataPrefixCount = countText(body, marker.data);
+  if (beginCount === 0 && endCount === 0 && dataPrefixCount === 0) return failure('HUMAN_PRESENTATION_MARKER_MISSING');
+  if (beginCount !== 1 || endCount !== 1 || dataPrefixCount !== 1) {
+    return failure(beginCount !== endCount ? 'HUMAN_PRESENTATION_PARTIAL' : 'HUMAN_PRESENTATION_DUPLICATE_MARKER');
+  }
+  const start = body.indexOf(marker.begin);
+  const end = body.indexOf(marker.end);
+  if (end < start) return failure('HUMAN_PRESENTATION_PARTIAL');
+  const legacyMarkers = kind === 'pr' ? [] : [MANAGED_MARKERS[kind], MANAGED_MARKERS[kind === 'parent' ? 'child' : 'parent']];
+  if (legacyMarkers.some((legacyMarker) => body.includes(legacyMarker.begin) || body.includes(legacyMarker.end))
+    || body.includes('GITHUB-PROGRAM-CANONICAL v5') || body.includes('GITHUB-PROGRAM-PROJECTION v1')) return failure('HUMAN_PRESENTATION_MIXED_MARKERS');
+  const managed = body.slice(start, end + marker.end.length);
+  return success('HUMAN_PRESENTATION_BLOCK_SPLIT', { markers, prefix: body.slice(0, start), managed, suffix: body.slice(end + marker.end.length) });
+}
+function parseHumanManagedBody(body, kind, options = {}) {
+  const split = splitHumanManagedBlock(body, kind, options);
+  if (!split.ok) return split;
+  const marker = split.markers[kind];
+  const expression = new RegExp('^' + marker.data.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_-]+) -->$', 'gm');
+  const encoded = markerPayload(split.managed, expression);
+  if (!encoded) return failure('HUMAN_PRESENTATION_PAYLOAD_INVALID');
+  const decoded = fromBase64url(encoded);
+  if (decoded === null) return failure('HUMAN_PRESENTATION_PAYLOAD_INVALID');
+  let payload;
+  try { payload = JSON.parse(decoded); } catch (_error) { return failure('HUMAN_PRESENTATION_PAYLOAD_INVALID'); }
+  if (!isRecord(payload) || !exactKeys(payload, ['model', 'model_digest', 'schema', 'source_digest', 'version'])
+    || payload.schema !== HUMAN_PRESENTATION_SCHEMA || payload.version !== HUMAN_PRESENTATION_VERSION
+    || !isDigest(payload.model_digest) || !isDigest(payload.source_digest)
+    || !isRecord(payload.model) || digestValue(payload.model) !== payload.model_digest
+    || payload.model.source?.digest !== payload.source_digest) return failure('HUMAN_PRESENTATION_PAYLOAD_INVALID');
+  const valid = validatePresentationModel(payload.model);
+  if (!valid.ok) return valid;
+  if (options.repository && options.repository !== payload.model.repository) return failure('HUMAN_PRESENTATION_IDENTITY_MISMATCH');
+  if (options.parent_issue && options.parent_issue !== payload.model.parent_issue) return failure('HUMAN_PRESENTATION_IDENTITY_MISMATCH');
+  const rerender = renderPresentationModel(payload.model, kind, { markers: split.markers, child_issue: options.child_issue, include_eli5: options.include_eli5 });
+  if (!rerender.ok || rerender.body !== split.managed) return failure('HUMAN_PRESENTATION_BYTES_NOT_DETERMINISTIC');
+  return success('HUMAN_PRESENTATION_VALID', {
+    kind,
+    model: clone(payload.model),
+    presentation: clone(payload),
+    prefix: split.prefix,
+    suffix: split.suffix,
+    managed: split.managed,
+    body_digest: sha256Text(body),
+    managed_digest: sha256Text(split.managed),
+    prefix_digest: sha256Text(split.prefix),
+    suffix_digest: sha256Text(split.suffix),
+  });
+}
+function parsePresentationBody(body, kind, options = {}) {
+  return kind === 'pr' ? parseHumanPrBody(body, options) : parseHumanManagedBody(body, kind, options);
+}
+function parseHumanPresentationBody(body, kind, options = {}) { return parsePresentationBody(body, kind, options); }
+function parseHumanParentBody(body, options = {}) { return parsePresentationBody(body, 'parent', options); }
+function parseHumanChildBody(body, options = {}) { return parsePresentationBody(body, 'child', options); }
+
+function prApplicability(value) {
+  const keys = ['before_after', 'hosted_qualification', 'recovery_evidence', 'repair_budget', 'repair_history', 'eli5'];
+  const result = Object.fromEntries(keys.map((key) => [key, false]));
+  if (value !== undefined && value !== null) {
+    if (!isRecord(value)) throw presentationError('HUMAN_PR_APPLICABILITY_INVALID', 'applicability must be an object');
+    if (Object.keys(value).some((key) => !keys.includes(key))) throw presentationError('HUMAN_PR_APPLICABILITY_INVALID', 'unknown optional applicability');
+    for (const key of keys) {
+      if (value[key] !== undefined && typeof value[key] !== 'boolean') throw presentationError('HUMAN_PR_APPLICABILITY_INVALID', key + ' must be boolean');
+      if (value[key] === true) result[key] = true;
+    }
+  }
+  return result;
+}
+function prOptionalValue(value, field, enabled) {
+  if (!enabled) return [];
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? presentationArray(value, 'pr.optional.' + field) : [presentationText(String(value), 'pr.optional.' + field)];
+}
+function normalizePrPresentationModel(input, options = {}) {
+  try {
+    if (isRecord(input) && input.schema === HUMAN_PR_PRESENTATION_SCHEMA && input.version === HUMAN_PRESENTATION_VERSION) {
+      const existing = validatePrPresentationModel(input);
+      if (!existing.ok) throw presentationError(existing.code, existing.reason || existing.code);
+      return deepFreeze(clone(input));
+    }
+    const value = isRecord(input) && isRecord(input.descriptor)
+      ? { ...input.descriptor, ...input }
+      : isRecord(input) && isRecord(input.pr_descriptor)
+        ? { ...input.pr_descriptor, ...input }
+        : input;
+    if (!isRecord(value)) throw presentationError('HUMAN_PR_INVALID', 'PR input must be an object');
+    const numberValue = value.number === undefined ? null : value.number;
+    if (numberValue !== null && !isIssue(numberValue)) throw presentationError('HUMAN_PR_NUMBER_INVALID', 'PR number must be positive or null');
+    const phase = options.phase ?? value.phase ?? (numberValue === null ? 'pre-number' : 'post-number');
+    if (!['pre-number', 'post-number'].includes(phase)) throw presentationError('HUMAN_PR_PHASE_INVALID', 'unknown PR presentation phase');
+    if (phase === 'post-number' && numberValue === null) throw presentationError('HUMAN_PR_NUMBER_REQUIRED', 'post-number rendering requires an assigned PR number');
+    const positionInput = isRecord(value.position) ? value.position : {};
+    const parentIssue = value.parent_issue ?? positionInput.parent ?? positionInput.parent_issue ?? null;
+    const childIssue = value.child_issue ?? positionInput.child ?? positionInput.child_issue ?? null;
+    const position = {
+      parent: parentIssue === null || parentIssue === undefined ? null : presentationIssue(parentIssue, 'position.parent'),
+      child: childIssue === null || childIssue === undefined ? null : presentationIssue(childIssue, 'position.child'),
+      epoch: value.epoch_id ?? value.epoch ?? positionInput.epoch ?? positionInput.epoch_id ?? null,
+      gate: value.gate ?? positionInput.gate ?? null,
+      role: value.role ?? positionInput.role ?? null,
+      completes_child: value.completes_child ?? positionInput.completes_child ?? false,
+      current_status: value.current_status ?? positionInput.current_status ?? null,
+    };
+    if (position.epoch !== null && position.epoch !== undefined) position.epoch = presentationText(String(position.epoch), 'position.epoch');
+    if (position.gate !== null && position.gate !== undefined) position.gate = presentationText(String(position.gate), 'position.gate');
+    if (position.role !== null && position.role !== undefined) position.role = presentationText(String(position.role), 'position.role');
+    if (typeof position.completes_child !== 'boolean') throw presentationError('HUMAN_PR_POSITION_INVALID', 'completes_child must be boolean');
+    if (position.current_status !== null && position.current_status !== undefined) position.current_status = presentationText(String(position.current_status), 'position.current_status');
+    const summary = presentationText(value.summary ?? value.purpose, 'pr.summary');
+    const why = presentationText(value.why ?? value.purpose, 'pr.why');
+    const candidateInput = value.candidate ?? value.lineage ?? null;
+    const applicability = prApplicability(value.applicability);
+    const optional = {
+      before_after: prOptionalValue(value.before_after ?? value.optional?.before_after, 'before_after', applicability.before_after),
+      hosted_qualification: prOptionalValue(value.hosted_qualification ?? value.optional?.hosted_qualification, 'hosted_qualification', applicability.hosted_qualification),
+      recovery_evidence: prOptionalValue(value.recovery_evidence ?? value.optional?.recovery_evidence, 'recovery_evidence', applicability.recovery_evidence),
+      repair_budget: prOptionalValue(value.repair_budget ?? value.optional?.repair_budget, 'repair_budget', applicability.repair_budget),
+      repair_history: prOptionalValue(value.repair_history ?? value.optional?.repair_history, 'repair_history', applicability.repair_history),
+    };
+    const model = {
+      applicability,
+      candidate: candidateInput === null ? null : genericCandidate(candidateInput, 'pr.candidate'),
+      changes: presentationArray(value.changed_surfaces ?? value.changes, 'pr.changes'),
+      eli5: value.eli5 === undefined || value.eli5 === null ? null : presentationText(value.eli5, 'pr.eli5'),
+      final_status: {
+        next: presentationText(value.next_action ?? value.next ?? 'Await the next authority-defined programme action.', 'pr.final_status.next'),
+        status: presentationText(value.final_status?.status ?? value.final_status ?? position.current_status ?? 'INTERMEDIATE / PENDING', 'pr.final_status.status'),
+      },
+      number: numberValue,
+      optional,
+      out_of_scope: presentationArray(value.out_of_scope, 'pr.out_of_scope'),
+      position,
+      schema: HUMAN_PR_PRESENTATION_SCHEMA,
+      scope: presentationArray(value.scope, 'pr.scope'),
+      source: {
+        descriptor_digest: digestValue({
+          changed_surfaces: value.changed_surfaces ?? value.changes ?? [],
+          child_issue: childIssue ?? null,
+          design_constraints: value.design_constraints ?? [],
+          eli5: value.eli5 ?? null,
+          evidence_refs: value.evidence_refs ?? [],
+          number: numberValue,
+          out_of_scope: value.out_of_scope ?? [],
+          purpose: value.purpose ?? why,
+          scope: value.scope ?? [],
+          summary: value.summary ?? summary,
+          validation_requirements: value.validation_requirements ?? value.validation ?? [],
+        }),
+      },
+      summary,
+      validation: presentationArray(value.validation_requirements ?? value.validation, 'pr.validation'),
+      version: HUMAN_PRESENTATION_VERSION,
+      why,
+    };
+    const valid = validatePrPresentationModel(model);
+    if (!valid.ok) throw presentationError(valid.code, valid.reason || valid.code);
+    return deepFreeze(model);
+  } catch (error) {
+    if (error.code) throw error;
+    throw presentationError('HUMAN_PR_INVALID', error.message);
+  }
+}
+function validatePrPresentationModel(value) {
+  try {
+    if (!isRecord(value) || !exactKeys(value, PRESENTATION_PR_KEYS)
+      || value.schema !== HUMAN_PR_PRESENTATION_SCHEMA || value.version !== HUMAN_PRESENTATION_VERSION
+      || (value.number !== null && !isIssue(value.number)) || !presentationText(value.summary, 'pr.summary') || !presentationText(value.why, 'pr.why')
+      || !isStringArray(value.changes) || !isStringArray(value.scope) || !isStringArray(value.out_of_scope) || !isStringArray(value.validation)
+      || !isRecord(value.position) || !exactKeys(value.position, ['child', 'completes_child', 'current_status', 'epoch', 'gate', 'parent', 'role'])
+      || (value.position.parent !== null && !isIssue(value.position.parent)) || (value.position.child !== null && !isIssue(value.position.child))
+      || (value.position.epoch !== null && !presentationText(value.position.epoch, 'position.epoch'))
+      || (value.position.gate !== null && !presentationText(value.position.gate, 'position.gate'))
+      || (value.position.role !== null && !presentationText(value.position.role, 'position.role'))
+      || typeof value.position.completes_child !== 'boolean'
+      || (value.position.current_status !== null && !presentationText(value.position.current_status, 'position.current_status'))
+      || !isRecord(value.final_status) || !exactKeys(value.final_status, ['next', 'status'])
+      || !presentationText(value.final_status.next, 'final_status.next') || !presentationText(value.final_status.status, 'final_status.status')
+      || !isRecord(value.source) || !exactKeys(value.source, ['descriptor_digest']) || !isDigest(value.source.descriptor_digest)
+      || (value.candidate !== null && !genericCandidate(value.candidate, 'pr.candidate'))
+      || (value.eli5 !== null && !presentationText(value.eli5, 'pr.eli5'))
+      || !isRecord(value.applicability) || !exactKeys(value.applicability, ['before_after', 'eli5', 'hosted_qualification', 'recovery_evidence', 'repair_budget', 'repair_history'])
+      || Object.values(value.applicability).some((item) => typeof item !== 'boolean')
+      || !isRecord(value.optional) || !exactKeys(value.optional, ['before_after', 'hosted_qualification', 'recovery_evidence', 'repair_budget', 'repair_history'])
+      || Object.entries(value.optional).some(([key, item]) => !Array.isArray(item) || !isStringArray(item) || !value.applicability[key] && item.length > 0)) return failure('HUMAN_PR_MODEL_INVALID');
+    if (value.applicability.eli5 && value.eli5 === null) return failure('HUMAN_PR_MODEL_INVALID', { reason: 'ELI5 applicability has no text' });
+    return success('HUMAN_PR_MODEL_VALID', { model: clone(value), canonical_digest: digestValue(value) });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PR_MODEL_INVALID', { reason: error.message });
+  }
+}
+function renderPrPresentationBlock(model, markers, options = {}) {
+  const numberLine = model.number === null ? 'PR number: pending provider assignment' : 'PR number: #' + String(model.number);
+  const lines = [
+    markers.pr.begin,
+    '# Pull request presentation',
+    '',
+    '## Summary',
+    numberLine,
+    model.summary,
+    '',
+    '## Programme position',
+    '- Parent: ' + (model.position.parent === null ? 'Not specified' : '#' + String(model.position.parent)),
+    '- Child: ' + (model.position.child === null ? 'Not specified' : '#' + String(model.position.child)),
+    '- Epoch / phase: ' + (model.position.epoch ?? 'Not specified'),
+    '- Gate: ' + (model.position.gate ?? 'Not specified'),
+    '- Role: ' + (model.position.role ?? 'Not specified'),
+    '- Completes child: ' + String(model.position.completes_child),
+    '- Current status: ' + (model.position.current_status ?? 'Not specified'),
+    '',
+    '## What changed',
+    ...presentationBullets(model.changes),
+    '',
+    '## Why',
+    model.why,
+    '',
+    '## Scope',
+    ...presentationBullets(model.scope),
+    '',
+    '## Out of scope',
+    ...presentationBullets(model.out_of_scope),
+    '',
+    '## Validation',
+    ...presentationBullets(model.validation),
+    '',
+    '## Candidate / lineage',
+  ];
+  // Keep provider-observed facts separate from programme intent.  A candidate
+  // is shown only when the structured input supplied one.
+  if (model.candidate) {
+    for (const key of ['repository', 'branch', 'base_ref', 'base_sha', 'head', 'tree', 'version']) {
+      if (model.candidate[key] !== undefined) lines.push('- ' + key + ': ' + model.candidate[key]);
+    }
+  } else {
+    lines.push('Not specified.');
+  }
+  lines.push(
+    '',
+    '## Final status / what happens next',
+    '- Status: ' + model.final_status.status,
+    '- Next: ' + model.final_status.next,
+  );
+  const optionalHeadings = [
+    ['repair_history', 'Repair history', 'repair_history'],
+    ['before_after', 'Before / after', 'before_after'],
+    ['repair_budget', 'Repair budget', 'repair_budget'],
+    ['hosted_qualification', 'Hosted qualification', 'hosted_qualification'],
+    ['recovery_evidence', 'Recovery-specific evidence', 'recovery_evidence'],
+  ];
+  for (const [flag, heading, key] of optionalHeadings) {
+    if (model.applicability[flag]) lines.push('', '## ' + heading, ...presentationBullets(model.optional[key]));
+  }
+  if (model.applicability.eli5) lines.push('', '## ELI5', model.eli5);
+  lines.push(presentationDataLine(markers, 'pr', model), markers.pr.end);
+  return lines.join('\n');
+}
+function renderHumanPrBody(input, options = {}) {
+  try {
+    const model = normalizePrPresentationModel(input, options);
+    const markers = presentationMarkerStyle(options);
+    const body = renderPrPresentationBlock(model, markers, options);
+    return success('HUMAN_PR_PRESENTATION_READY', {
+      body,
+      model: clone(model),
+      model_digest: digestValue(model),
+      source_digest: model.source.descriptor_digest,
+    });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PR_INVALID', { reason: error.message });
+  }
+}
+function renderPrPresentation(input, options = {}) { return renderHumanPrBody(input, options); }
+function parseHumanPrBody(body, options = {}) {
+  const split = splitHumanManagedBlock(body, 'pr', options);
+  if (!split.ok) return split;
+  const marker = split.markers.pr;
+  const expression = new RegExp('^' + marker.data.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_-]+) -->$', 'gm');
+  const encoded = markerPayload(split.managed, expression);
+  if (!encoded) return failure('HUMAN_PR_PAYLOAD_INVALID');
+  const decoded = fromBase64url(encoded);
+  if (decoded === null) return failure('HUMAN_PR_PAYLOAD_INVALID');
+  let payload;
+  try { payload = JSON.parse(decoded); } catch (_error) { return failure('HUMAN_PR_PAYLOAD_INVALID'); }
+  if (!isRecord(payload) || !exactKeys(payload, ['model', 'model_digest', 'schema', 'source_digest', 'version'])
+    || payload.schema !== HUMAN_PR_PRESENTATION_SCHEMA || payload.version !== HUMAN_PRESENTATION_VERSION
+    || !isDigest(payload.model_digest) || !isDigest(payload.source_digest) || !isRecord(payload.model)
+    || digestValue(payload.model) !== payload.model_digest || payload.model.source?.descriptor_digest !== payload.source_digest) return failure('HUMAN_PR_PAYLOAD_INVALID');
+  const valid = validatePrPresentationModel(payload.model);
+  if (!valid.ok) return valid;
+  if (options.number !== undefined && options.number !== payload.model.number) return failure('HUMAN_PR_IDENTITY_MISMATCH');
+  const rerender = renderHumanPrBody(payload.model, { markers: split.markers, phase: payload.model.number === null ? 'pre-number' : 'post-number' });
+  if (!rerender.ok || rerender.body !== split.managed) return failure('HUMAN_PR_BYTES_NOT_DETERMINISTIC');
+  return success('HUMAN_PR_VALID', {
+    model: clone(payload.model),
+    presentation: clone(payload),
+    prefix: split.prefix,
+    suffix: split.suffix,
+    managed: split.managed,
+    body_digest: sha256Text(body),
+    managed_digest: sha256Text(split.managed),
+    prefix_digest: sha256Text(split.prefix),
+    suffix_digest: sha256Text(split.suffix),
+  });
+}
+function bindHumanPrNumber(input, number, options = {}) {
+  try {
+    const assigned = presentationIssue(number, 'pr.number');
+    const source = isRecord(input) && isRecord(input.descriptor) ? { ...input, descriptor: { ...input.descriptor, number: assigned } }
+      : isRecord(input) && isRecord(input.pr_descriptor) ? { ...input, pr_descriptor: { ...input.pr_descriptor, number: assigned } }
+        : { ...input, number: assigned };
+    return renderHumanPrBody(source, { ...options, phase: 'post-number' });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PR_NUMBER_INVALID', { reason: error.message });
+  }
+}
+function verifyHumanPrBodyIdentity(body, expected, options = {}) {
+  const parsed = parseHumanPrBody(body, options);
+  if (!parsed.ok) return parsed;
+  const rendered = renderHumanPrBody(expected ?? parsed.model, { ...options, phase: parsed.model.number === null ? 'pre-number' : 'post-number', markers: parsed.presentation ? (isHumanPresentationBody(body, 'pr') && body.includes('AI-AGENT-TOOLKIT:') ? TOOLKIT_HUMAN_PRESENTATION_MARKERS : HUMAN_PRESENTATION_MARKERS) : undefined });
+  if (!rendered.ok || rendered.body !== parsed.managed) return failure('HUMAN_PR_IDENTITY_MISMATCH');
+  return success('HUMAN_PR_IDENTITY_VALID', { model: parsed.model, body_digest: sha256Text(body) });
+}
+function bindHistoryCandidateNumber(decision, prNumber, candidate) {
+  try {
+    const normalized = clone(decision);
+    const number = presentationIssue(prNumber, 'accepted_candidate_identities.pr_number');
+    const identity = { pr_number: number, candidate: genericCandidate(candidate, 'accepted_candidate_identities.candidate', false) };
+    normalized.accepted_candidate_identities = (normalized.accepted_candidate_identities || []).filter((item) => item.pr_number !== number);
+    normalized.accepted_candidate_identities.push(identity);
+    return createHumanSurfaceConformanceDecision(normalized);
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_CANDIDATE_INVALID', { reason: error.message });
+  }
+}
+
+const HUMAN_HISTORY_DECISION_KEYS = Object.freeze([
+  'accepted_candidate_identities', 'authority', 'history_additions', 'invariants',
+  'lock', 'repository', 'root', 'schema', 'source',
+]);
+const HUMAN_HISTORY_SOURCE_KEYS = Object.freeze(['canonical_digest', 'immutable_digest', 'schema', 'state']);
+const HUMAN_HISTORY_AUTHORITY_KEYS = Object.freeze(['body_digest', 'comment_id', 'issue', 'kind', 'repository']);
+const HUMAN_HISTORY_ADDITION_KEYS = Object.freeze(['evidence_refs', 'historical_transitions', 'prs', 'registry']);
+const HUMAN_HISTORY_INVARIANT_KEYS = Object.freeze([
+  'allowed_paths', 'immutable_digest', 'no_state_movement',
+  'no_provider_target_rebase', 'provider_evidence_observational_only',
+]);
+const HUMAN_PROVIDER_EVIDENCE_KEYS = Object.freeze([
+  'decision_digest', 'evidence_digest', 'observations', 'provider_evidence_observational_only',
+  'readback', 'repository', 'source_canonical_digest', 'target_rebase', 'schema',
+]);
+const HUMAN_PROVIDER_OBSERVATION_KEYS = Object.freeze(['base', 'head', 'merged', 'pr_number', 'revision', 'state', 'tree']);
+
+function validateGenericHistorySource(value) {
+  if (!isRecord(value) || typeof value.repository !== 'string' || !Array.isArray(value.children)
+    || !Array.isArray(value.prs) || !Array.isArray(value.evidence_refs) || !Array.isArray(value.historical_transitions)) return false;
+  const childIssues = new Set();
+  return value.children.every((child) => isRecord(child) && isIssue(child.issue) && Array.isArray(child.pr_registry)
+    && !childIssues.has(child.issue) && childIssues.add(child.issue))
+    && value.prs.every((item) => isRecord(item) && isIssue(item.number))
+    && value.evidence_refs.every((item) => isRecord(item) && isSafeId(item.id, 512))
+    && value.historical_transitions.every((item) => isRecord(item) && isSafeId(item.id, 512));
+}
+function validateGenericHistoryDescriptor(value) {
+  const required = ['changed_surfaces', 'child_issue', 'design_constraints', 'eli5', 'evidence_refs', 'number', 'out_of_scope', 'purpose', 'scope', 'summary', 'validation_requirements'];
+  if (!hasOnly(value, required, ['candidate']) || !isStringArray(value.changed_surfaces) || !isIssue(value.child_issue)
+    || !isStringArray(value.design_constraints) || typeof value.eli5 !== 'string' || !Array.isArray(value.evidence_refs)
+    || value.evidence_refs.some((item) => !isSafeId(item, 512)) || !isIssue(value.number) || !isStringArray(value.out_of_scope)
+    || typeof value.purpose !== 'string' || !isStringArray(value.scope) || typeof value.summary !== 'string'
+    || !isStringArray(value.validation_requirements)) return false;
+  return !Object.prototype.hasOwnProperty.call(value, 'candidate') || value.candidate === null || validateGenericCandidate(value.candidate);
+}
+function validateGenericCandidate(value) {
+  if (!isRecord(value)) return false;
+  const keys = ['repository', 'branch', 'base_ref', 'base_sha', 'head', 'tree', 'version'];
+  if (!exactKeys(value, keys)) return false;
+  return typeof value.repository === 'string' && typeof value.branch === 'string' && typeof value.base_ref === 'string'
+    && typeof value.version === 'string' && isSha(value.base_sha) && isSha(value.head) && isSha(value.tree)
+    && isSafeId(value.branch, 240) && isSafeId(value.repository, 240) && isSafeId(value.base_ref, 240);
+}
+function validateGenericHistoryRegistryEntry(value) {
+  const required = ['accepted_evidence_ref', 'completes_child', 'epoch_id', 'pr', 'retirement_evidence_ref', 'role', 'status'];
+  const optional = ['candidate', 'draft', 'github_state', 'merged', 'retention_evidence_ref'];
+  if (!hasOnly(value, required, optional) || !isIssue(value.pr) || typeof value.completes_child !== 'boolean'
+    || !isSafeId(value.epoch_id, 512) || !isSafeId(value.role, 128) || !isSafeId(value.status, 128)
+    || (value.accepted_evidence_ref !== null && !isSafeId(value.accepted_evidence_ref, 512))
+    || (value.retirement_evidence_ref !== null && !isSafeId(value.retirement_evidence_ref, 512))
+    || (Object.prototype.hasOwnProperty.call(value, 'retention_evidence_ref') && value.retention_evidence_ref !== null && !isSafeId(value.retention_evidence_ref, 512))
+    || (Object.prototype.hasOwnProperty.call(value, 'candidate') && value.candidate !== null && !validateGenericCandidate(value.candidate))
+    || (Object.prototype.hasOwnProperty.call(value, 'draft') && typeof value.draft !== 'boolean')
+    || (Object.prototype.hasOwnProperty.call(value, 'merged') && typeof value.merged !== 'boolean')
+    || (Object.prototype.hasOwnProperty.call(value, 'github_state') && !isSafeId(value.github_state, 128))) return false;
+  return true;
+}
+function validateGenericHistoryEvidenceRef(value) {
+  return isRecord(value) && exactKeys(value, ['id', 'kind', 'reference', 'summary'])
+    && isSafeId(value.id, 512) && isSafeId(value.kind, 128) && isSafeId(value.reference, 1024)
+    && typeof value.summary === 'string' && !/\r|\n/.test(value.summary);
+}
+function validateGenericHistoryTransition(value) {
+  return isRecord(value) && exactKeys(value, ['child_issue', 'disposition', 'epoch_id', 'evidence_ref', 'gate', 'id'])
+    && isIssue(value.child_issue) && isSafeId(value.disposition, 128) && isSafeId(value.epoch_id, 512)
+    && isSafeId(value.evidence_ref, 512) && isSafeId(value.gate, 128) && isSafeId(value.id, 512);
+}
+function historySourceImmutableProjection(state) {
+  const projection = clone(state);
+  projection.prs = [];
+  projection.evidence_refs = [];
+  projection.historical_transitions = [];
+  projection.children = projection.children.map((child) => ({ ...child, pr_registry: [] }));
+  return projection;
+}
+function humanHistoryImmutableDigest(state) { return digestValue(historySourceImmutableProjection(state)); }
+function normalizeHistoryDecisionInput(input) {
+  if (!isRecord(input)) throw presentationError('HUMAN_HISTORY_DECISION_INVALID', 'decision must be an object');
+  for (const forbidden of ['desired', 'target', 'target_state', 'patch', 'provider_target']) {
+    if (Object.prototype.hasOwnProperty.call(input, forbidden)) throw presentationError('HUMAN_HISTORY_TARGET_FORBIDDEN', forbidden + ' is not part of a history decision');
+  }
+  const sourceInput = isRecord(input.source) ? input.source : {};
+  const sourceState = sourceInput.state ?? input.source_state ?? input.state;
+  if (!isRecord(sourceState)) throw presentationError('HUMAN_HISTORY_SOURCE_INVALID', 'source state is required');
+  const authorityInput = isRecord(input.authority) ? input.authority : isRecord(input.web_authority) ? input.web_authority : {};
+  const historyInput = isRecord(input.history_additions) ? input.history_additions : isRecord(input.history) ? input.history : {};
+  const sourceDigest = sourceInput.canonical_digest ?? input.source_canonical_digest ?? input.source_digest ?? digestValue(sourceState);
+  const immutableDigest = sourceInput.immutable_digest ?? input.immutable_digest ?? humanHistoryImmutableDigest(sourceState);
+  const authority = {
+    body_digest: authorityInput.body_digest,
+    comment_id: authorityInput.comment_id,
+    issue: authorityInput.issue,
+    kind: authorityInput.kind ?? 'USER_WEB_CONTROLLER',
+    repository: authorityInput.repository ?? input.repository ?? sourceState.repository,
+  };
+  return {
+    accepted_candidate_identities: input.accepted_candidate_identities ?? [],
+    authority,
+    history_additions: {
+      evidence_refs: historyInput.evidence_refs ?? [],
+      historical_transitions: historyInput.historical_transitions ?? historyInput.transitions ?? [],
+      prs: historyInput.prs ?? historyInput.pr_descriptors ?? [],
+      registry: historyInput.registry ?? historyInput.registry_entries ?? [],
+    },
+    invariants: {
+      allowed_paths: input.invariants?.allowed_paths ?? HUMAN_HISTORY_ALLOWED_PATHS,
+      immutable_digest: input.invariants?.immutable_digest ?? immutableDigest,
+      no_state_movement: input.invariants?.no_state_movement ?? true,
+      no_provider_target_rebase: input.invariants?.no_provider_target_rebase ?? true,
+      provider_evidence_observational_only: input.invariants?.provider_evidence_observational_only ?? true,
+    },
+    lock: input.lock ?? input.design_lock,
+    repository: input.repository ?? sourceState.repository,
+    root: input.root ?? input.recovery_root,
+    schema: HUMAN_HISTORY_DECISION_SCHEMA,
+    source: {
+      canonical_digest: sourceDigest,
+      immutable_digest: immutableDigest,
+      schema: sourceInput.schema ?? sourceState.schema ?? 'canonical-state',
+      state: clone(sourceState),
+    },
+  };
+}
+function validateHumanSurfaceConformanceDecision(value) {
+  try {
+    if (!isRecord(value) || !exactKeys(value, HUMAN_HISTORY_DECISION_KEYS) || value.schema !== HUMAN_HISTORY_DECISION_SCHEMA
+      || !isSafeId(value.root, 512) || !isSafeId(value.lock, 512) || !isSafeId(value.repository, 512)
+      || !isRecord(value.source) || !exactKeys(value.source, HUMAN_HISTORY_SOURCE_KEYS)
+      || !isSafeId(value.source.schema, 512) || !isDigest(value.source.canonical_digest) || !isDigest(value.source.immutable_digest)
+      || !isRecord(value.source.state) || !validateGenericHistorySource(value.source.state)
+      || value.source.state.repository !== value.repository || digestValue(value.source.state) !== value.source.canonical_digest
+      || humanHistoryImmutableDigest(value.source.state) !== value.source.immutable_digest
+      || !isRecord(value.authority) || !exactKeys(value.authority, HUMAN_HISTORY_AUTHORITY_KEYS)
+      || value.authority.kind !== 'USER_WEB_CONTROLLER' || value.authority.repository !== value.repository
+      || !isIssue(value.authority.issue) || !Number.isSafeInteger(value.authority.comment_id) || value.authority.comment_id < 1
+      || !isDigest(value.authority.body_digest) || !isRecord(value.history_additions)
+      || !exactKeys(value.history_additions, HUMAN_HISTORY_ADDITION_KEYS)
+      || !Array.isArray(value.history_additions.prs) || !value.history_additions.prs.every(validateGenericHistoryDescriptor)
+      || !Array.isArray(value.history_additions.registry) || !value.history_additions.registry.every((item) => isRecord(item)
+        && exactKeys(item, ['child_issue', 'entry']) && isIssue(item.child_issue) && validateGenericHistoryRegistryEntry(item.entry)
+        && item.entry.pr === item.entry.pr)
+      || !Array.isArray(value.history_additions.evidence_refs) || !value.history_additions.evidence_refs.every(validateGenericHistoryEvidenceRef)
+      || !Array.isArray(value.history_additions.historical_transitions) || !value.history_additions.historical_transitions.every(validateGenericHistoryTransition)
+      || !isRecord(value.invariants) || !exactKeys(value.invariants, HUMAN_HISTORY_INVARIANT_KEYS)
+      || !same(value.invariants.allowed_paths, HUMAN_HISTORY_ALLOWED_PATHS) || value.invariants.immutable_digest !== value.source.immutable_digest
+      || value.invariants.no_state_movement !== true || value.invariants.no_provider_target_rebase !== true
+      || value.invariants.provider_evidence_observational_only !== true || !Array.isArray(value.accepted_candidate_identities)) return failure('HUMAN_HISTORY_DECISION_INVALID');
+    const prNumbers = new Set();
+    for (const item of value.history_additions.prs) {
+      if (prNumbers.has(item.number)) return failure('HUMAN_HISTORY_DUPLICATE_PR');
+      prNumbers.add(item.number);
+    }
+    const registryKeys = new Set();
+    for (const item of value.history_additions.registry) {
+      const key = String(item.child_issue) + ':' + String(item.entry.pr);
+      if (registryKeys.has(key)) return failure('HUMAN_HISTORY_DUPLICATE_REGISTRY');
+      registryKeys.add(key);
+    }
+    const evidenceIds = new Set();
+    for (const item of value.history_additions.evidence_refs) {
+      if (evidenceIds.has(item.id)) return failure('HUMAN_HISTORY_DUPLICATE_EVIDENCE');
+      evidenceIds.add(item.id);
+    }
+    const transitionIds = new Set();
+    for (const item of value.history_additions.historical_transitions) {
+      if (transitionIds.has(item.id)) return failure('HUMAN_HISTORY_DUPLICATE_TRANSITION');
+      transitionIds.add(item.id);
+    }
+    const candidatePrs = new Set();
+    for (const item of value.accepted_candidate_identities) {
+      if (!isRecord(item) || !exactKeys(item, ['candidate', 'pr_number']) || !isIssue(item.pr_number)
+        || candidatePrs.has(item.pr_number) || !validateGenericCandidate(item.candidate)) return failure('HUMAN_HISTORY_CANDIDATE_INVALID');
+      candidatePrs.add(item.pr_number);
+    }
+    return success('HUMAN_HISTORY_DECISION_VALID', { decision: clone(value), decision_digest: digestValue(value) });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_DECISION_INVALID', { reason: error.message });
+  }
+}
+function createHumanSurfaceConformanceDecision(input = {}) {
+  const normalized = normalizeHistoryDecisionInput(input);
+  const valid = validateHumanSurfaceConformanceDecision(normalized);
+  if (!valid.ok) throw presentationError(valid.code, valid.reason || valid.code);
+  return deepFreeze(normalized);
+}
+function prepareHumanSurfaceConformanceDecision(input = {}) {
+  try {
+    const decision = createHumanSurfaceConformanceDecision(input);
+    return success('HUMAN_HISTORY_DECISION_READY', { decision: clone(decision), decision_digest: digestValue(decision) });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_DECISION_INVALID', { reason: error.message });
+  }
+}
+function historySameOrAppend(items, additions, keyFn, label) {
+  const result = clone(items);
+  const byKey = new Map(result.map((item) => [keyFn(item), item]));
+  for (const addition of additions) {
+    const key = keyFn(addition);
+    if (byKey.has(key)) {
+      if (!same(byKey.get(key), addition)) throw presentationError('HUMAN_HISTORY_CONFLICT', label + ' ' + key + ' conflicts with source');
+    } else {
+      result.push(clone(addition));
+      byKey.set(key, addition);
+    }
+  }
+  return result;
+}
+function applyHumanHistoryDeltaInternal(sourceState, decision) {
+  const next = clone(sourceState);
+  next.prs = historySameOrAppend(Array.isArray(next.prs) ? next.prs : [], decision.history_additions.prs, (item) => String(item.number), 'PR');
+  next.evidence_refs = historySameOrAppend(Array.isArray(next.evidence_refs) ? next.evidence_refs : [], decision.history_additions.evidence_refs, (item) => item.id, 'evidence');
+  next.historical_transitions = historySameOrAppend(Array.isArray(next.historical_transitions) ? next.historical_transitions : [], decision.history_additions.historical_transitions, (item) => item.id, 'transition');
+  for (const addition of decision.history_additions.registry) {
+    const child = next.children.find((item) => item.issue === addition.child_issue);
+    if (!child) throw presentationError('HUMAN_HISTORY_CHILD_MISSING', '#' + String(addition.child_issue));
+    child.pr_registry = historySameOrAppend(Array.isArray(child.pr_registry) ? child.pr_registry : [], [addition.entry], (item) => String(item.pr), 'registry #' + String(addition.child_issue));
+  }
+  return next;
+}
+function applyHumanSurfaceHistoryDecision(sourceState, decision) {
+  const valid = validateHumanSurfaceConformanceDecision(decision);
+  if (!valid.ok) return valid;
+  if (!isRecord(sourceState) || digestValue(sourceState) !== decision.source.canonical_digest) return failure('HUMAN_HISTORY_SOURCE_DIGEST_MISMATCH');
+  try {
+    const next = applyHumanHistoryDeltaInternal(sourceState, decision);
+    if (humanHistoryImmutableDigest(next) !== decision.source.immutable_digest) return failure('HUMAN_HISTORY_STATE_MOVEMENT');
+    return success('HUMAN_HISTORY_TARGET_READY', {
+      state: deepFreeze(next),
+      decision: clone(decision),
+      decision_digest: digestValue(decision),
+      immutable_digest: humanHistoryImmutableDigest(next),
+      allowed_paths: [...HUMAN_HISTORY_ALLOWED_PATHS],
+      provider_evidence_observational_only: true,
+      target_rebase: false,
+    });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_APPLY_INVALID', { reason: error.message });
+  }
+}
+function validateHistoryOnlyDelta(sourceState, targetState, decision) {
+  const valid = validateHumanSurfaceConformanceDecision(decision);
+  if (!valid.ok) return valid;
+  if (!isRecord(sourceState) || !isRecord(targetState) || digestValue(sourceState) !== decision.source.canonical_digest) return failure('HUMAN_HISTORY_SOURCE_DIGEST_MISMATCH');
+  const applied = applyHumanSurfaceHistoryDecision(sourceState, decision);
+  if (!applied.ok) return applied;
+  if (!same(applied.state, targetState)) return failure('HUMAN_HISTORY_DELTA_INVALID');
+  if (humanHistoryImmutableDigest(sourceState) !== humanHistoryImmutableDigest(targetState)) return failure('HUMAN_HISTORY_STATE_MOVEMENT');
+  return success('HUMAN_HISTORY_DELTA_VALID', { source_digest: digestValue(sourceState), target_digest: digestValue(targetState) });
+}
+function normalizeHumanSurfaceConformanceEvidence(input = {}) {
+  if (!isRecord(input)) throw presentationError('HUMAN_HISTORY_EVIDENCE_INVALID', 'evidence must be an object');
+  const observations = Array.isArray(input.observations) ? input.observations.map((item, index) => {
+    if (!isRecord(item)) throw presentationError('HUMAN_HISTORY_EVIDENCE_INVALID', 'observation ' + String(index) + ' is not an object');
+    return {
+      base: item.base === null || item.base === undefined ? null : presentationText(String(item.base), 'observation.base'),
+      head: item.head === null || item.head === undefined ? null : presentationText(String(item.head), 'observation.head'),
+      merged: item.merged === null || item.merged === undefined ? null : item.merged,
+      pr_number: presentationIssue(item.pr_number, 'observation.pr_number'),
+      revision: item.revision === null || item.revision === undefined ? null : presentationText(String(item.revision), 'observation.revision'),
+      state: presentationText(String(item.state), 'observation.state'),
+      tree: item.tree === null || item.tree === undefined ? null : presentationText(String(item.tree), 'observation.tree'),
+    };
+  }) : [];
+  const readback = isRecord(input.readback) ? { complete: input.readback.complete, exact: input.readback.exact } : { complete: false, exact: false };
+  if (typeof readback.complete !== 'boolean' || typeof readback.exact !== 'boolean') throw presentationError('HUMAN_HISTORY_EVIDENCE_INVALID', 'readback must contain booleans');
+  const result = {
+    decision_digest: input.decision_digest,
+    evidence_digest: input.evidence_digest,
+    observations,
+    provider_evidence_observational_only: input.provider_evidence_observational_only,
+    readback,
+    repository: input.repository,
+    schema: HUMAN_HISTORY_EVIDENCE_SCHEMA,
+    source_canonical_digest: input.source_canonical_digest,
+    target_rebase: input.target_rebase,
+  };
+  if (result.evidence_digest === undefined) {
+    const unsigned = clone(result);
+    delete unsigned.evidence_digest;
+    result.evidence_digest = digestValue(unsigned);
+  }
+  return result;
+}
+function validateHumanSurfaceConformanceEvidence(value, decision) {
+  try {
+    if (!isRecord(value) || !exactKeys(value, HUMAN_PROVIDER_EVIDENCE_KEYS) || value.schema !== HUMAN_HISTORY_EVIDENCE_SCHEMA
+      || !isSafeId(value.repository, 512) || !isDigest(value.decision_digest) || !isDigest(value.source_canonical_digest)
+      || !Array.isArray(value.observations) || !isRecord(value.readback) || !exactKeys(value.readback, ['complete', 'exact'])
+      || typeof value.readback.complete !== 'boolean' || typeof value.readback.exact !== 'boolean'
+      || value.provider_evidence_observational_only !== true || value.target_rebase !== false
+      || !isDigest(value.evidence_digest)) return failure('HUMAN_HISTORY_EVIDENCE_INVALID');
+    for (const item of value.observations) {
+      if (!isRecord(item) || !exactKeys(item, HUMAN_PROVIDER_OBSERVATION_KEYS) || !isIssue(item.pr_number)
+        || !presentationText(item.state, 'observation.state')
+        || (item.base !== null && !presentationText(item.base, 'observation.base'))
+        || (item.head !== null && !presentationText(item.head, 'observation.head'))
+        || (item.tree !== null && !presentationText(item.tree, 'observation.tree'))
+        || (item.revision !== null && !presentationText(item.revision, 'observation.revision'))
+        || (item.merged !== null && typeof item.merged !== 'boolean')) return failure('HUMAN_HISTORY_EVIDENCE_INVALID');
+    }
+    const unsigned = clone(value);
+    delete unsigned.evidence_digest;
+    if (digestValue(unsigned) !== value.evidence_digest) return failure('HUMAN_HISTORY_EVIDENCE_DIGEST_INVALID');
+    if (decision) {
+      const decisionValid = validateHumanSurfaceConformanceDecision(decision);
+      if (!decisionValid.ok || value.decision_digest !== digestValue(decision) || value.source_canonical_digest !== decision.source.canonical_digest || value.repository !== decision.repository) return failure('HUMAN_HISTORY_EVIDENCE_BINDING_INVALID');
+    }
+    return success('HUMAN_HISTORY_EVIDENCE_VALID', { evidence: clone(value), evidence_digest: value.evidence_digest });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_EVIDENCE_INVALID', { reason: error.message });
+  }
+}
+function createHumanSurfaceConformanceEvidence(input = {}) {
+  const value = normalizeHumanSurfaceConformanceEvidence(input);
+  const valid = validateHumanSurfaceConformanceEvidence(value, input.decision);
+  if (!valid.ok) throw presentationError(valid.code, valid.reason || valid.code);
+  return deepFreeze(value);
+}
+function buildHumanSurfaceConformanceEvidence(input = {}, decision) {
+  try {
+    const value = createHumanSurfaceConformanceEvidence({ ...input, decision_digest: input.decision_digest ?? (decision ? digestValue(decision) : input.decision_digest), source_canonical_digest: input.source_canonical_digest ?? decision?.source.canonical_digest, repository: input.repository ?? decision?.repository });
+    return success('HUMAN_HISTORY_EVIDENCE_READY', { evidence: clone(value), evidence_digest: value.evidence_digest });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_HISTORY_EVIDENCE_INVALID', { reason: error.message });
+  }
+}
+function deriveHumanSurfaceHistoryTarget(input = {}) {
+  if (!isRecord(input) || !isRecord(input.source) || !isRecord(input.decision)) return failure('HUMAN_HISTORY_TARGET_INPUT_INVALID');
+  const decisionValid = validateHumanSurfaceConformanceDecision(input.decision);
+  if (!decisionValid.ok) return decisionValid;
+  if (input.provider_evidence !== undefined && input.provider_evidence !== null) {
+    const evidenceValid = validateHumanSurfaceConformanceEvidence(input.provider_evidence, input.decision);
+    if (!evidenceValid.ok) return evidenceValid;
+  }
+  const applied = applyHumanSurfaceHistoryDecision(input.source, input.decision);
+  if (!applied.ok) return applied;
+  return success('HUMAN_HISTORY_TARGET_READY', {
+    state: applied.state,
+    decision: clone(input.decision),
+    provider_evidence: input.provider_evidence ? clone(input.provider_evidence) : null,
+    provider_evidence_observational_only: true,
+    target_rebase: false,
+  });
+}
+function makeHumanSurfaceConformanceDecision(input = {}) { return createHumanSurfaceConformanceDecision(input); }
+function makeHumanSurfaceConformanceEvidence(input = {}) { return createHumanSurfaceConformanceEvidence(input); }
+function buildHumanHistoryTarget(source, decision, provider_evidence) { return deriveHumanSurfaceHistoryTarget({ source, decision, provider_evidence }); }
+
+function adaptToolkitV5ToPresentation(state, options = {}) {
+  const valid = validateCanonicalStateV5(state);
+  if (!valid.ok) return valid;
+  let target = state;
+  if (options.history_decision) {
+    const applied = applyHumanSurfaceHistoryDecision(state, options.history_decision);
+    if (!applied.ok) return applied;
+    target = applied.state;
+  }
+  try {
+    const model = buildPresentationModel(target, { ...options, allow_pr_summary_fallback: options.allow_pr_summary_fallback === true });
+    return success('HUMAN_PRESENTATION_MODEL_READY', { model: clone(model), state: clone(target), source_state: clone(state), history_applied: target !== state });
+  } catch (error) {
+    return failure(error.code || 'HUMAN_PRESENTATION_INVALID', { reason: error.message });
+  }
+}
+function toolkitV5PresentationAdapter(state, options = {}) { return adaptToolkitV5ToPresentation(state, options); }
+function renderHumanPresentation(state, options = {}) {
+  const adapted = adaptToolkitV5ToPresentation(state, options);
+  if (!adapted.ok) return adapted;
+  const renderOptions = { markers: TOOLKIT_HUMAN_PRESENTATION_MARKERS, include_eli5: options.include_eli5 };
+  const parent = renderPresentationModel(adapted.model, 'parent', renderOptions);
+  if (!parent.ok) return parent;
+  const child = renderPresentationModel(adapted.model, 'child', { ...renderOptions, child_issue: options.child_issue ?? adapted.model.current_child?.issue });
+  if (!child.ok) return child;
+  return success('HUMAN_PRESENTATION_READY', {
+    state: adapted.state,
+    source_state: adapted.source_state,
+    model: adapted.model,
+    parent: parent.body,
+    child: child.body,
+    parent_model: parent.model,
+    child_model: child.model,
+    history_applied: adapted.history_applied,
+  });
+}
+function renderProgrammeHuman(state, options = {}) { return renderHumanPresentation(state, options); }
+function renderCurrentHuman(state, options = {}) { return renderHumanPresentation(state, options); }
+function renderHuman(state, options = {}) { return renderHumanPresentation(state, options); }
+function renderHumanParent(state, options = {}) {
+  const rendered = renderHumanPresentation(state, options);
+  return rendered.ok ? success('HUMAN_PARENT_READY', { body: rendered.parent, model: rendered.model, state: rendered.state }) : rendered;
+}
+function renderHumanChild(state, options = {}) {
+  const rendered = renderHumanPresentation(state, options);
+  return rendered.ok ? success('HUMAN_CHILD_READY', { body: rendered.child, model: rendered.model, state: rendered.state }) : rendered;
+}
+function renderParentHumanBody(state, options = {}) { return renderHumanParent(state, options); }
+function renderChildHumanBody(state, options = {}) { return renderHumanChild(state, options); }
+
 const projectionBootstrapRecovery = Object.freeze({
   schema: DECISION_SCHEMA,
   evidenceSchema: EVIDENCE_SCHEMA,
@@ -3621,6 +5048,8 @@ const projectionBootstrapRecovery = Object.freeze({
   parseChildV5Body,
   parse: parseProgrammeV5Body,
   render: renderProgrammeV5,
+  renderHuman: renderHumanPresentation,
+  renderCurrent: renderCurrentHuman,
   preview: previewRecovery,
   buildTargetState: buildRecoveryTargetState,
   buildReceiptOperationDescriptor,
@@ -3643,12 +5072,53 @@ const postMergeEpochFinalisation = Object.freeze({
 });
 const programmeV5 = Object.freeze({
   schema: STATE_SCHEMA,
+  HUMAN_PRESENTATION_SCHEMA,
+  HUMAN_PRESENTATION_VERSION,
+  HUMAN_PR_PRESENTATION_SCHEMA,
+  HUMAN_HISTORY_DECISION_SCHEMA,
+  HUMAN_HISTORY_EVIDENCE_SCHEMA,
   validateCanonicalStateV5,
   deriveProjectionV5: (state, kind) => {
     const valid = validateCanonicalStateV5(state);
     return valid.ok ? success('V5_PROJECTION_READY', { projection: projectionPayload(state, kind), projection_digest: digestValue(projectionPayload(state, kind)) }) : valid;
   },
   renderProgrammeV5,
+  buildPresentationModel,
+  normalizePresentationModel,
+  adaptToolkitV5ToPresentation,
+  toolkitV5PresentationAdapter,
+  renderPresentationModel,
+  renderHumanPresentation,
+  renderProgrammeHuman,
+  renderCurrentHuman,
+  renderHuman,
+  renderHumanParent,
+  renderHumanChild,
+  renderParentHumanBody,
+  renderChildHumanBody,
+  parsePresentationBody,
+  parseHumanPresentationBody,
+  parseHumanParentBody,
+  parseHumanChildBody,
+  parseHumanPrBody,
+  renderHumanPrBody,
+  renderPrPresentation,
+  normalizePrPresentationModel,
+  bindHumanPrNumber,
+  verifyHumanPrBodyIdentity,
+  createHumanSurfaceConformanceDecision,
+  makeHumanSurfaceConformanceDecision,
+  prepareHumanSurfaceConformanceDecision,
+  validateHumanSurfaceConformanceDecision,
+  createHumanSurfaceConformanceEvidence,
+  makeHumanSurfaceConformanceEvidence,
+  buildHumanSurfaceConformanceEvidence,
+  validateHumanSurfaceConformanceEvidence,
+  applyHumanSurfaceHistoryDecision,
+  validateHistoryOnlyDelta,
+  deriveHumanSurfaceHistoryTarget,
+  buildHumanHistoryTarget,
+  bindHistoryCandidateNumber,
   parseProgrammeV5Body,
   projectionBootstrapRecovery,
   postMergeEpochFinalisation,
@@ -3727,6 +5197,14 @@ module.exports = Object.freeze({
   PR379_COMMENT_FACTS,
   PR379_CHECK_FACTS,
   MANAGED_MARKERS,
+  HUMAN_PRESENTATION_SCHEMA,
+  HUMAN_PRESENTATION_VERSION,
+  HUMAN_PR_PRESENTATION_SCHEMA,
+  HUMAN_HISTORY_DECISION_SCHEMA,
+  HUMAN_HISTORY_EVIDENCE_SCHEMA,
+  HUMAN_PRESENTATION_MARKERS,
+  TOOLKIT_HUMAN_PRESENTATION_MARKERS,
+  HUMAN_HISTORY_ALLOWED_PATHS,
   canonicalSerialize,
   digestValue,
   sha256Text,
@@ -3747,6 +5225,45 @@ module.exports = Object.freeze({
   previewPostMergeEpochFinalisation,
   deriveProjectionV5: programmeV5.deriveProjectionV5,
   renderProgrammeV5,
+  buildPresentationModel,
+  normalizePresentationModel,
+  validatePresentationModel,
+  adaptToolkitV5ToPresentation,
+  toolkitV5PresentationAdapter,
+  renderPresentationModel,
+  renderHumanPresentation,
+  renderProgrammeHuman,
+  renderCurrentHuman,
+  renderHuman,
+  renderHumanParent,
+  renderHumanChild,
+  renderParentHumanBody,
+  renderChildHumanBody,
+  parsePresentationBody,
+  parseHumanPresentationBody,
+  parseHumanParentBody,
+  parseHumanChildBody,
+  normalizePrPresentationModel,
+  validatePrPresentationModel,
+  renderHumanPrBody,
+  renderPrPresentation,
+  bindHumanPrNumber,
+  parseHumanPrBody,
+  verifyHumanPrBodyIdentity,
+  createHumanSurfaceConformanceDecision,
+  makeHumanSurfaceConformanceDecision,
+  prepareHumanSurfaceConformanceDecision,
+  validateHumanSurfaceConformanceDecision,
+  createHumanSurfaceConformanceEvidence,
+  makeHumanSurfaceConformanceEvidence,
+  buildHumanSurfaceConformanceEvidence,
+  validateHumanSurfaceConformanceEvidence,
+  applyHumanSurfaceHistoryDecision,
+  validateHistoryOnlyDelta,
+  deriveHumanSurfaceHistoryTarget,
+  buildHumanHistoryTarget,
+  bindHistoryCandidateNumber,
+  humanHistoryImmutableDigest,
   parseParentV5Body,
   parseChildV5Body,
   parseProgrammeV5Body,
