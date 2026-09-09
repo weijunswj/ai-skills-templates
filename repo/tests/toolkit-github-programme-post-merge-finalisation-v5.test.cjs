@@ -314,6 +314,67 @@ test('all six checkpoints select exactly five operations and final zero delta', 
   ]);
 });
 
+test('fresh provider revisions rebind observational evidence and fence only the next operation', () => {
+  const fresh = {
+    parent_revision: '2026-09-09T08:10:01Z',
+    child_revision: '2026-09-09T08:10:02Z',
+    pr_379_revision: '2026-09-09T08:10:03Z',
+  };
+  const applicable = [
+    ['BEFORE_STAGE_A', 'CHILD_STAGE_A', fresh.child_revision],
+    ['CHILD_STAGE_A_OBSERVED', 'PARENT_STAGE_A', fresh.parent_revision],
+    ['PARENT_STAGE_A_OBSERVED', 'PR379_CLOSE', fresh.pr_379_revision],
+  ];
+  for (const [checkpoint, operation, resourceRevision] of applicable) {
+    const evidence = makeEvidence(checkpoint, fresh);
+    assert.equal(evidence.parent.revision, fresh.parent_revision);
+    assert.equal(evidence.child.revision, fresh.child_revision);
+    assert.equal(evidence.pr_379.revision, fresh.pr_379_revision);
+    assert.notEqual(evidence.parent.revision, decision.source.parent_revision);
+    assert.notEqual(evidence.child.revision, decision.source.child_revision);
+    assert.notEqual(evidence.pr_379.revision, decision.source.pr_379_revision);
+    const valid = programme.validatePostMergeEpochFinalisationEvidence(evidence, decision);
+    assert.equal(valid.ok, true, checkpoint + ':' + valid.code);
+    const preview = programme.previewPostMergeEpochFinalisation({ decision, evidence });
+    assert.equal(preview.ok, true, checkpoint + ':' + preview.code);
+    assert.equal(preview.checkpoint, checkpoint);
+    assert.equal(preview.next_operation.operation_id, operation);
+    assert.equal(preview.next_operation.precondition.resource_revision, resourceRevision);
+    assert.equal(preview.next_operation.provider_client_used, false);
+    assert.equal(preview.next_operation.provider_cas_claim, false);
+  }
+  const alternate = makeEvidence('BEFORE_STAGE_A', {
+    parent_revision: '2026-09-10T08:10:01Z',
+    child_revision: '2026-09-10T08:10:02Z',
+    pr_379_revision: '2026-09-10T08:10:03Z',
+  });
+  const alternatePreview = programme.previewPostMergeEpochFinalisation({ decision, evidence: alternate });
+  const baselinePreview = programme.previewPostMergeEpochFinalisation({ decision, evidence: makeEvidence('BEFORE_STAGE_A', fresh) });
+  assert.equal(alternatePreview.ok, true);
+  assert.equal(alternatePreview.checkpoint, baselinePreview.checkpoint);
+  assert.equal(alternatePreview.next_operation.operation_id, baselinePreview.next_operation.operation_id);
+  assert.equal(alternatePreview.next_operation.target_canonical_digest, baselinePreview.next_operation.target_canonical_digest);
+  assert.equal(alternatePreview.next_operation.target_body_digest, baselinePreview.next_operation.target_body_digest);
+  assert.notEqual(alternatePreview.next_operation.precondition.resource_revision, baselinePreview.next_operation.precondition.resource_revision);
+});
+
+test('child renderer derives the visible Lock from canonical state for recovery and finalisation', () => {
+  const lockLine = (body) => body.split('\n').find((line) => line.startsWith('| Lock |'));
+  assert.equal(lockLine(sourceRendered.child), '| Lock | DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001 |');
+  assert.equal(lockLine(stageARendered.child), '| Lock | DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002 |');
+  assert.equal(lockLine(stageBRendered.child), '| Lock | DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002 |');
+  for (const [state, rendered] of [
+    [programme.FINALISATION_SOURCE_STATE, sourceRendered],
+    [programme.FINALISATION_STAGE_A_TARGET_STATE, stageARendered],
+    [programme.FINALISATION_STAGE_B_TARGET_STATE, stageBRendered],
+  ]) {
+    const parsed = programme.parseChildV5Body(rendered.child, { repository: programme.REPOSITORY, parent_issue: programme.PARENT_ISSUE });
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.envelope.canonical_digest, programme.digestValue(state));
+    assert.equal(parsed.envelope.projection_digest, rendered.projections.child.projection_digest);
+  }
+});
+
 test('acknowledgement loss rebinds to the same checkpoint without a blind repeat', () => {
   for (const checkpoint of programme.FINALISATION_CHECKPOINTS.slice(1)) {
     const evidence = makeEvidence(checkpoint, { acknowledgement: 'LOST' });
@@ -334,6 +395,13 @@ test('acknowledgement loss rebinds to the same checkpoint without a blind repeat
 
 test('provider facts are observational and #380 is immutable', () => {
   const before = makeEvidence('BEFORE_STAGE_A');
+  const moved379 = clone(before);
+  moved379.pr_379.facts.branch = 'caller-moved-branch';
+  moved379.pr_379.facts_digest = programme.digestValue(moved379.pr_379.facts);
+  moved379.source_binding.pr_379_facts_digest = moved379.pr_379.facts_digest;
+  moved379.source_binding.snapshot_digest = programme.digestValue(Object.fromEntries(Object.entries(moved379.source_binding).filter(([key]) => key !== 'snapshot_digest')));
+  moved379.evidence_digest = programme.digestValue(Object.fromEntries(Object.entries(moved379).filter(([key]) => key !== 'evidence_digest')));
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(moved379, decision).ok, false);
   const moved380 = clone(before);
   moved380.pr_380.merge_commit = '0'.repeat(40);
   moved380.pr_380.facts.merge_commit = '0'.repeat(40);
@@ -393,6 +461,16 @@ test('canonical-rebase attack matrix fails at every later checkpoint', () => {
 
 test('unknown, mixed, and mutated final states fail closed', () => {
   const finalEvidence = makeEvidence('FINAL_TARGET_OBSERVED');
+  const movedSource = rebindObservation(
+    makeEvidence('BEFORE_STAGE_A', {
+      parent_revision: '2026-09-09T08:20:01Z',
+      child_revision: '2026-09-09T08:20:02Z',
+      pr_379_revision: '2026-09-09T08:20:03Z',
+    }),
+    sourceRendered.parent.replace('## Programme status', '## Programme status moved'),
+    sourceRendered.child,
+  );
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(movedSource, decision).ok, false);
   const mixed = makeEvidence('CHILD_STAGE_B_OBSERVED');
   mixed.parent = clone(finalEvidence.parent);
   mixed.source_binding = clone(finalEvidence.source_binding);

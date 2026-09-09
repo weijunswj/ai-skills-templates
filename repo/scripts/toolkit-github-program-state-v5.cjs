@@ -1690,7 +1690,7 @@ function managedContent(kind, state) {
     '| Epoch | E3 |',
     '| Gate | ' + (recovery ? 'None' : interEpoch ? 'None' : 'G4') + ' |',
     '| Gate state | ' + gateState + ' |',
-    '| Lock | ' + LOCK + ' |',
+    '| Lock | ' + state.design_lock + ' |',
     '| Finality | ' + child.finality.state + ' |',
     '',
     '## Objective',
@@ -3251,10 +3251,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINAL
   const spec = finalisationCheckpointSpec(checkpoint);
   const expectedParentState = finalisationStateForKind(targetsResult.targets, spec.parent);
   const expectedChildState = finalisationStateForKind(targetsResult.targets, spec.child);
-  if ((spec.parent === 'source' && value.parent.revision !== decisionInput.source.parent_revision)
-    || (spec.child === 'source' && value.child.revision !== decisionInput.source.child_revision)
-    || (spec.pr_379 === 'OPEN' && value.pr_379.revision !== decisionInput.source.pr_379_revision)
-    || value.pr_380.facts_digest !== digestValue(finalisationPr380Facts())
+  if (value.pr_380.facts_digest !== digestValue(finalisationPr380Facts())
     || value.parent.canonical_digest !== digestValue(expectedParentState)
     || value.child.canonical_digest !== digestValue(expectedChildState)) return failure('FINALISATION_CHECKPOINT_BINDING_INVALID');
   const expectedParentBody = spec.parent === 'source' ? targetsResult.targets.rendered.source.parent
@@ -3264,10 +3261,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINAL
   if ((expectedParentBody !== null && value.parent.raw_body !== expectedParentBody)
     || (expectedChildBody !== null && value.child.raw_body !== expectedChildBody)
     || (spec.parent === 'source' && value.parent.body_digest !== FINALISATION_SOURCE_PARENT_BODY_DIGEST)
-    || (spec.child === 'source' && value.child.body_digest !== FINALISATION_SOURCE_CHILD_BODY_DIGEST)
-    || (spec.parent !== 'source' && value.parent.revision === SOURCE_PARENT_REVISION)
-    || (spec.child !== 'source' && value.child.revision === SOURCE_CHILD_REVISION)
-    || (spec.pr_379 === 'OPEN' && value.pr_379.revision !== FINALISATION_PR379_SOURCE_REVISION)) {
+    || (spec.child === 'source' && value.child.body_digest !== FINALISATION_SOURCE_CHILD_BODY_DIGEST)) {
     return failure('FINALISATION_TARGET_BYTES_INVALID');
   }
   const transactionValid = validateFinalisationTransaction(value.transaction, checkpoint);
@@ -3310,9 +3304,9 @@ function buildPostMergeEpochFinalisationEvidence(input = {}) {
   const spec = finalisationCheckpointSpec(input.checkpoint);
   const parentBody = input.parent_body;
   const childBody = input.child_body;
-  const parentRevision = spec.parent === 'source' ? SOURCE_PARENT_REVISION : (input.parent_revision || '2026-09-09T00:00:01Z');
-  const childRevision = spec.child === 'source' ? SOURCE_CHILD_REVISION : (input.child_revision || '2026-09-09T00:00:02Z');
-  const pr379Revision = spec.pr_379 === 'OPEN' ? FINALISATION_PR379_SOURCE_REVISION : (input.pr_379_revision || '2026-09-09T00:00:03Z');
+  const parentRevision = input.parent_revision ?? (spec.parent === 'source' ? SOURCE_PARENT_REVISION : '2026-09-09T00:00:01Z');
+  const childRevision = input.child_revision ?? (spec.child === 'source' ? SOURCE_CHILD_REVISION : '2026-09-09T00:00:02Z');
+  const pr379Revision = input.pr_379_revision ?? (spec.pr_379 === 'OPEN' ? FINALISATION_PR379_SOURCE_REVISION : '2026-09-09T00:00:03Z');
   const evidence = {
     schema: FINALISATION_EVIDENCE_SCHEMA,
     root: FINALISATION_ROOT,
