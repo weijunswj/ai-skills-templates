@@ -1,6 +1,6 @@
 ---
 name: github-program-reconciler
-description: Explicit-only GitHub programme parent/direct-child governance and truthful PR-review and Deferred Findings reconciliation. E2 renames the product only; current N5 runtime semantics remain unchanged until their separately authorised redesign.
+description: Explicit-only GitHub programme parent/direct-child governance, human-readable programme surfaces, and truthful PR-review and Deferred Findings reconciliation. Human views are deterministic projections; canonical state, Web authority, and provider mutation remain separate.
 ---
 
 # GitHub Program Reconciler
@@ -38,6 +38,35 @@ must return a complete server-authoritative body, revision/ETag metadata when
 available, and a complete readback. Incomplete retrieval, missing/duplicate or
 ambiguous entries, parse uncertainty, concurrent movement, unrelated-byte
 drift, unverified body limits, and incomplete reconciliation fail closed.
+
+## Human-readable programme surfaces
+
+The current presentation path uses the generic `github.program.presentation.v1`
+model and its Toolkit v5 adapter. Use `buildPresentationModel` for a portable
+state projection, `renderPresentationModel` for parent or child Markdown, and
+`renderHumanPresentation` for the Toolkit v5 adapter. Parent views show status,
+one immediate next action, ordered work packages, completed work when useful,
+and boundaries. Child views show objective, scope, every epoch, PR history,
+what remains, and ELI5. Zero-lane noise and parent PR-registry detail stay out
+of the parent view.
+
+The legacy `renderProgrammeV5` path and exact v5 parser remain available for
+historical E3 byte/digest proofs. New current views use distinct human-v1
+markers and fail closed on duplicate, partial, mixed, unknown, or malformed
+marker payloads. Unmanaged prefix and suffix bytes remain preserved by parsers.
+
+PR presentation is deterministic and mutation-free. `renderHumanPrBody`
+supports a pre-number body and `bindHumanPrNumber` regenerates the complete
+post-number body; `parseHumanPrBody` and `verifyHumanPrBodyIdentity` prove the
+managed bytes. Repair, before/after, budget, hosted, and recovery sections are
+emitted only when explicit applicability flags are true.
+
+Historical gaps are handled by the typed human-surface conformance decision.
+It permits authority-defined additions only on `prs`, child `pr_registry`,
+`evidence_refs`, and `historical_transitions`. Provider evidence may observe
+state and identity, but cannot supply purpose, outcome, target state, or a
+rebase. The resulting target is history-only and must not move lifecycle,
+epochs, finality, lanes, holds, or other canonical invariants.
 
 ## Authority and consent
 

@@ -22,5 +22,25 @@
   "auto_code": { "mutation": false, "install": false, "schedule": false, "worker_claim": false, "finality": false, "readiness": "inspection-only" },
   "historical": { "pr310": "NO_LONGER_APPLICABLE", "pr310_code": "do-not-revive", "318": "SUPERSEDE", "337": "NO_LONGER_APPLICABLE" },
   "privacy": { "raw_secrets": false, "private_paths": false, "raw_code_blobs": false, "public_safe_evidence_only": true },
-  "mcp": { "status": "not_applicable", "custom_n8n_mcp": false }
+  "mcp": { "status": "not_applicable", "custom_n8n_mcp": false },
+  "human_presentation": {
+    "schema": "github.program.presentation.v1",
+    "version": "v1",
+    "generic_renderer": true,
+    "legacy_compatibility": true,
+    "optional_sections_require_applicability": true,
+    "history_trust": {
+      "authority_defined_additions_only": true,
+      "provider_evidence_observational_only": true,
+      "provider_evidence_may_rebase": false,
+      "no_state_movement": true,
+      "allowed_history_paths": ["prs", "children[*].pr_registry", "evidence_refs", "historical_transitions"]
+    },
+    "pr_renderer": {
+      "schema": "github.program.pr-presentation.v1",
+      "pre_number": true,
+      "post_number": true,
+      "mutation": false
+    }
+  }
 }

@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "repository": "weijunswj/ai-agent-toolkit",
   "design_lock": "DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
-  "toolkit_package_version": "2.10.8",
+  "toolkit_package_version": "2.10.9",
   "canonical_state": {
     "schema": "toolkit.github-program.state.v5",
     "parent_issue": 240,
@@ -35,23 +35,57 @@
       "issue": 240,
       "marker": "GITHUB-PROGRAM-PARENT",
       "version": "v5",
-      "parser": "PARENT_V5",
-      "renderer": "PARENT_V5",
+      "parser": "PARENT_V5_AND_HUMAN_V1",
+      "renderer": "HUMAN_V1",
+      "legacy_parser": "PARENT_V5",
+      "legacy_renderer": "PARENT_V5",
+      "human_schema": "github.program.presentation.v1",
       "preserve_unmanaged_bytes": true
     },
     "child": {
       "issue": 359,
       "marker": "GITHUB-PROGRAM-CHILD",
       "version": "v5",
-      "parser": "CHILD_V5",
-      "renderer": "CHILD_V5",
+      "parser": "CHILD_V5_AND_HUMAN_V1",
+      "renderer": "HUMAN_V1",
+      "legacy_parser": "CHILD_V5",
+      "legacy_renderer": "CHILD_V5",
+      "human_schema": "github.program.presentation.v1",
       "preserve_unmanaged_bytes": true
     },
     "pr": {
-      "parser": "PR_V5_NOT_REQUIRED",
-      "renderer": "PR_RENDERER_NOT_REQUIRED",
+      "parser": "HUMAN_PR_V1",
+      "renderer": "HUMAN_PR_V1",
+      "human_schema": "github.program.pr-presentation.v1",
+      "pre_number": true,
+      "post_number": true,
       "mutation": false
     }
+  },
+  "presentation": {
+    "schema": "github.program.presentation.v1",
+    "version": "v1",
+    "adapter": "toolkitV5PresentationAdapter",
+    "normal_renderer": "HUMAN_V1",
+    "legacy_renderer": "LEGACY_E3_V5",
+    "generic_renderer_portable": true,
+    "canonical_state_embedded": false,
+    "parent_sections": ["Current programme status", "Immediate next", "Children / work packages", "Completed work", "Programme boundaries"],
+    "child_sections": ["Status / Summary", "Objective", "Scope / Boundaries / Completion shape", "Epochs / phases", "PR history", "What remains / Immediate next", "ELI5"],
+    "pr_sections": ["Summary", "Programme position", "What changed", "Why", "Scope", "Out of scope", "Validation", "Candidate / lineage", "Final status / what happens next"],
+    "optional_pr_sections_require_explicit_applicability": true,
+    "unknown_or_mixed_marker_versions_fail_closed": true
+  },
+  "history_conformance": {
+    "decision_schema": "toolkit.github-program.human-surface-conformance-decision.v1",
+    "evidence_schema": "toolkit.github-program.human-surface-conformance-evidence.v1",
+    "allowed_history_paths": ["prs", "children[*].pr_registry", "evidence_refs", "historical_transitions"],
+    "authority_defined_additions_only": true,
+    "provider_evidence_observational_only": true,
+    "provider_evidence_may_define_target": false,
+    "provider_evidence_may_rebase": false,
+    "no_state_movement": true,
+    "future_pr_numbers_are_bound_by_authority": true
   },
   "projection_bootstrap_recovery": {
     "decision_schema": "toolkit.github-program.projection-bootstrap-recovery-decision.v1",
@@ -68,7 +102,8 @@
       240
     ],
     "no_general_state_control": true,
-    "no_pr_body_renderer": true
+    "no_pr_body_renderer": false,
+    "human_renderer": "HUMAN_PR_V1"
   },
   "post_merge_finalisation": {
     "root": "E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
@@ -194,6 +229,7 @@
     "e4_activation": false,
     "pr_body_mutation": false,
     "pr_renderer": false,
+    "human_pr_mutation": false,
     "normal_lane_creation": false,
     "workflow_or_fetch_depth_change": false,
     "repair3": false
