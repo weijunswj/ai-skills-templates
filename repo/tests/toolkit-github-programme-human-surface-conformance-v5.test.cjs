@@ -139,6 +139,12 @@ test('generic presentation model is portable, deterministic, and free of Toolkit
   assert.doesNotMatch(first.body, /AI-AGENT-TOOLKIT|SQAG|Swooshz Platform|weijunswj\/ai-agent-toolkit/);
   assert.match(first.body, /# Managed Product Programme/);
   assert.match(first.body, /#73 - Current delivery package/);
+  assert.doesNotMatch(first.body, /secret=|password=|api[_ -]?key=/i);
+  const escapedSource = genericState();
+  escapedSource.children[1].summary = 'A\\B | C';
+  const escaped = programme.renderPresentationModel(escapedSource, 'parent');
+  assert.equal(escaped.ok, true, escaped.code);
+  assert.ok(escaped.body.includes('A\\\\B \\| C'));
   assert.equal(programme.parsePresentationBody(first.body, 'parent').ok, true);
   assert.equal(Object.isFrozen(model), true);
 });

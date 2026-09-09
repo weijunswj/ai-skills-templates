@@ -3745,7 +3745,7 @@ function presentationDigest(value, field, nullable = false) {
   return value;
 }
 function presentationCell(value) {
-  return String(value ?? '').replace(/[\r\n]/g, ' ').replace(/\|/g, '\\|');
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/[\r\n]/g, ' ').replace(/\|/g, '\\|');
 }
 function presentationBullets(values, empty = 'None recorded.') {
   const list = Array.isArray(values) ? values : [];
