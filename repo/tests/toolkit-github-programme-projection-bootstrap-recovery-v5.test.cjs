@@ -16,8 +16,10 @@ const decisionSchemaPath = path.join(__dirname, '..', 'contracts', 'github-progr
 const publishedDecisionSchema = JSON.parse(fs.readFileSync(decisionSchemaPath, 'utf8'));
 const finalisationDecisionSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'post-merge-epoch-finalisation-decision-v1.schema.json');
 const finalisationEvidenceSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'post-merge-epoch-finalisation-evidence-v1.schema.json');
+const programmeStateSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'programme-state-v5.schema.json');
 const publishedFinalisationDecisionSchema = JSON.parse(fs.readFileSync(finalisationDecisionSchemaPath, 'utf8'));
 const publishedFinalisationEvidenceSchema = JSON.parse(fs.readFileSync(finalisationEvidenceSchemaPath, 'utf8'));
+const publishedProgrammeStateSchema = JSON.parse(fs.readFileSync(programmeStateSchemaPath, 'utf8'));
 const PARENT_BODY = "<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:BEGIN v5 -->\n# Programme dashboard\n\n## Goal\nDeliver the six-stage Toolkit programme through truthful, deterministic, source-traceable programme views.\n\n## Programme status\n| Field | Value |\n| --- | --- |\n| Aggregate programme state | HELD |\n| Concurrency mode | SINGLE_DEFAULT |\n| Active lanes | 1 |\n| Max lanes | 1 |\n| Current child IDs | #359 |\n| Programme finality state | HELD |\n\n## Active work\n| Child | State | Epoch / Gate | Candidate / PR | Material hold |\n| --- | --- | --- | --- | --- |\n| #359 - S2 — Productize retained skills + native host adapters | ACTIVE | E3 / G4 | PR #366 @ a7dcb69da43100c5411076008307a221e89b720f | None |\n\n## Children\n| Child | Lifecycle | Dependencies | Outcome |\n| --- | --- | --- | --- |\n| #358 - S1 — Canonical topology collapse + permanent Ledger retirement | COMPLETED | None | S1 — Canonical topology collapse + permanent Ledger retirement is completed with retained evidence. |\n| #359 - S2 — Productize retained skills + native host adapters | CURRENT | None | S2 — Productize retained skills + native host adapters is current in E3 at G4. |\n| #360 - S3 — Repository Loop Manager + trusted CI live integration | QUEUED | #358 | S3 — Repository Loop Manager + trusted CI live integration is queued behind its declared dependencies. |\n| #361 - S4 — Official n8n Skills + API-first workflow transport | QUEUED | #358, #359, #360 | S4 — Official n8n Skills + API-first workflow transport is queued behind its declared dependencies. |\n| #362 - S5 — External authority, secrets + hosted operations | QUEUED | #358, #359, #360 | S5 — External authority, secrets + hosted operations is queued behind its declared dependencies. |\n| #363 - S6 — Native UAT + final whole-Toolkit assurance | QUEUED | #358, #359, #360, #361, #362 | S6 — Native UAT + final whole-Toolkit assurance is queued behind its declared dependencies. |\n\n## Progress\n| Metric | Value |\n| --- | --- |\n| Completed children / total | 1 / 6 |\n| Retired children | 0 |\n| Accepted or retired epochs / total | 3 / 9 |\n| Active lanes | 1 |\n| Web-decision-required lanes | 0 |\n\n## Major holds\nNone\n\n## Additional context\nNone\n\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CANONICAL v5 eyJlbnZlbG9wZSI6eyJjYW5vbmljYWxfZGlnZXN0IjoiYTA5ZmRhZmE2Yjc3YWQ4NTYyNDI5OGNlZWE0ODhhNWMzNDJkMDBhMDcwMDIxOGRlNjJiYTIyNzZlZDA1MDI4MCIsImV4dGVuc2lvbl9kaWdlc3QiOiI0ZjUzY2RhMThjMmJhYTBjMDM1NGJiNWY5YTNlY2JlNWVkMTJhYjRkOGUxMWJhODczYzJmMTExNjEyMDJiOTQ1Iiwia2luZCI6InBhcmVudCIsIm51bWJlciI6MjQwLCJwYXJlbnRfaXNzdWUiOjI0MCwicHJvamVjdGlvbl9kaWdlc3QiOiI3ZjY4OGNmM2M5MzIxOGYyMzA4MWJhMDQ0NzFjMWYwYjZjYTdlNGMxMjA2ZDk3ODBmMjIxMjI0NmM3ODI5ZDRjIiwicmVwb3NpdG9yeSI6IndlaWp1bnN3ai9haS1hZ2VudC10b29sa2l0Iiwic2NoZW1hIjoidG9vbGtpdC5naXRodWItcHJvZ3JhbS5wcm9qZWN0aW9uLnYxIn0sInN0YXRlIjp7ImFjdGl2ZV9sYW5lcyI6W3siY2FuZGlkYXRlIjp7ImJhc2VfcmVmIjoibWFpbiIsImJhc2Vfc2hhIjoiZTg2YTJkNzRmZDc3MWY2NTAwYWEwMmZlMDg5Mjk0MDkzM2JmNzY0NyIsImJyYW5jaCI6InNvbC9zMi1wcm9kdWN0aXNhdGlvbi1nMyIsImVwb2NoX2lkIjoiRTMiLCJoZWFkIjoiYTdkY2I2OWRhNDMxMDBjNTQxMTA3NjAwODMwN2EyMjFlODliNzIwZiIsInByIjozNjYsInRyZWUiOiIyYzg4NzgyZmEyNzRlNTAyZmI2YzhjNTEyNmQ1NTQ3MDExMmYzOGU5IiwidmVyc2lvbiI6IjIuMTIuMCJ9LCJjaGlsZF9pc3N1ZSI6MzU5LCJlcG9jaF9pZCI6IkUzIiwiZ2F0ZSI6Ikc0IiwiZ2F0ZV9yZXN1bHQiOm51bGwsImdhdGVfc3RhdGUiOiJBQ1RJVkUiLCJsYW5lX2lkIjoiY2hpbGQtMzU5Iiwid29ya19jbGFpbXMiOlt7Im1vZGUiOiJXUklURSIsIm9wZXJhdGlvbiI6ImNhbm9uaWNhbC10cmFuc2l0aW9uIiwicmVzb3VyY2UiOiJwcm9ncmFtbWUvY2hpbGQvMzU5In1dfV0sImNoaWxkcmVuIjpbeyJib3VuZGFyaWVzIjpbIktlZXAgY29tcGxldGVkIGFuZCBtZXJnZWQgUzEgc2NvcGUgY2xvc2VkLiIsIlMyIHRocm91Z2ggUzYgcmVtYWluIG91dHNpZGUgUzEuIl0sImRlbGl2ZXJhYmxlcyI6WyJDYW5vbmljYWwgVG9vbGtpdCB0b3BvbG9neSBjb2xsYXBzZS4iLCJQZXJtYW5lbnQgcmV0aXJlbWVudCBvZiBvYnNvbGV0ZSB0b3BvbG9neSBhbmQgZXh0ZXJuYWwgZXhlY3V0b3ItZXZhbHVhdGlvbiBMZWRnZXIgY291cGxpbmcuIl0sImRlcGVuZGVuY2llcyI6W10sImRvbmVfd2hlbiI6WyJDYW5vbmljYWwgc3VyZmFjZXMgYXJlIHJldGFpbmVkLCBvYnNvbGV0ZSB0b3BvbG9neSBhbmQgTGVkZ2VyIGNvdXBsaW5nIGFyZSBwZXJtYW5lbnRseSByZXRpcmVkLCBhbmQgY29tcGxldGVkIHNjb3BlIHJlbWFpbnMgY2xvc2VkLiJdLCJlbGk1IjoiVGhlIG9sZCBsYXlvdXQgd2FzIGNsZWFuZWQgdXAgYW5kIHRoaXMgZmluaXNoZWQgc3RlcCBzdGF5cyBjbG9zZWQuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOiJzMS1hY2NlcHRlZCIsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzEiLCJsb2NrIjoiREwtUzEtQ0FOT05JQ0FMLVRPUE9MT0dZLUNPTExBUFNFLTAwMS1HMiIsIm5hbWUiOiJTMSAtIENhbm9uaWNhbCB0b3BvbG9neSBjb2xsYXBzZSIsInB1cnBvc2UiOiJDYW5vbmljYWwgdG9wb2xvZ3kgY29sbGFwc2UiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6IkFDQ0VQVEVEIn1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjoiczEtYWNjZXB0ZWQiLCJzdGF0ZSI6Ik1FUkdFRCJ9LCJob2xkcyI6W10sImlzc3VlIjozNTgsImxpZmVjeWNsZSI6IkNPTVBMRVRFRCIsIm9iamVjdGl2ZSI6IkNvbGxhcHNlIFRvb2xraXQgdG8gY2Fub25pY2FsIHN1cmZhY2VzIGFuZCBwZXJtYW5lbnRseSByZXRpcmUgb2Jzb2xldGUgdG9wb2xvZ3kgcmVzaWR1ZS4iLCJvcmRlciI6MSwib3V0X29mX3Njb3BlIjpbIlJlb3BlbmluZyBjb21wbGV0ZWQgb3IgbWVyZ2VkIFMxIHNjb3BlLiIsIlMyIHRocm91Z2ggUzYgd29yay4iXSwicHJfcmVnaXN0cnkiOltdLCJzY29wZSI6WyJDb21wbGV0ZWQgUzEgdG9wb2xvZ3kgY29sbGFwc2UgYW5kIHBlcm1hbmVudCBvYnNvbGV0ZS9MZWRnZXIgY291cGxpbmcgcmV0aXJlbWVudC4iXSwic3VtbWFyeSI6IkNvbGxhcHNlIFRvb2xraXQgdG8gY2Fub25pY2FsIHN1cmZhY2VzIGFuZCBwZXJtYW5lbnRseSByZXRpcmUgb2Jzb2xldGUgdG9wb2xvZ3kgcmVzaWR1ZS4iLCJ0aXRsZSI6IlMxIOKAlCBDYW5vbmljYWwgdG9wb2xvZ3kgY29sbGFwc2UgKyBwZXJtYW5lbnQgTGVkZ2VyIHJldGlyZW1lbnQifSx7ImJvdW5kYXJpZXMiOlsiV2ViIG93bnMgZnJlc2ggRzQgZGlzcG9zaXRpb24sIEUzIGFjY2VwdGFuY2UsIFJlYWR5LCBtZXJnZSBhbmQgZmluYWxpdHkuIiwiRnJlc2ggRzQgaXMgYWN0aXZlIHdpdGggbm8gcmVzdWx0IHlldC4iLCJFNCBhbmQgUzMgdGhyb3VnaCBTNiBkbyBub3QgYmVnaW4gaW4gdGhpcyB0cmFuc2l0aW9uLiJdLCJkZWxpdmVyYWJsZXMiOlsiUmV0YWluZWQtc2tpbGwgcHJvZHVjdGlzYXRpb24uIiwiR2l0SHViIHByb2dyYW1tZSByZWNvbmNpbGVyIHY1LiIsIkZ1dHVyZSBFNCB0cnV0aGZ1bCBuYXRpdmUgYWRhcHRlcnMuIl0sImRlcGVuZGVuY2llcyI6W10sImRvbmVfd2hlbiI6WyJFMSBhbmQgRTIgcmVtYWluIGFjY2VwdGVkIHdpdGggcmV0YWluZWQgZXZpZGVuY2UuIiwiRTMgUmVwYWlyLTIsIHY1IG1pZ3JhdGlvbi9yZWFkYmFjay96ZXJvLWRlbHRhLCBjYW5vbmljYWwtZGF0YSBVWCBjb3JyZWN0aW9uLCBmcmVzaCBHNCBhbmQgV2ViIGFjY2VwdGFuY2UgYXJlIGNvbXBsZXRlLiIsIkU0IHRydXRoZnVsIG5hdGl2ZSBhZGFwdGVycyBhcmUgY29tcGxldGUgYW5kIFdlYiByZWNvcmRzIFMyIGZpbmFsaXR5LiJdLCJlbGk1IjoiVGhlIHByb2dyYW1tZSB0b29sIGlzIHJlcGFpcmVkIGFuZCBpdHMgZmluYWwgaW5kZXBlbmRlbnQgRTMgcmV2aWV3IGdhdGUgaXMgbm93IGFjdGl2ZSwgYnV0IG5vIHJlc3VsdCBvciBhY2NlcHRhbmNlIGV4aXN0cyB5ZXQuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOiJlMS1hY2NlcHRlZCIsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiRTEiLCJsb2NrIjoiREwtUzItQ1JFQVRJT04tR0FURS0wMDMiLCJuYW1lIjoiRTEgLSBDcmVhdGlvbiBHYXRlIiwicHVycG9zZSI6IkNyZWF0aW9uIGFuZCBhZG1pc3Npb24gZ2F0ZSIsInRlcm1pbmFsX2Rpc3Bvc2l0aW9uIjoiQUNDRVBURUQifSx7ImV2aWRlbmNlX3JlZiI6ImUyLWFjY2VwdGVkIiwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJFMiIsImxvY2siOiJETC1TMi1QUk9EVUNULVBPUlRGT0xJTy0wMTUiLCJuYW1lIjoiRTIgLSBQcm9kdWN0IFBvcnRmb2xpbyIsInB1cnBvc2UiOiJSZXRhaW5lZCBwcm9kdWN0IHBvcnRmb2xpbyIsInRlcm1pbmFsX2Rpc3Bvc2l0aW9uIjoiQUNDRVBURUQifSx7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJFMyIsImxvY2siOiJETC1TMi1HSVRIVUItUFJPR1JBTS1DT05WRVJHRU5DRS0wMDIiLCJuYW1lIjoiRTMgLSBHaXRIdWIgUHJvZ3JhbW1lIFByb2R1Y3QiLCJwdXJwb3NlIjoiTWFuYWdlZCBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsaWF0aW9uIiwidGVybWluYWxfZGlzcG9zaXRpb24iOm51bGx9LHsiZXZpZGVuY2VfcmVmIjpudWxsLCJnYXRlcyI6WyJHMSIsIkcyIiwiRzMiLCJHNCJdLCJpZCI6IkU0IiwibG9jayI6IkRMLVMyLU5BVElWRS1BREFQVEVSUy0wMDIiLCJuYW1lIjoiRTQgLSBOYXRpdmUgQWRhcHRlcnMiLCJwdXJwb3NlIjoiVHJ1dGhmdWwgbmF0aXZlIGhvc3QgYWRhcHRlcnMiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzU5LCJsaWZlY3ljbGUiOiJDVVJSRU5UIiwib2JqZWN0aXZlIjoiUHJvZHVjdGlzZSByZXRhaW5lZCBza2lsbHMsIGNvbXBsZXRlIHRoZSBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIsIHRoZW4gZmluaXNoIHRydXRoZnVsIG5hdGl2ZSBob3N0IGFkYXB0ZXJzLiIsIm9yZGVyIjoyLCJvdXRfb2Zfc2NvcGUiOlsiRzQgcmVzdWx0IG9yIEUzIGFjY2VwdGFuY2UgYmVmb3JlIHNlcGFyYXRlIFdlYiBhdXRob3JpdHkuIiwiUmVhZHksIG1lcmdlLCBmaW5hbGl0eSwgRTQgZXhlY3V0aW9uIGFuZCBTMyB0aHJvdWdoIFM2IHByb2dyZXNzaW9uLiJdLCJwcl9yZWdpc3RyeSI6W3siYWNjZXB0ZWRfZXZpZGVuY2VfcmVmIjpudWxsLCJjb21wbGV0ZXNfY2hpbGQiOmZhbHNlLCJlcG9jaF9pZCI6IkUzIiwicHIiOjM2NiwicmV0aXJlbWVudF9ldmlkZW5jZV9yZWYiOm51bGwsInJvbGUiOiJJTlRFUk1FRElBVEUiLCJzdGF0dXMiOiJBQ1RJVkUifV0sInNjb3BlIjpbIlJldGFpbmVkLXNraWxsIHByb2R1Y3Rpc2F0aW9uLCBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIgdjUgYW5kIGZ1dHVyZSBFNCB0cnV0aGZ1bCBuYXRpdmUgYWRhcHRlcnMuIiwiRnJlc2ggRTMgRzQgdHJhbnNpdGlvbiBhbmQgZXhhY3QtY2FuZGlkYXRlIHZhbGlkYXRpb24uIl0sInN1bW1hcnkiOiJFMSBhbmQgRTIgYXJlIGFjY2VwdGVkOyBFMyBSZXBhaXItMiBpbXBsZW1lbnRhdGlvbiwgdjUgbWlncmF0aW9uL3JlYWRiYWNrL3plcm8tZGVsdGEgYW5kIGRvZ2Zvb2QgVVggY29ycmVjdGlvbiBhcmUgYWNoaWV2ZWQ7IGZyZXNoIEc0IGlzIG5vdyBhY3RpdmUgd2l0aCBubyByZXN1bHQuIiwidGl0bGUiOiJTMiDigJQgUHJvZHVjdGl6ZSByZXRhaW5lZCBza2lsbHMgKyBuYXRpdmUgaG9zdCBhZGFwdGVycyJ9LHsiYm91bmRhcmllcyI6WyJDb25zZXF1ZW50aWFsIGxpdmUgb3IgcmVwb3NpdG9yeS1wcm90ZWN0aW9uIG11dGF0aW9uIHJlcXVpcmVzIGV4cGxpY2l0IGF1dGhvcml0eS4iLCJUaGlzIHF1ZXVlZCBjaGlsZCBkb2VzIG5vdCBzdGFydCB1bnRpbCBpdHMgZGVwZW5kZW5jaWVzIGFyZSBjb21wbGV0ZSBvciByZXRpcmVkLiJdLCJkZWxpdmVyYWJsZXMiOlsiUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIgYW5kIHdvcmsgZ3JhcGguIiwiTGVhc2VzLCBmZW5jZXMsIGR1cmFibGUgcmVjb3ZlcnkgYW5kIGlkZW1wb3RlbmN5LiIsIkJvdW5kZWQgY29udmVyZ2VuY2Ugd2l0aCBhIHR3by1yZXBhaXIgc3RvcC4iLCJUcnVzdGVkIENJIGFuZCBwZXJtYW5lbnQgaG9zdC1iYWNrZWQgb3JjaGVzdHJhdGlvbi4iXSwiZGVwZW5kZW5jaWVzIjpbMzU4XSwiZG9uZV93aGVuIjpbIlRoZSBMb29wIE1hbmFnZXIsIHdvcmsgZ3JhcGgsIGxlYXNlcy9mZW5jZXMsIGR1cmFibGUgcmVjb3ZlcnksIGlkZW1wb3RlbmN5IGFuZCBib3VuZGVkIGNvbnZlcmdlbmNlIGFyZSBwcm92ZW4uIiwiVHJ1c3RlZCBDSSBhbmQgcGVybWFuZW50IGhvc3QtYmFja2VkIG9yY2hlc3RyYXRpb24gYXJlIG9wZXJhdGlvbmFsIHVuZGVyIGFjY2VwdGVkIGF1dGhvcml0eSBib3VuZGFyaWVzLiJdLCJlbGk1IjoiVGhpcyBsYXRlciBzdGVwIHdpbGwgYXV0b21hdGUgdGhlIGxvb3AgYXJvdW5kIHRoZSBwcm9ncmFtbWUgdG9vbC4iLCJlcG9jaHMiOlt7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJTMyIsImxvY2siOiJTMy1ERVNJR04tTE9DSy1QRU5ESU5HIiwibmFtZSI6IlMzIC0gUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIiLCJwdXJwb3NlIjoiUmVwb3NpdG9yeSBsb29wIGFuZCB0cnVzdGVkIENJIGF1dG9tYXRpb24iLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYwLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJCdWlsZCB0aGUgUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIgYW5kIHRydXN0ZWQtQ0kgYXV0b21hdGlvbiBhcm91bmQgdGhlIEUzIHByaW1pdGl2ZS4iLCJvcmRlciI6Mywib3V0X29mX3Njb3BlIjpbIlM0IHRocm91Z2ggUzYgZXhlY3V0aW9uLiIsIlVuYXBwcm92ZWQgY29uc2VxdWVudGlhbCBsaXZlIG9yIHJlcG9zaXRvcnktcHJvdGVjdGlvbiBtdXRhdGlvbi4iXSwicHJfcmVnaXN0cnkiOltdLCJzY29wZSI6WyJSZXBvc2l0b3J5IExvb3AgTWFuYWdlciwgd29yayBncmFwaCwgbGVhc2VzL2ZlbmNlcywgZHVyYWJsZSByZWNvdmVyeSwgaWRlbXBvdGVuY3ksIGJvdW5kZWQgY29udmVyZ2VuY2UvdHdvLXJlcGFpciBzdG9wLCB0cnVzdGVkIENJIGFuZCBwZXJtYW5lbnQgaG9zdC1iYWNrZWQgb3JjaGVzdHJhdGlvbi4iXSwic3VtbWFyeSI6IkJ1aWxkIHRoZSBSZXBvc2l0b3J5IExvb3AgTWFuYWdlciBhbmQgdHJ1c3RlZC1DSSBhdXRvbWF0aW9uIGFyb3VuZCB0aGUgRTMgcHJpbWl0aXZlLiIsInRpdGxlIjoiUzMg4oCUIFJlcG9zaXRvcnkgTG9vcCBNYW5hZ2VyICsgdHJ1c3RlZCBDSSBsaXZlIGludGVncmF0aW9uIn0seyJib3VuZGFyaWVzIjpbIkxpdmUgbjhuIG9wZXJhdGlvbnMgcmVxdWlyZSBleHBsaWNpdCBhdXRob3JpdHkuIiwiVGhpcyBxdWV1ZWQgY2hpbGQgZG9lcyBub3Qgc3RhcnQgdW50aWwgaXRzIGRlcGVuZGVuY2llcyBhcmUgY29tcGxldGUgb3IgcmV0aXJlZC4iXSwiZGVsaXZlcmFibGVzIjpbIkV4YWN0LXBpbm5lZCBvZmZpY2lhbCBuOG4gU2tpbGxzLiIsIkFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQuIiwiQ3JlZGVudGlhbC0gYW5kIGlkZW50aXR5LXNhZmUgYm91bmRhcmllcy4iLCJQYXVzZS1iZWZvcmUtZXhpdCBhbmQgSlNPTiBwcmltaXRpdmUgaW1wb3J0IHJlZ3Jlc3Npb25zIGZpeGVkIGFuZCBjb3ZlcmVkLiJdLCJkZXBlbmRlbmNpZXMiOlszNTgsMzU5LDM2MF0sImRvbmVfd2hlbiI6WyJPZmZpY2lhbCBuOG4gU2tpbGxzIGFyZSBleGFjdC1waW5uZWQgYW5kIEFQSS1maXJzdCB0cmFuc3BvcnQgaXMgcHJvdmVuLiIsIkNyZWRlbnRpYWwvaWRlbnRpdHkgc2FmZXR5LCBwYXVzZS1iZWZvcmUtZXhpdCBhbmQgSlNPTiBwcmltaXRpdmUgaW1wb3J0IHJlZ3Jlc3Npb25zIHBhc3MgdGhlaXIgcmVxdWlyZWQgZXZpZGVuY2UuIl0sImVsaTUiOiJUaGlzIGxhdGVyIHN0ZXAgd2lsbCBtYWtlIG44biBzdXBwb3J0IG9mZmljaWFsIGFuZCBzYWZlbHkgdHJhbnNwb3J0IHdvcmtmbG93cy4iLCJlcG9jaHMiOlt7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJTNCIsImxvY2siOiJTNC1ERVNJR04tTE9DSy1QRU5ESU5HIiwibmFtZSI6IlM0IC0gbjhuIHNraWxscyBhbmQgdHJhbnNwb3J0IiwicHVycG9zZSI6Ik9mZmljaWFsIG44biBza2lsbHMgYW5kIEFQSS1maXJzdCB0cmFuc3BvcnQiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYxLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJNb3ZlIG44biBzdXBwb3J0IHRvIG9mZmljaWFsIG44biBTa2lsbHMgYW5kIHNhZmUgQVBJLWZpcnN0IHdvcmtmbG93IHRyYW5zcG9ydC4iLCJvcmRlciI6NCwib3V0X29mX3Njb3BlIjpbIkN1c3RvbSBuOG4gTUNQIHJldml2YWwuIiwiTGl2ZSBuOG4gb3BlcmF0aW9ucyB3aXRob3V0IGV4cGxpY2l0IGF1dGhvcml0eS4iLCJTNSBhbmQgUzYgZXhlY3V0aW9uLiJdLCJwcl9yZWdpc3RyeSI6W10sInNjb3BlIjpbIk9mZmljaWFsIG44biBTa2lsbHMsIEFQSS1maXJzdCB0cmFuc3BvcnQsIGNyZWRlbnRpYWwvaWRlbnRpdHktc2FmZSBib3VuZGFyaWVzIGFuZCB0aGUgdHdvIHJlcG9ydGVkIHJlZ3Jlc3Npb25zLiJdLCJzdW1tYXJ5IjoiTW92ZSBuOG4gc3VwcG9ydCB0byBvZmZpY2lhbCBuOG4gU2tpbGxzIGFuZCBzYWZlIEFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQuIiwidGl0bGUiOiJTNCDigJQgT2ZmaWNpYWwgbjhuIFNraWxscyArIEFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQifSx7ImJvdW5kYXJpZXMiOlsiTm8gc2VjcmV0IHZhbHVlcyBpbiByZXBvLCBwcm9tcHRzLCBsb2dzIG9yIHB1YmxpYyBldmlkZW5jZS4iLCJDb25zZXF1ZW50aWFsIHByb3ZpZGVyIGFjdGlvbnMgcmVxdWlyZSBleHBsaWNpdCBhdXRob3JpdHkuIiwiVGhpcyBxdWV1ZWQgY2hpbGQgZG9lcyBub3Qgc3RhcnQgdW50aWwgaXRzIGRlcGVuZGVuY2llcyBhcmUgY29tcGxldGUgb3IgcmV0aXJlZC4iXSwiZGVsaXZlcmFibGVzIjpbIkV4dGVybmFsIGF1dGhvcml0eSBhbmQgc2VjcmV0LXJlZmVyZW5jZSBib3VuZGFyaWVzLiIsIlNlbnNpdGl2ZS1maWxlIGJvdW5kYXJpZXMuIiwiSG9zdGVkIG9wZXJhdGlvbnMsIGJhY2t1cCwgcm9sbGJhY2sgYW5kIGhlYWx0aC4iLCJQcml2YWN5LXNhZmUgdGVsZW1ldHJ5LiJdLCJkZXBlbmRlbmNpZXMiOlszNTgsMzU5LDM2MF0sImRvbmVfd2hlbiI6WyJFeHRlcm5hbCBhdXRob3JpdHksIHNlY3JldC1yZWZlcmVuY2UgYW5kIHNlbnNpdGl2ZS1maWxlIGJvdW5kYXJpZXMgYXJlIHByb3Zlbi4iLCJIb3N0ZWQgb3BlcmF0aW9ucywgYmFja3VwL3JvbGxiYWNrL2hlYWx0aCBhbmQgcHJpdmFjeS1zYWZlIHRlbGVtZXRyeSBtZWV0IGFjY2VwdGVkIGV2aWRlbmNlIHJlcXVpcmVtZW50cy4iXSwiZWxpNSI6IlRoaXMgbGF0ZXIgc3RlcCB3aWxsIGRlZmluZSB3aG8gbWF5IHRvdWNoIHByb3ZpZGVycywgc2VjcmV0cyBhbmQgaG9zdGVkIHN5c3RlbXMuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOm51bGwsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzUiLCJsb2NrIjoiUzUtREVTSUdOLUxPQ0stUEVORElORyIsIm5hbWUiOiJTNSAtIEV4dGVybmFsIGF1dGhvcml0eSBib3VuZGFyaWVzIiwicHVycG9zZSI6IkV4dGVybmFsIGF1dGhvcml0eSBhbmQgaG9zdGVkLW9wZXJhdGlvbiBib3VuZGFyaWVzIiwidGVybWluYWxfZGlzcG9zaXRpb24iOm51bGx9XSwiZmluYWxpdHkiOnsiYXV0aG9yaXR5X3JlZiI6bnVsbCwic3RhdGUiOiJIRUxEIn0sImhvbGRzIjpbXSwiaXNzdWUiOjM2MiwibGlmZWN5Y2xlIjoiUVVFVUVEIiwib2JqZWN0aXZlIjoiRXN0YWJsaXNoIGV4dGVybmFsIGF1dGhvcml0eSwgc2VjcmV0cywgcHJvdmlkZXIvZGVwbG95bWVudCBhbmQgaG9zdGVkLW9wZXJhdGlvbiBib3VuZGFyaWVzLiIsIm9yZGVyIjo1LCJvdXRfb2Zfc2NvcGUiOlsiU2VjcmV0IHZhbHVlcyBpbiByZXBvc2l0b3J5IGZpbGVzLCBwcm9tcHRzLCBsb2dzIG9yIHB1YmxpYyBldmlkZW5jZS4iLCJDb25zZXF1ZW50aWFsIHByb3ZpZGVyIGFjdGlvbnMgd2l0aG91dCBleHBsaWNpdCBhdXRob3JpdHkuIiwiUzYgZXhlY3V0aW9uLiJdLCJwcl9yZWdpc3RyeSI6W10sInNjb3BlIjpbIkV4dGVybmFsIGF1dGhvcml0eSwgc2VjcmV0IHJlZmVyZW5jZXMsIHNlbnNpdGl2ZSBmaWxlcywgaG9zdGVkIG9wZXJhdGlvbnMsIGJhY2t1cC9yb2xsYmFjay9oZWFsdGggYW5kIHByaXZhY3ktc2FmZSB0ZWxlbWV0cnkuIl0sInN1bW1hcnkiOiJFc3RhYmxpc2ggZXh0ZXJuYWwgYXV0aG9yaXR5LCBzZWNyZXRzLCBwcm92aWRlci9kZXBsb3ltZW50IGFuZCBob3N0ZWQtb3BlcmF0aW9uIGJvdW5kYXJpZXMuIiwidGl0bGUiOiJTNSDigJQgRXh0ZXJuYWwgYXV0aG9yaXR5LCBzZWNyZXRzICsgaG9zdGVkIG9wZXJhdGlvbnMifSx7ImJvdW5kYXJpZXMiOlsiUzYgcmVtYWlucyBsYXN0LiIsIkNvbnNlcXVlbnRpYWwgbGl2ZSBhY3Rpb25zIHJlcXVpcmUgc2VwYXJhdGUgYXV0aG9yaXR5LiJdLCJkZWxpdmVyYWJsZXMiOlsiRmluYWwgbmF0aXZlL2xpdmUgVUFULiIsIkxvb3AgTWFuYWdlciwgdHJ1c3RlZC1DSSBhbmQgbjhuIFVBVC4iLCJSZXNpZHVlIHZlcmlmaWNhdGlvbi4iLCJGaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iXSwiZGVwZW5kZW5jaWVzIjpbMzU4LDM1OSwzNjAsMzYxLDM2Ml0sImRvbmVfd2hlbiI6WyJOYXRpdmUvbGl2ZSwgTG9vcCBNYW5hZ2VyLCB0cnVzdGVkLUNJIGFuZCBuOG4gVUFUIGFyZSBjb21wbGV0ZSB1bmRlciB0aGVpciBhdXRob3JpdGllcy4iLCJSZXNpZHVlIHZlcmlmaWNhdGlvbiBhbmQgZmluYWwgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UgYXJlIGFjY2VwdGVkIGJ5IFdlYi4iXSwiZWxpNSI6IlRoaXMgZmluYWwgc3RlcCB3aWxsIHRlc3QgdGhlIHdob2xlIFRvb2xraXQgYWZ0ZXIgZXZlcnkgZWFybGllciBzdGVwIGlzIGRvbmUuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOm51bGwsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzYiLCJsb2NrIjoiUzYtREVTSUdOLUxPQ0stUEVORElORyIsIm5hbWUiOiJTNiAtIE5hdGl2ZSBVQVQgYW5kIGFzc3VyYW5jZSIsInB1cnBvc2UiOiJOYXRpdmUgVUFULCBjbGVhbnVwIGFuZCBmaW5hbCBhc3N1cmFuY2UiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYzLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJQZXJmb3JtIG5hdGl2ZS9saXZlIFVBVCwgcmVzaWR1ZSBjbGVhbnVwIGFuZCBmaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iLCJvcmRlciI6Niwib3V0X29mX3Njb3BlIjpbIlN0YXJ0aW5nIGJlZm9yZSBTMSB0aHJvdWdoIFM1IG9ibGlnYXRpb25zIGFyZSB0ZXJtaW5hbCBhbmQgYWNjZXB0ZWQuIiwiQ29uc2VxdWVudGlhbCBsaXZlIGFjdGlvbnMgd2l0aG91dCBzZXBhcmF0ZSBhdXRob3JpdHkuIl0sInByX3JlZ2lzdHJ5IjpbXSwic2NvcGUiOlsiRmluYWwgbmF0aXZlL2xpdmUgVUFULCBMb29wIE1hbmFnZXIvdHJ1c3RlZC1DSS9uOG4gVUFULCByZXNpZHVlIHZlcmlmaWNhdGlvbiBhbmQgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UuIl0sInN1bW1hcnkiOiJQZXJmb3JtIG5hdGl2ZS9saXZlIFVBVCwgcmVzaWR1ZSBjbGVhbnVwIGFuZCBmaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iLCJ0aXRsZSI6IlM2IOKAlCBOYXRpdmUgVUFUICsgZmluYWwgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UifV0sImNvbmN1cnJlbmN5X2F1dGhvcml0eSI6eyJhdXRob3JpdHlfZGlnZXN0IjpudWxsLCJhdXRob3JpdHlfcmVmIjpudWxsLCJtYXhfYWN0aXZlX2xhbmVzIjoxLCJtb2RlIjoiU0lOR0xFX0RFRkFVTFQiLCJwZXJtaXR0ZWRfY2hpbGRfaXNzdWVzIjpbXX0sImRlc2lnbl9sb2NrIjoiREwtUzItR0lUSFVCLVBST0dSQU0tU1VSRkFDRS1SRUNPVkVSWS0wMDMiLCJldmlkZW5jZV9yZWZzIjpbeyJpZCI6ImUzLWc0LWFjdGl2ZS10cmFuc2l0aW9uIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1Njo1NDU2MDc3NjQ3Iiwic3VtbWFyeSI6IkUzIEc0IGNvbnRyb2wtcGxhbmUgdHJhbnNpdGlvbiAtIFBSRVZJRVcgT05MWS4ifSx7ImlkIjoicmVwYWlyMS1jdXJyZW50Iiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDUyMTM4MzkwIiwic3VtbWFyeSI6IkUzIEczIGNvbnZlcmdlbmNlIFJlcGFpciAxIGlzIGN1cnJlbnQgYW5kIGF3YWl0cyBXZWIgcmVjb25jaWxpYXRpb24uIn0seyJpZCI6InByaW9yLWc0LWFtZW5kIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDQ4ODE4MTQyIiwic3VtbWFyeSI6IlByaW9yIGlzb2xhdGVkIEUzIEc0IHJldHVybmVkIEFNRU5EIGFuZCByZXF1aXJlZCBjb252ZXJnZW5jZSBHMiByZS1lbnRyeS4ifSx7ImlkIjoiY29udmVyZ2VuY2UtZzItYWNjZXB0ZWQiLCJraW5kIjoiV0VCIiwicmVmZXJlbmNlIjoiZ2l0aHViOmlzc3VlLWNvbW1lbnQ6MzU5OjU0NDkwNzUzMDQiLCJzdW1tYXJ5IjoiRTMgY29udmVyZ2VuY2UgRzIgZGVzaWduIExvY2sgd2FzIGFjY2VwdGVkIGFuZCBHMyBhdXRob3Jpc2VkLiJ9LHsiaWQiOiJlMS1hY2NlcHRlZCIsImtpbmQiOiJXRUIiLCJyZWZlcmVuY2UiOiJnaXRodWI6aXNzdWUtY29tbWVudDozNjY6NTQyODc0MTIzMSIsInN1bW1hcnkiOiJTMiBFMSBDcmVhdGlvbiBHYXRlIHdhcyBXZWIgYWNjZXB0ZWQuIn0seyJpZCI6ImUyLWFjY2VwdGVkIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM2Njo1NDM3MjY2MTU3Iiwic3VtbWFyeSI6IlMyIEUyIFByb2R1Y3QgUG9ydGZvbGlvIHdhcyBXZWIgYWNjZXB0ZWQuIn0seyJpZCI6InMxLWFjY2VwdGVkIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1ODo1NDI2OTQ4Mzk0Iiwic3VtbWFyeSI6IlMxIHdhcyB0ZXJtaW5hbCwgY2Fub25pY2FsLCBhbmQgYWNjZXB0ZWQuIn0seyJpZCI6InByZWRlY2Vzc29yLWNvdmVyYWdlIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDM3ODI3MDMwIiwic3VtbWFyeSI6IlByZWRlY2Vzc29yIGNvdmVyYWdlIGlzIGV4YWN0bHkgNDUgaXNzdWVzLCA4NCBjcml0ZXJpYSwgYW5kIHplcm8gdW5tYXBwZWQuIn0seyJpZCI6InJlcGFpci1oZWFkIiwia2luZCI6IkNPTU1JVCIsInJlZmVyZW5jZSI6ImdpdDpjb21taXQ6NDQ2NDcxZTYyNDhiZjhiYzY1NDBkNGEwM2FhMmEwZTFhYjYyNWYzZCIsInN1bW1hcnkiOiJFeGFjdCBSZXBhaXIgMSBjYW5kaWRhdGUgY29tbWl0LiJ9LHsiaWQiOiJyZXBhaXItY2hlY2tzIiwia2luZCI6IkNIRUNLIiwicmVmZXJlbmNlIjoiZ2l0aHViOmNoZWNrczo0NDY0NzFlNjI0OGJmOGJjNjU0MGQ0YTAzYWEyYTBlMWFiNjI1ZjNkIiwic3VtbWFyeSI6IkV4YWN0LWhlYWQgdmFsaWRhdGlvbiBhbmQgQ29kZVFMIHBhc3NlZC4ifSx7ImlkIjoid2ViXzc3MDRjYTBkODcyNTZiNDI3ZjYzIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDYyOTg1MDcxIiwic3VtbWFyeSI6IldlYi1jb250cm9sbGVkIEUzIGFyY2hpdGVjdHVyZSBhbmQgZXhhY3QtY2FuZGlkYXRlIGFkbWlzc2lvbiBhdXRob3JpdHkuIn0seyJpZCI6ImUzLWczLWRvZ2Zvb2QtYWNjZXB0ZWQiLCJraW5kIjoiV0VCIiwicmVmZXJlbmNlIjoiZ2l0aHViOmlzc3VlLWNvbW1lbnQ6MzU5OjU0NjY5MTI1NjYiLCJzdW1tYXJ5IjoiV2ViIGFjY2VwdGVkIEUzIEczIGRvZ2Zvb2QgYW5kIGF1dGhvcmlzZWQgdGhlIGZyZXNoIEc0IHRyYW5zaXRpb24gcHJldmlldy4ifV0sImV4dGVuc2lvbnMiOltdLCJoaXN0b3JpY2FsX3RyYW5zaXRpb25zIjpbeyJjaGlsZF9pc3N1ZSI6MzU5LCJkaXNwb3NpdGlvbiI6IkFNRU5EIiwiZXBvY2hfaWQiOiJFMyIsImV2aWRlbmNlX3JlZiI6InByaW9yLWc0LWFtZW5kIiwiZ2F0ZSI6Ikc0IiwiaWQiOiJlMy1wcmlvci1nNC1hbWVuZCJ9LHsiY2hpbGRfaXNzdWUiOjM1OSwiZGlzcG9zaXRpb24iOiJBQ0NFUFRFRCIsImVwb2NoX2lkIjoiRTMiLCJldmlkZW5jZV9yZWYiOiJjb252ZXJnZW5jZS1nMi1hY2NlcHRlZCIsImdhdGUiOiJHMiIsImlkIjoiZTMtY29udmVyZ2VuY2UtZzItYWNjZXB0ZWQifSx7ImNoaWxkX2lzc3VlIjozNTksImRpc3Bvc2l0aW9uIjoiQUNDRVBURUQiLCJlcG9jaF9pZCI6IkUzIiwiZXZpZGVuY2VfcmVmIjoiZTMtZzMtZG9nZm9vZC1hY2NlcHRlZCIsImdhdGUiOiJHMyIsImlkIjoiZTMtZzMtZG9nZm9vZC1hY2NlcHRlZCJ9XSwicGFyZW50Ijp7ImdvYWwiOiJEZWxpdmVyIHRoZSBzaXgtc3RhZ2UgVG9vbGtpdCBwcm9ncmFtbWUgdGhyb3VnaCB0cnV0aGZ1bCwgZGV0ZXJtaW5pc3RpYywgc291cmNlLXRyYWNlYWJsZSBwcm9ncmFtbWUgdmlld3MuIiwiaXNzdWUiOjI0MCwidGl0bGUiOiJbIFBBUkVOVCBUSFJFQUQgXSBBSSBBZ2VudCBUb29sa2l0IOKAlCBSb2xsaW5nIFdvcmsgUXVldWUifSwicHJlZGVjZXNzb3JfY29udHJhY3RfZGlnZXN0IjoiNmVhOWEzNTM5NzM3Njk5NTczMGMwNDJmN2NkOTE1MDg0MzQ4YzQyM2VhZTc2ZGIwNThhNDgwYWM5YzllMjI3NiIsInBycyI6W3siY2hhbmdlZF9zdXJmYWNlcyI6WyJHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIgcnVudGltZSBhbmQgcG9saWN5LiIsIlByb2dyYW1tZSBzdXJmYWNlIGFuZCBwcmVkZWNlc3NvciBjb250cmFjdHMuIiwiRm9jdXNlZCByZWNvbmNpbGlhdGlvbiBhbmQgYnJpZGdlIHRlc3RzLiIsIkFsaWduZWQgbmF0aXZlIHBsdWdpbiBhbmQgYnJpZGdlIHZlcnNpb24gc3VyZmFjZXMuIl0sImNoaWxkX2lzc3VlIjozNTksImRlc2lnbl9jb25zdHJhaW50cyI6WyJSb2xlIHJlbWFpbnMgSU5URVJNRURJQVRFIGFuZCBjb21wbGV0ZXNfY2hpbGQgcmVtYWlucyBmYWxzZS4iLCJQUiByZW1haW5zIGRyYWZ0LiIsIk5vIGZpbmFsaXR5IG9wZXJhdGlvbiBpcyBhdXRob3Jpc2VkIGJ5IHRoaXMgcmVjb25jaWxpYXRpb24uIl0sImVsaTUiOiJUaGUgcmVwYWlyIGFuZCBkb2dmb29kIGNvcnJlY3Rpb24gYXJlIGFjY2VwdGVkLCBhbmQgdGhlIGZpbmFsIGluZGVwZW5kZW50IEUzIHJldmlldyBnYXRlIGlzIGFjdGl2ZSB3aXRob3V0IGEgcmVzdWx0LiIsImV2aWRlbmNlX3JlZnMiOltdLCJudW1iZXIiOjM2Niwib3V0X29mX3Njb3BlIjpbIkc0IHJlc3VsdCBvciBFMyBhY2NlcHRhbmNlIGJlZm9yZSBzZXBhcmF0ZSBXZWIgYXV0aG9yaXR5LiIsIlJlYWR5LCBtZXJnZSwgZmluYWxpdHksIEU0IGFuZCBTMyB0aHJvdWdoIFM2IGV4ZWN1dGlvbi4iLCJQcm92aWRlciwgZGVwbG95bWVudCwgY3JlZGVudGlhbCBhbmQgbGl2ZSBuOG4gb3BlcmF0aW9ucy4iXSwicHVycG9zZSI6IkltcGxlbWVudCBhbmQgcHJvdmUgdGhlIGRldGVybWluaXN0aWMgR2l0SHViIHByb2dyYW1tZSByZWNvbmNpbGVyIHByb2R1Y3QgZm9yIFMyIEUzLiIsInNjb3BlIjpbIkNhbm9uaWNhbCBwYXJlbnQsIGNoaWxkIGFuZCBQUiB2aWV3cy4iLCJNYW5hZ2VkIGxpZmVjeWNsZSBsYWJlbHMgYW5kIHR5cGVkIGV2ZW50cy4iLCJFeGlzdGluZy1pc3N1ZSBzdWItaXNzdWUgYW5kIGJsb2NrZWQtYnkgcmVsYXRpb25zaGlwcy4iLCJQcmV2aWV3LCBleHBsaWNpdCBhcHBseSwgcmVhZGJhY2sgdmVyaWZpY2F0aW9uIGFuZCBleGFjdCByZXJ1biB6ZXJvIGRlbHRhLiJdLCJzdW1tYXJ5IjoiRTMgUmVwYWlyLTIgaW1wbGVtZW50YXRpb24sIHY1IG1pZ3JhdGlvbi9yZWFkYmFjay96ZXJvLWRlbHRhIGFuZCBkb2dmb29kIFVYIGNvcnJlY3Rpb24gYXJlIGFjaGlldmVkOyBmcmVzaCBHNCBpcyBub3cgYWN0aXZlIHdpdGggbm8gcmVzdWx0LiIsInZhbGlkYXRpb25fcmVxdWlyZW1lbnRzIjpbIlJlcGFpci0yIGZvY3VzZWQgdGVzdHMgcGFzc2VkIDI0LzI0LiIsIlJlbGV2YW50IHJlY29uY2lsZXIgc3VpdGUgcGFzc2VkIDI1NS8yNTUuIiwiVG9vbGtpdCB2YWxpZGF0aW9uIGFuZCBhdWRpdHMgcGFzc2VkLiIsIkV4YWN0LWhlYWQgVmFsaWRhdGUgcGFzc2VkLiIsIkV4YWN0LWhlYWQgVmFsaWRhdGUgdG9vbGtpdCBwYXNzZWQuIiwiQ29kZVFMIGFuZCBsYW5ndWFnZSBhbmFseXNlcyBwYXNzZWQuIiwiRHluYW1pYyBHSEFTIHVuc3VwcG9ydGVkLW1vZGVsIGZhaWx1cmUgaXMgZXh0ZXJuYWwvbm9uLWNhbmRpZGF0ZSBldmlkZW5jZS4iLCJEdXJhYmxlIG9yaWdpbmFsIG1pZ3JhdGlvbiBwcmV2aWV3IGFuZCByZWNlaXB0IHdlcmUgcmVhZCBiYWNrLiIsIkV4YWN0bHkgb25lIGF1dGhvcmlzZWQgdjUgbWlncmF0aW9uIEFwcGx5IGNvbXBsZXRlZC4iLCJNaWdyYXRpb24gZXZlbnQ6IDg3ODUxYjM2ZTBmNTRkZDk2OWFjMWI4NWU0OWUyZjE1OWFlZWZlZTE0OTc4NjFmMjBlMmZkNDViMDIxMjhlNjYuIiwiSW1tZWRpYXRlIG1pZ3JhdGlvbiByZXJ1bjogUFJPR1JBTU1FX1pFUk9fREVMVEEgLyBtdXRhdGlvbl9jb3VudD0wLiIsIkRvZ2Zvb2QgVVggY29ycmVjdGlvbiBhY2NlcHRlZCBieSBXZWIgdW5kZXIgYXV0aG9yaXR5IGNvbW1lbnQgNTQ2NjkxMjU2Ni4iLCJGcmVzaCBHNDogQUNUSVZFIC8gTk8gUkVTVUxULiJdfV0sInJlcG9zaXRvcnkiOiJ3ZWlqdW5zd2ovYWktYWdlbnQtdG9vbGtpdCIsInNjaGVtYSI6InRvb2xraXQuZ2l0aHViLXByb2dyYW0uc3RhdGUudjUifX0 -->\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:END -->";
 const CHILD_BODY = "<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:BEGIN v5 -->\n# S2 — Productize retained skills + native host adapters\n\n## Summary\nE1 and E2 are accepted; E3 Repair-2 implementation, v5 migration/readback/zero-delta and dogfood UX correction are achieved; fresh G4 is now active with no result.\n\n## Operating contract\n| Field | Value |\n| --- | --- |\n| Parent | #240 |\n| Lane | child-359 |\n| Lifecycle | CURRENT |\n| Epoch | E3 |\n| Gate | G4 |\n| Gate state | ACTIVE |\n| Lock | DL-S2-GITHUB-PROGRAM-CONVERGENCE-002 |\n| Finality | HELD |\n\n## Objective\nProductise retained skills, complete the GitHub programme reconciler, then finish truthful native host adapters.\n\n## Deliverables\n- Retained-skill productisation.\n- GitHub programme reconciler v5.\n- Future E4 truthful native adapters.\n\n## Done when\n- E1 and E2 remain accepted with retained evidence.\n- E3 Repair-2, v5 migration/readback/zero-delta, canonical-data UX correction, fresh G4 and Web acceptance are complete.\n- E4 truthful native adapters are complete and Web records S2 finality.\n\n## Scope\n- Retained-skill productisation, GitHub programme reconciler v5 and future E4 truthful native adapters.\n- Fresh E3 G4 transition and exact-candidate validation.\n\n## Out of scope\n- G4 result or E3 acceptance before separate Web authority.\n- Ready, merge, finality, E4 execution and S3 through S6 progression.\n\n## Progress\n- E1: ACCEPTED\n- E2: ACCEPTED\n- E3: G4 ACTIVE\n- E4: PENDING\n\n## Achieved\n- E1 ACCEPTED\n- E2 ACCEPTED\n- E3 G4 AMEND\n- E3 G2 ACCEPTED\n- E3 G3 ACCEPTED\n\n## Remaining\n- E3 G4\n- E4 G1\n- E4 G2\n- E4 G3\n- E4 G4\n- Web finality disposition\n\n## Epochs / Locks\n| Epoch | Lock | State | Purpose |\n| --- | --- | --- | --- |\n| E1 | DL-S2-CREATION-GATE-003 | ACCEPTED | Creation and admission gate |\n| E2 | DL-S2-PRODUCT-PORTFOLIO-015 | ACCEPTED | Retained product portfolio |\n| E3 | DL-S2-GITHUB-PROGRAM-CONVERGENCE-002 | ACTIVE | Managed GitHub programme reconciliation |\n| E4 | DL-S2-NATIVE-ADAPTERS-002 | PENDING | Truthful native host adapters |\n\n## PR registry\n| PR | Status | Role | Completes Child |\n| --- | --- | --- | --- |\n| #366 | ACTIVE | INTERMEDIATE | No |\n\n## Holds\nNone\n\n## Boundaries\n- Web owns fresh G4 disposition, E3 acceptance, Ready, merge and finality.\n- Fresh G4 is active with no result yet.\n- E4 and S3 through S6 do not begin in this transition.\n\n## Next action\nComplete E3 G4 without advancing finality.\n\n## ELI5\nThe programme tool is repaired and its final independent E3 review gate is now active, but no result or acceptance exists yet.\n\n## Additional context\nNone\n\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PROJECTION v1 eyJjYW5vbmljYWxfZGlnZXN0IjoiYTA5ZmRhZmE2Yjc3YWQ4NTYyNDI5OGNlZWE0ODhhNWMzNDJkMDBhMDcwMDIxOGRlNjJiYTIyNzZlZDA1MDI4MCIsImV4dGVuc2lvbl9kaWdlc3QiOiI0ZjUzY2RhMThjMmJhYTBjMDM1NGJiNWY5YTNlY2JlNWVkMTJhYjRkOGUxMWJhODczYzJmMTExNjEyMDJiOTQ1Iiwia2luZCI6ImNoaWxkIiwibnVtYmVyIjozNTksInBhcmVudF9pc3N1ZSI6MjQwLCJwcm9qZWN0aW9uX2RpZ2VzdCI6IjQ3MmFlMDkxZmY2NzRmN2IxMzk4OTg0NGE5MjBiZmVlYjliYjE5ZWU2NWY0ZWYyNWFmZjQ1YzgyNDQ0MTQ4ZjkiLCJyZXBvc2l0b3J5Ijoid2VpanVuc3dqL2FpLWFnZW50LXRvb2xraXQiLCJzY2hlbWEiOiJ0b29sa2l0LmdpdGh1Yi1wcm9ncmFtLnByb2plY3Rpb24udjEifQ -->\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:END -->";
 const PR379_REVIEW_BODY = "## WEB EXACT-HEAD G3 BLOCKED ADJUDICATION / REPAIR-1 AUTHORITY\n\nExact reviewed head: `d3587fb69f0043d74936c116168a17247174ba07` / tree `1cf1bfbccee02b757040350c872bf18ad8056071` against canonical main `c72028c63cc09dd07d3e522692065448b6b7dbb6`.\n\nWeb accepts the G3 implementation structurally but does not accept it as G3-complete because both hosted Validate jobs fail.\n\nThe two failures are adjudicated as same-root test harness/fixture defects only:\n1. real receipt-store tamper test reopens/reads the deliberately corrupted store outside the intended fail-closed assertion boundary;\n2. real SQLite recovery fixture references `harnessA.scope.scope_digest` instead of canonical `harnessA.scope.grant.scope_digest`.\n\nNo runtime, G1 or G2 defect is presently established.\n\nControlling Repair-1 authority: #359 comment `5578743909`.\nParent mirror: #240 comment `5578745835`.\n\nRepair 1 may change only the receipt test, programme-bootstrap-recovery test, then a bootstrap-only repin. No other candidate mutation is authorised. Repair 2, G4, Ready, merge and Programme Apply remain unauthorised pending Web adjudication.";
@@ -460,10 +462,139 @@ function rebindFinalisationProviderRevision(value, resource, revision) {
   next.pagination = programme.postMergeEpochFinalisation.buildPaginationEvidence(next);
   return withEvidenceDigest(next);
 }
+function untrustedFinalisationSourceBinding(value) {
+  const binding = {
+    canonical_main: clone(value.canonical_main),
+    child: {
+      body_digest: value.child.body_digest,
+      canonical_digest: value.child.canonical_digest,
+      dependencies: clone(value.child.dependencies),
+      issue: value.child.issue,
+      labels: clone(value.child.labels),
+      native_parent: value.child.native_parent,
+      prefix_digest: value.child.prefix_digest,
+      projection_digest: value.child.projection.projection_digest,
+      relationships: clone(value.child.relationships),
+      revision: value.child.revision,
+      sole_current: value.child.sole_current,
+      suffix_digest: value.child.suffix_digest,
+    },
+    collector: clone(value.collector),
+    complete: true,
+    parent: {
+      body_digest: value.parent.body_digest,
+      canonical_digest: value.parent.canonical_digest,
+      issue: value.parent.issue,
+      native_children: clone(value.parent.native_children),
+      prefix_digest: value.parent.prefix_digest,
+      relationships: clone(value.parent.relationships),
+      revision: value.parent.revision,
+      suffix_digest: value.parent.suffix_digest,
+    },
+    pr_379: {
+      body_digest: value.pr_379.body_digest,
+      facts: clone(value.pr_379.facts),
+      facts_digest: value.pr_379.facts_digest,
+      pr: value.pr_379.pr,
+      revision: value.pr_379.revision,
+    },
+    pr_380: {
+      body_digest: value.pr_380.body_digest,
+      facts: clone(value.pr_380.facts),
+      facts_digest: value.pr_380.facts_digest,
+      pr: value.pr_380.pr,
+      revision: value.pr_380.revision,
+    },
+  };
+  return { ...binding, snapshot_digest: programme.digestValue(binding) };
+}
+function refreshFinalisationBodyEvidence(value, kind) {
+  const parsed = kind === 'parent'
+    ? programme.parseParentV5Body(value.parent.raw_body, { repository, parent_issue: 240 })
+    : programme.parseChildV5Body(value.child.raw_body, { repository, parent_issue: 240 });
+  assert.equal(parsed.ok, true, `${kind}: refreshed body parse`);
+  const target = value[kind];
+  target.body_digest = parsed.body_digest;
+  target.prefix_digest = parsed.prefix_digest;
+  target.suffix_digest = parsed.suffix_digest;
+  target.canonical_digest = parsed.envelope.canonical_digest;
+  if (kind === 'parent') target.state = clone(parsed.state);
+  else target.projection = clone(parsed.envelope);
+}
+function recomputeFinalisationEvidence(value) {
+  const next = clone(value);
+  next.pr_379.facts_digest = programme.digestValue(next.pr_379.facts);
+  next.pr_380.facts_digest = programme.digestValue(next.pr_380.facts);
+  next.source_binding = untrustedFinalisationSourceBinding(next);
+  next.provider_facts.facts_digest = next.source_binding.snapshot_digest;
+  next.pagination = programme.postMergeEpochFinalisation.buildPaginationEvidence(next);
+  return withEvidenceDigest(next);
+}
+function mutateFinalisationBody(value, kind, transform) {
+  const next = clone(value);
+  next[kind].raw_body = transform(next[kind].raw_body);
+  refreshFinalisationBodyEvidence(next, kind);
+  return recomputeFinalisationEvidence(next);
+}
+function rebaseFinalisationPr380(value) {
+  const next = clone(value);
+  const rebasedFacts = { ...next.pr_380.facts, merge_commit: 'f'.repeat(40) };
+  next.pr_380.revision = 'synthetic:pr380:rebased';
+  next.pr_380.body_digest = digestText('synthetic rebased provider body #380');
+  next.pr_380.facts = rebasedFacts;
+  next.pr_380.facts_digest = programme.digestValue(rebasedFacts);
+  if (next.transaction.previous_source_binding) {
+    const previous = clone(next.transaction.previous_source_binding);
+    previous.pr_380.revision = next.pr_380.revision;
+    previous.pr_380.body_digest = next.pr_380.body_digest;
+    previous.pr_380.facts = clone(rebasedFacts);
+    previous.pr_380.facts_digest = next.pr_380.facts_digest;
+    delete previous.snapshot_digest;
+    next.transaction.previous_source_binding = {
+      ...previous,
+      snapshot_digest: programme.digestValue(previous),
+    };
+  }
+  return recomputeFinalisationEvidence(next);
+}
+function rebaseFinalisationPr380RevisionBody(value) {
+  const next = clone(value);
+  const revision = 'synthetic:pr380:rebased-shape';
+  const bodyDigest = digestText('synthetic rebased provider body #380 without fact movement');
+  next.pr_380.revision = revision;
+  next.pr_380.body_digest = bodyDigest;
+  if (next.transaction.previous_source_binding) {
+    const previous = clone(next.transaction.previous_source_binding);
+    previous.pr_380.revision = revision;
+    previous.pr_380.body_digest = bodyDigest;
+    delete previous.snapshot_digest;
+    next.transaction.previous_source_binding = {
+      ...previous,
+      snapshot_digest: programme.digestValue(previous),
+    };
+  }
+  return recomputeFinalisationEvidence(next);
+}
+function rebasePreviousBinding(value, resource, changes) {
+  const next = clone(value);
+  const previous = clone(next.transaction.previous_source_binding);
+  assert.ok(previous, `${resource}: previous binding exists`);
+  Object.assign(previous[resource], changes);
+  if (resource === 'pr_379' || resource === 'pr_380') {
+    previous[resource].facts_digest = programme.digestValue(previous[resource].facts);
+  }
+  delete previous.snapshot_digest;
+  next.transaction.previous_source_binding = {
+    ...previous,
+    snapshot_digest: programme.digestValue(previous),
+  };
+  return withEvidenceDigest(next);
+}
 const DECISION_SCHEMA_TYPES = new Set(['null', 'boolean', 'object', 'array', 'number', 'integer', 'string']);
 const SUPPORTED_DECISION_SCHEMA_KEYWORDS = new Set([
   '$schema', '$id', '$ref', 'title', 'type', 'const', 'enum', 'required', 'properties',
   'additionalProperties', 'items', 'minItems', 'maxItems', 'minimum', 'pattern', 'anyOf',
+  'minLength', 'maxLength',
 ]);
 function isSchemaRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function deepEqual(left, right) {
@@ -480,12 +611,40 @@ function deepEqual(left, right) {
   return leftKeys.length === rightKeys.length
     && leftKeys.every((key, index) => key === rightKeys[index] && deepEqual(left[key], right[key]));
 }
-function assertDecisionSchemaSupported(schema, schemaPath = '$') {
+function resolvePublishedSchemaReference(reference, rootSchema, schemaPath) {
+  if (typeof reference !== 'string' || reference.length === 0) {
+    throw new Error(`Invalid schema $ref at ${schemaPath}`);
+  }
+  if (reference.startsWith('#')) {
+    let resolved = rootSchema;
+    const tokens = reference.slice(1).split('/').filter(Boolean);
+    for (const token of tokens) {
+      const key = token.replace(/~1/g, '/').replace(/~0/g, '~');
+      if ((isSchemaRecord(resolved) || Array.isArray(resolved)) && Object.prototype.hasOwnProperty.call(resolved, key)) {
+        resolved = resolved[key];
+      } else {
+        throw new Error(`Unresolved schema $ref ${reference} at ${schemaPath}`);
+      }
+    }
+    return resolved;
+  }
+  if (reference === 'programme-state-v5.schema.json') return publishedProgrammeStateSchema;
+  throw new Error(`Unsupported external schema $ref ${reference} at ${schemaPath}`);
+}
+function assertDecisionSchemaSupported(schema, schemaPath = '$', rootSchema = schema, refStack = new Set()) {
   if (!isSchemaRecord(schema)) throw new Error(`Unsupported decision schema at ${schemaPath}`);
   for (const keyword of Object.keys(schema)) {
     if (!SUPPORTED_DECISION_SCHEMA_KEYWORDS.has(keyword)) {
       throw new Error(`Unsupported decision schema keyword ${keyword} at ${schemaPath}`);
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(schema, '$ref')) {
+    if (Object.keys(schema).length !== 1) throw new Error(`Unsupported schema $ref sibling at ${schemaPath}`);
+    const refKey = `${rootSchema.$id || 'root'}:${schema.$ref}`;
+    if (refStack.has(refKey)) throw new Error(`Cyclic schema $ref at ${schemaPath}`);
+    const target = resolvePublishedSchemaReference(schema.$ref, rootSchema, schemaPath);
+    assertDecisionSchemaSupported(target, `${schemaPath}.$ref(${schema.$ref})`, rootSchema, new Set([...refStack, refKey]));
+    return;
   }
   if (Object.prototype.hasOwnProperty.call(schema, 'type')) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
@@ -516,21 +675,27 @@ function assertDecisionSchemaSupported(schema, schemaPath = '$') {
     && (typeof schema.minimum !== 'number' || !Number.isFinite(schema.minimum))) {
     throw new Error(`Invalid decision schema minimum at ${schemaPath}`);
   }
+  for (const keyword of ['minLength', 'maxLength']) {
+    if (Object.prototype.hasOwnProperty.call(schema, keyword)
+      && (!Number.isSafeInteger(schema[keyword]) || schema[keyword] < 0)) {
+      throw new Error(`Invalid decision schema ${keyword} at ${schemaPath}`);
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(schema, 'pattern')) {
     if (typeof schema.pattern !== 'string') throw new Error(`Invalid decision schema pattern at ${schemaPath}`);
     try { new RegExp(schema.pattern); } catch (_error) { throw new Error(`Invalid decision schema pattern at ${schemaPath}`); }
   }
   if (schema.properties) {
     for (const [property, propertySchema] of Object.entries(schema.properties)) {
-      assertDecisionSchemaSupported(propertySchema, `${schemaPath}.properties.${property}`);
+      assertDecisionSchemaSupported(propertySchema, `${schemaPath}.properties.${property}`, rootSchema, refStack);
     }
   }
   if (Object.prototype.hasOwnProperty.call(schema, 'anyOf')) {
     if (!Array.isArray(schema.anyOf) || schema.anyOf.length === 0) throw new Error(`Invalid decision schema anyOf at ${schemaPath}`);
-    schema.anyOf.forEach((branch, index) => assertDecisionSchemaSupported(branch, `${schemaPath}.anyOf[${index}]`));
+    schema.anyOf.forEach((branch, index) => assertDecisionSchemaSupported(branch, `${schemaPath}.anyOf[${index}]`, rootSchema, refStack));
   }
   if (Object.prototype.hasOwnProperty.call(schema, 'items')) {
-    assertDecisionSchemaSupported(schema.items, `${schemaPath}.items`);
+    assertDecisionSchemaSupported(schema.items, `${schemaPath}.items`, rootSchema, refStack);
   }
 }
 function matchesDecisionSchemaType(value, type) {
@@ -543,8 +708,20 @@ function matchesDecisionSchemaType(value, type) {
   if (type === 'string') return typeof value === 'string';
   return false;
 }
-function validateDecisionSchemaNode(value, schema) {
-  if (schema.anyOf !== undefined && !schema.anyOf.some((branch) => validateDecisionSchemaNode(value, branch))) return false;
+function validateDecisionSchemaNode(value, schema, rootSchema = schema, schemaPath = '$', refStack = new Set()) {
+  if (schema.$ref !== undefined) {
+    if (Object.keys(schema).length !== 1) return false;
+    const refKey = `${rootSchema.$id || 'root'}:${schema.$ref}`;
+    if (refStack.has(refKey)) return false;
+    let target;
+    try {
+      target = resolvePublishedSchemaReference(schema.$ref, rootSchema, schemaPath);
+    } catch (_error) {
+      return false;
+    }
+    return validateDecisionSchemaNode(value, target, rootSchema, `${schemaPath}.$ref(${schema.$ref})`, new Set([...refStack, refKey]));
+  }
+  if (schema.anyOf !== undefined && !schema.anyOf.some((branch) => validateDecisionSchemaNode(value, branch, rootSchema, `${schemaPath}.anyOf`, refStack))) return false;
   if (schema.type !== undefined) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
     if (!types.some((type) => matchesDecisionSchemaType(value, type))) return false;
@@ -557,17 +734,23 @@ function validateDecisionSchemaNode(value, schema) {
       && Object.keys(value).some((key) => !schema.properties || !Object.prototype.hasOwnProperty.call(schema.properties, key))) return false;
     if (schema.properties !== undefined) {
       for (const [property, propertySchema] of Object.entries(schema.properties)) {
-        if (Object.prototype.hasOwnProperty.call(value, property) && !validateDecisionSchemaNode(value[property], propertySchema)) return false;
+        if (Object.prototype.hasOwnProperty.call(value, property)
+          && !validateDecisionSchemaNode(value[property], propertySchema, rootSchema, `${schemaPath}.properties.${property}`, refStack)) return false;
       }
     }
   }
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) return false;
     if (schema.maxItems !== undefined && value.length > schema.maxItems) return false;
-    if (schema.items !== undefined && value.some((item) => !validateDecisionSchemaNode(item, schema.items))) return false;
+    if (schema.items !== undefined
+      && value.some((item) => !validateDecisionSchemaNode(item, schema.items, rootSchema, `${schemaPath}.items`, refStack))) return false;
   }
   if (typeof value === 'number' && schema.minimum !== undefined && value < schema.minimum) return false;
-  if (typeof value === 'string' && schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) return false;
+  if (typeof value === 'string') {
+    if (schema.minLength !== undefined && value.length < schema.minLength) return false;
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) return false;
+    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) return false;
+  }
   return true;
 }
 function validateDecisionAgainstPublishedSchema(value, schema) {
@@ -1256,6 +1439,39 @@ test('post-merge decision and evidence schemas are closed and runtime-valid', ()
   assert.equal(evidenceValidation.ok, true, evidenceValidation.code);
 });
 
+test('published finalisation schema resolves local refs and closes child state', () => {
+  const finalDecision = finalisationDecision();
+  const evidence = makeFinalisationEvidence();
+  const positive = makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED');
+  assert.equal(validateDecisionAgainstPublishedSchema(finalDecision, publishedFinalisationDecisionSchema), true);
+  assert.equal(validateDecisionAgainstPublishedSchema(evidence, publishedFinalisationEvidenceSchema), true);
+
+  const rejects = [
+    ['parent state null', (value) => { value.parent.state = null; }],
+    ['parent state malformed', (value) => { value.parent.state = {}; }],
+    ['parent state hidden extra key', (value) => { value.parent.state = { ...value.parent.state, unexpected: true }; }],
+    ['child state null', (value) => { value.child.state = null; }],
+    ['child state malformed', (value) => { value.child.state = {}; }],
+    ['child state desired key', (value) => { value.child.state.desired = true; }],
+    ['child state provider client key', (value) => { value.child.state.provider_client = false; }],
+    ['child state provider cas key', (value) => { value.child.state.provider_cas_claim = false; }],
+    ['child state programme apply key', (value) => { value.child.state.programme_apply = false; }],
+    ['parent provider revision sentinel', (value) => { value.parent.revision = 'OPEN'; }],
+    ['previous source binding scalar', (value) => { value.transaction.previous_source_binding = 42; }],
+    ['previous source binding malformed child', (value) => { value.transaction.previous_source_binding.child = null; }],
+    ['previous source binding hidden extra key', (value) => { value.transaction.previous_source_binding.child.unexpected = true; }],
+  ];
+  for (const [name, mutate] of rejects) {
+    const candidate = clone(name.startsWith('previous') ? positive : evidence);
+    mutate(candidate);
+    assert.equal(
+      validateDecisionAgainstPublishedSchema(candidate, publishedFinalisationEvidenceSchema),
+      false,
+      name,
+    );
+  }
+});
+
 test('clean inter-epoch Stage A and Stage B targets validate with exact E3/E4 and registry semantics', () => {
   const fixtures = finalisationStateFixtures();
   const stageAChild = fixtures.stageA.children.find((item) => item.issue === 359);
@@ -1313,6 +1529,156 @@ test('finalisation recognises the exact operation order and all bounded normal c
     assert.equal(preview.provider_cas_claim, false);
     assert.equal(preview.duplicate_write, false);
   });
+});
+
+test('Repair 2 rejects all ten unsafe exact-checkpoint acceptances', () => {
+  const cases = [
+    {
+      name: 'child Stage A plus unauthorised prefix',
+      checkpoint: 'CHILD_STAGE_A_OBSERVED',
+      mutate: (value) => mutateFinalisationBody(value, 'child', (body) => 'unauthorised-prefix\n' + body),
+    },
+    {
+      name: 'parent Stage A plus unauthorised prefix',
+      checkpoint: 'PARENT_STAGE_A_OBSERVED',
+      mutate: (value) => mutateFinalisationBody(value, 'parent', (body) => 'unauthorised-prefix\n' + body),
+    },
+    {
+      name: '#379 close plus changed body digest',
+      checkpoint: 'PR379_CLOSED_STAGE_A',
+      mutate: (value) => {
+        const next = clone(value);
+        next.pr_379.body_digest = digestText('unauthorised #379 body');
+        return recomputeFinalisationEvidence(next);
+      },
+    },
+    {
+      name: 'child Stage B plus unauthorised body movement',
+      checkpoint: 'CHILD_STAGE_B_OBSERVED',
+      mutate: (value) => mutateFinalisationBody(
+        value,
+        'child',
+        (body) => body.replace(programme.MANAGED_MARKERS.child.end, '\nunauthorised-body-movement\n' + programme.MANAGED_MARKERS.child.end),
+      ),
+    },
+    {
+      name: 'final parent target plus unauthorised body movement',
+      checkpoint: 'FINAL_TARGET_OBSERVED',
+      mutate: (value) => mutateFinalisationBody(
+        value,
+        'parent',
+        (body) => body.replace(programme.MANAGED_MARKERS.parent.end, '\nunauthorised-body-movement\n' + programme.MANAGED_MARKERS.parent.end),
+      ),
+    },
+  ];
+  for (const checkpoint of [
+    'CHILD_STAGE_A_OBSERVED',
+    'PARENT_STAGE_A_OBSERVED',
+    'PR379_CLOSED_STAGE_A',
+    'CHILD_STAGE_B_OBSERVED',
+    'FINAL_TARGET_OBSERVED',
+  ]) {
+    cases.push({
+      name: `#380 rebased revision/body/facts at ${checkpoint}`,
+      checkpoint,
+      mutate: rebaseFinalisationPr380,
+    });
+  }
+  assert.equal(cases.length, 10);
+  for (const item of cases) {
+    const evidence = item.mutate(makeFinalisationEvidence(item.checkpoint));
+    assert.equal(
+      programme.postMergeEpochFinalisation.validateEvidence(evidence, finalisationDecision()).ok,
+      false,
+      item.name,
+    );
+  }
+});
+
+test('Repair 2 anchors immutable #380 against the original decision at every checkpoint', () => {
+  const checkpoints = [
+    'BEFORE_STAGE_A',
+    'CHILD_STAGE_A_OBSERVED',
+    'PARENT_STAGE_A_OBSERVED',
+    'PR379_CLOSED_STAGE_A',
+    'CHILD_STAGE_B_OBSERVED',
+    'FINAL_TARGET_OBSERVED',
+  ];
+  for (const checkpoint of checkpoints) {
+    const attacked = rebaseFinalisationPr380RevisionBody(makeFinalisationEvidence(checkpoint));
+    const validation = programme.postMergeEpochFinalisation.validateEvidence(attacked, finalisationDecision());
+    assert.equal(validation.ok, false, `${checkpoint}: #380 revision/body rebase`);
+    assert.ok(
+      ['FINALISATION_SOURCE_BINDING_INVALID', 'FINALISATION_EXACT_CHECKPOINT_PROVIDER_INVALID'].includes(validation.code),
+      `${checkpoint}: anchored failure (${validation.code})`,
+    );
+  }
+});
+
+test('Repair 2 rejects rebased immutable fields in every prior checkpoint binding', () => {
+  const cases = [
+    ['CHILD_STAGE_A_OBSERVED', 'child', { prefix_digest: 'f'.repeat(64) }],
+    ['PARENT_STAGE_A_OBSERVED', 'parent', { suffix_digest: 'e'.repeat(64) }],
+    ['PR379_CLOSED_STAGE_A', 'pr_379', { body_digest: digestText('rebased prior #379 body') }],
+    ['CHILD_STAGE_B_OBSERVED', 'child', { prefix_digest: 'd'.repeat(64) }],
+    ['FINAL_TARGET_OBSERVED', 'parent', { suffix_digest: 'c'.repeat(64) }],
+  ];
+  for (const [checkpoint, resource, changes] of cases) {
+    const attacked = rebasePreviousBinding(makeFinalisationEvidence(checkpoint), resource, changes);
+    const validation = programme.postMergeEpochFinalisation.validateEvidence(attacked, finalisationDecision());
+    assert.equal(validation.ok, false, `${checkpoint}: ${resource} prior binding rebase`);
+    assert.equal(validation.code, 'FINALISATION_PREVIOUS_SOURCE_BINDING_NOT_ANCHORED', `${checkpoint}: anchored prior failure`);
+  }
+});
+
+test('Repair 2 rejects unexpected resource movement, stale or fabricated prior state, and malformed revisions', () => {
+  const finalDecision = finalisationDecision();
+  const unexpected = [
+    ['#240-only unexpected revision', rebindFinalisationProviderRevision(makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED'), 'parent', 'synthetic:parent:unexpected')],
+    ['#359-only unexpected revision', rebindFinalisationProviderRevision(makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED'), 'child', 'synthetic:child:unexpected')],
+    ['#379-only unexpected revision before close', rebindFinalisationProviderRevision(makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED'), 'pr_379', 'synthetic:pr379:unexpected')],
+    ['#380-only unexpected revision', rebaseFinalisationPr380RevisionBody(makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED'))],
+  ];
+  const twoResource = rebindFinalisationProviderRevision(
+    rebindFinalisationProviderRevision(makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED'), 'parent', 'synthetic:parent:unexpected'),
+    'pr_379',
+    'synthetic:pr379:unexpected',
+  );
+  unexpected.push(['two-resource unexpected movement', twoResource]);
+  for (const [name, evidence] of unexpected) {
+    assert.equal(programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision).ok, false, name);
+  }
+
+  const stale = makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED');
+  stale.transaction.previous_source_binding = clone(makeFinalisationEvidence('BEFORE_STAGE_A').source_binding);
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(stale), finalDecision).ok, false, 'stale prior binding');
+
+  const fabricated = rebasePreviousBinding(
+    makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED'),
+    'child',
+    { canonical_digest: 'b'.repeat(64) },
+  );
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(fabricated, finalDecision).ok, false, 'fabricated prior binding');
+
+  const wrongCheckpoint = makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED');
+  wrongCheckpoint.transaction.checkpoint = 'PARENT_STAGE_A_OBSERVED';
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(wrongCheckpoint), finalDecision).ok, false, 'wrong checkpoint');
+
+  const malformedRevision = makeFinalisationEvidence('BEFORE_STAGE_A');
+  malformedRevision.parent.revision = 'OPEN';
+  malformedRevision.source_binding.parent.revision = 'OPEN';
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(recomputeFinalisationEvidence(malformedRevision), finalDecision).ok, false, 'malformed revision');
+
+  const changedFactsDigest = makeFinalisationEvidence('BEFORE_STAGE_A');
+  changedFactsDigest.pr_380.facts.accepted_evidence_ref = 'changed';
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(changedFactsDigest), finalDecision).ok, false, 'changed facts digest');
+
+  const changedSuffix = mutateFinalisationBody(
+    makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED'),
+    'child',
+    (body) => body + '\nunauthorised suffix',
+  );
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(changedSuffix, finalDecision).ok, false, 'changed suffix');
 });
 
 test('Repair 1 binds arbitrary execution-time provider revisions and rejects revision movement', () => {

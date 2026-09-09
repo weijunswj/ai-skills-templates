@@ -76,7 +76,7 @@
             "issue": { "const": 240 },
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "native_children": { "const": [358, 359, 360, 361, 362, 363] },
@@ -101,7 +101,7 @@
             "issue": { "const": 359 },
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "labels": { "const": ["current"] },
             "native_parent": { "const": 240 },
             "dependencies": { "const": [] },
@@ -130,7 +130,7 @@
             "pr": { "const": 379 },
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "facts": {
               "type": "object",
               "additionalProperties": false,
@@ -179,7 +179,7 @@
             "pr": { "const": 380 },
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "facts": {
               "type": "object",
               "additionalProperties": false,
@@ -230,7 +230,7 @@
         "raw_body": { "type": "string" },
         "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "revision": { "type": "string" },
+        "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
         "state": { "$ref": "programme-state-v5.schema.json" },
         "native_children": { "const": [358, 359, 360, 361, 362, 363] },
         "relationships": {
@@ -258,7 +258,7 @@
         "raw_body": { "type": "string" },
         "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "revision": { "type": "string" },
+        "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
         "labels": { "const": ["current"] },
         "native_parent": { "const": 240 },
         "relationships": {
@@ -274,7 +274,18 @@
         },
         "sole_current": { "const": true },
         "dependencies": { "const": [] },
-        "state": { "type": "object" },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["active_blocking_recovery_hold", "finality", "gate_state", "lifecycle", "normal_active_lanes"],
+          "properties": {
+            "lifecycle": { "const": "CURRENT" },
+            "finality": { "enum": ["HELD", "UNMERGED"] },
+            "gate_state": { "enum": ["HELD", "NONE"] },
+            "normal_active_lanes": { "const": 0 },
+            "active_blocking_recovery_hold": { "type": "boolean" }
+          }
+        },
         "projection": {
           "type": "object",
           "additionalProperties": false,
@@ -315,7 +326,7 @@
         "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
         "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+        "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
         "facts": { "$ref": "#/properties/source_binding/properties/pr_379/properties/facts" },
         "changed_files": { "const": 48 },
         "candidate": {
@@ -360,7 +371,7 @@
         "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
         "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+        "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
         "facts": { "$ref": "#/properties/source_binding/properties/pr_380/properties/facts" },
         "candidate": {
           "type": "object",
@@ -450,7 +461,7 @@
           "properties": {
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
           }
         },
@@ -461,7 +472,7 @@
           "properties": {
             "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-            "revision": { "type": "string" },
+            "revision": { "type": "string", "pattern": "^(?!OPEN$|CLOSED$)[^\\r\\n]{1,256}$" },
             "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
           }
         },

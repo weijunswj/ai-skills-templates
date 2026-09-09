@@ -2854,6 +2854,105 @@ const FINALISATION_OPERATION_RESOURCE = Object.freeze({
   4: 'child',
   5: 'parent',
 });
+const FINALISATION_CHECKPOINT_RESOURCE_STATES = Object.freeze({
+  BEFORE_STAGE_A: Object.freeze({ parent: 'source', child: 'source', pr_379: 'OPEN' }),
+  CHILD_STAGE_A_OBSERVED: Object.freeze({ parent: 'source', child: 'stage_a', pr_379: 'OPEN' }),
+  PARENT_STAGE_A_OBSERVED: Object.freeze({ parent: 'stage_a', child: 'stage_a', pr_379: 'OPEN' }),
+  PR379_CLOSED_STAGE_A: Object.freeze({ parent: 'stage_a', child: 'stage_a', pr_379: 'CLOSED' }),
+  CHILD_STAGE_B_OBSERVED: Object.freeze({ parent: 'stage_a', child: 'stage_b', pr_379: 'CLOSED' }),
+  FINAL_TARGET_OBSERVED: Object.freeze({ parent: 'stage_b', child: 'stage_b', pr_379: 'CLOSED' }),
+});
+
+function finalisationCheckpointResourceStates(checkpoint) {
+  return FINALISATION_CHECKPOINT_RESOURCE_STATES[checkpoint] || null;
+}
+function finalisationExpectedStateDigest(kind, stateKind, context, decision) {
+  if (stateKind === 'source') return decision.source_binding[kind].canonical_digest;
+  const state = context.stages[stateKind === 'stage_a' ? 'stageA' : 'stageB'];
+  return state ? digestValue(state) : null;
+}
+function finalisationExpectedBodyDigest(kind, stateKind, context, decision) {
+  if (stateKind === 'source') return decision.source_binding[kind].body_digest;
+  const body = context.expectedBodies[`${stateKind}_${kind}`];
+  return typeof body === 'string' ? sha256Text(body) : null;
+}
+function finalisationExpectedProjectionDigest(stateKind, context, decision) {
+  if (stateKind === 'source') return decision.source_binding.child.projection_digest;
+  return context[stateKind === 'stage_a' ? 'stageARendered' : 'stageBRendered']?.projections.child.projection_digest || null;
+}
+function finalisationExpectedPr379Facts(decision, githubState) {
+  const facts = clone(decision.source_binding.pr_379.facts);
+  facts.state = githubState;
+  facts.github_state = githubState;
+  return facts;
+}
+function finalisationParentIdentityAnchored(value, source) {
+  return value.issue === source.issue
+    && same(value.native_children, source.native_children)
+    && same(value.relationships, source.relationships)
+    && value.prefix_digest === source.prefix_digest
+    && value.suffix_digest === source.suffix_digest;
+}
+function finalisationChildIdentityAnchored(value, source) {
+  return value.issue === source.issue
+    && same(value.dependencies, source.dependencies)
+    && same(value.labels, source.labels)
+    && value.native_parent === source.native_parent
+    && same(value.relationships, source.relationships)
+    && value.sole_current === source.sole_current
+    && value.prefix_digest === source.prefix_digest
+    && value.suffix_digest === source.suffix_digest;
+}
+function finalisationBindingExactCheckpointValid(binding, checkpoint, decision, context) {
+  const states = finalisationCheckpointResourceStates(checkpoint);
+  if (!states || !finalisationSourceBindingValid(binding)
+    || !same(binding.canonical_main, decision.source_binding.canonical_main)
+    || !same(binding.collector, decision.source_binding.collector)) {
+    return failure('FINALISATION_EXACT_CHECKPOINT_INVALID');
+  }
+
+  const source = decision.source_binding;
+  const expectedParentDigest = finalisationExpectedStateDigest('parent', states.parent, context, decision);
+  const expectedChildDigest = finalisationExpectedStateDigest('child', states.child, context, decision);
+  const expectedParentBodyDigest = finalisationExpectedBodyDigest('parent', states.parent, context, decision);
+  const expectedChildBodyDigest = finalisationExpectedBodyDigest('child', states.child, context, decision);
+  const expectedChildProjectionDigest = finalisationExpectedProjectionDigest(states.child, context, decision);
+  if (!expectedParentDigest || !expectedChildDigest || !expectedParentBodyDigest || !expectedChildBodyDigest
+    || !expectedChildProjectionDigest
+    || !finalisationParentIdentityAnchored(binding.parent, source.parent)
+    || !finalisationChildIdentityAnchored(binding.child, source.child)
+    || binding.parent.canonical_digest !== expectedParentDigest
+    || binding.child.canonical_digest !== expectedChildDigest
+    || binding.parent.body_digest !== expectedParentBodyDigest
+    || binding.child.body_digest !== expectedChildBodyDigest
+    || binding.child.projection_digest !== expectedChildProjectionDigest) {
+    return failure('FINALISATION_EXACT_CHECKPOINT_INVALID');
+  }
+
+  const parentRevisionExpected = states.parent === 'source'
+    ? source.parent.revision
+    : binding.parent.revision !== source.parent.revision;
+  const childRevisionExpected = states.child === 'source'
+    ? source.child.revision
+    : binding.child.revision !== source.child.revision;
+  if ((states.parent === 'source' && binding.parent.revision !== parentRevisionExpected)
+    || (states.parent !== 'source' && !parentRevisionExpected)
+    || (states.child === 'source' && binding.child.revision !== childRevisionExpected)
+    || (states.child !== 'source' && !childRevisionExpected)) {
+    return failure('FINALISATION_EXACT_CHECKPOINT_REVISION_INVALID');
+  }
+
+  const expectedPr379Facts = finalisationExpectedPr379Facts(decision, states.pr_379);
+  if (binding.pr_379.body_digest !== source.pr_379.body_digest
+    || !same(binding.pr_379.facts, expectedPr379Facts)
+    || (states.pr_379 === 'OPEN'
+      ? binding.pr_379.revision !== source.pr_379.revision
+      : binding.pr_379.revision === source.pr_379.revision)
+    || !same(binding.pr_380, source.pr_380)) {
+    return failure('FINALISATION_EXACT_CHECKPOINT_PROVIDER_INVALID');
+  }
+  return success('FINALISATION_EXACT_CHECKPOINT_VALID', { checkpoint });
+}
 function finalisationBindingCheckpoint(binding, stages, decision) {
   if (!finalisationSourceBindingValid(binding)) return null;
   const sourceDigest = stages.source ? digestValue(stages.source) : decision.source_state.canonical_digest;
@@ -3002,8 +3101,6 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
       ? observed.stages.stageA
       : observed.stages.stageB;
   if (!observedChildState || !validateSnapshotState(value.child.state, expectedChildSnapshotState(observedChildState))) return failure('FINALISATION_CHILD_STATE_DIVERGENCE');
-  const transactionValid = finalisationTransactionValid(value.transaction, observed, decisionValid, value.source_binding);
-  if (!transactionValid.ok) return transactionValid;
   if (!finalisationPaginationValid(value.pagination, value)) return failure('FINALISATION_PAGINATION_INCOMPLETE');
   if (value.evidence_digest !== digestValue(without(value, 'evidence_digest'))) return failure('FINALISATION_EVIDENCE_DIGEST_INVALID');
   const stages = observed.stages;
@@ -3031,6 +3128,34 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
   const expectedBodyForChild = value.child.canonical_digest === digestValue(stageA) ? expectedStageAChild : value.child.canonical_digest === digestValue(stageB) ? expectedStageBChild : value.child.canonical_digest === FINALISATION_SOURCE_CANONICAL_DIGEST ? value.child.raw_body : null;
   if (expectedBodyForParent && value.parent.raw_body !== expectedBodyForParent) return failure('FINALISATION_PARENT_TARGET_BYTES_INVALID');
   if (expectedBodyForChild && value.child.raw_body !== expectedBodyForChild) return failure('FINALISATION_CHILD_TARGET_BYTES_INVALID');
+  const transactionValid = finalisationTransactionValid(value.transaction, observed, decisionValid, value.source_binding);
+  if (!transactionValid.ok) return transactionValid;
+  const currentCheckpoint = finalisationBindingCheckpoint(value.source_binding, observed.stages, decisionValid.decision);
+  const exactContext = {
+    stages,
+    stageARendered,
+    stageBRendered,
+    expectedBodies,
+  };
+  const exactCurrent = finalisationBindingExactCheckpointValid(
+    value.source_binding,
+    currentCheckpoint,
+    decisionValid.decision,
+    exactContext,
+  );
+  if (!exactCurrent.ok) return exactCurrent;
+  const acknowledgement = finalisationAcknowledgementSpec(value.transaction.checkpoint);
+  const normal = finalisationTransactionSpec(observed.base_checkpoint);
+  const previousCheckpoint = acknowledgement ? acknowledgement.pre : normal?.previous;
+  if (previousCheckpoint !== null) {
+    const exactPrevious = finalisationBindingExactCheckpointValid(
+      value.transaction.previous_source_binding,
+      previousCheckpoint,
+      decisionValid.decision,
+      exactContext,
+    );
+    if (!exactPrevious.ok) return failure('FINALISATION_PREVIOUS_SOURCE_BINDING_NOT_ANCHORED');
+  }
   return success('FINALISATION_EVIDENCE_VALID', {
     evidence: clone(value),
     evidence_digest: value.evidence_digest,
