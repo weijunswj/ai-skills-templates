@@ -14,6 +14,7 @@
     "child_issue",
     "parent",
     "child",
+    "source_binding",
     "pr_379",
     "pr_380",
     "accepted_evidence",
@@ -36,6 +37,190 @@
     "repository": { "const": "weijunswj/ai-agent-toolkit" },
     "parent_issue": { "const": 240 },
     "child_issue": { "const": 359 },
+    "source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_main", "child", "collector", "complete", "parent", "pr_379", "pr_380", "snapshot_digest"],
+      "properties": {
+        "complete": { "const": true },
+        "snapshot_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "canonical_main": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "equals_merge_commit", "ref", "sha", "tree"],
+          "properties": {
+            "ref": { "const": "main" },
+            "sha": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+            "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+            "equals_merge_commit": { "const": true },
+            "complete": { "const": true }
+          }
+        },
+        "collector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authenticated", "identity", "kind", "provider_client_used", "version"],
+          "properties": {
+            "kind": { "const": "WEB_AUTHENTICATED_GITHUB_COLLECTION" },
+            "identity": { "const": "github-web-readonly-adapter" },
+            "version": { "const": "v1" },
+            "authenticated": { "const": true },
+            "provider_client_used": { "const": false }
+          }
+        },
+        "parent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "canonical_digest", "issue", "native_children", "prefix_digest", "relationships", "revision", "suffix_digest"],
+          "properties": {
+            "issue": { "const": 240 },
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "native_children": { "const": [358, 359, 360, 361, 362, 363] },
+            "relationships": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["child_issue", "child_is_native_sub_issue", "parent_issue", "sole_current"],
+              "properties": {
+                "child_issue": { "const": 359 },
+                "child_is_native_sub_issue": { "const": true },
+                "parent_issue": { "const": 240 },
+                "sole_current": { "const": true }
+              }
+            }
+          }
+        },
+        "child": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "canonical_digest", "dependencies", "issue", "labels", "native_parent", "prefix_digest", "projection_digest", "relationships", "revision", "sole_current", "suffix_digest"],
+          "properties": {
+            "issue": { "const": 359 },
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "labels": { "const": ["current"] },
+            "native_parent": { "const": 240 },
+            "dependencies": { "const": [] },
+            "projection_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "sole_current": { "const": true },
+            "relationships": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["child_issue", "child_is_native_sub_issue", "parent_issue", "sole_current"],
+              "properties": {
+                "child_issue": { "const": 359 },
+                "child_is_native_sub_issue": { "const": true },
+                "parent_issue": { "const": 240 },
+                "sole_current": { "const": true }
+              }
+            }
+          }
+        },
+        "pr_379": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "facts", "facts_digest", "pr", "revision"],
+          "properties": {
+            "pr": { "const": 379 },
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "facts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["base_ref", "base_sha", "branch", "candidate", "changed_files", "draft", "github_state", "head", "merged", "merged_at", "non_convergence_evidence_ref", "pr", "repository", "retention_evidence_ref", "retirement_evidence_ref", "state", "status", "tree"],
+              "properties": {
+                "repository": { "const": "weijunswj/ai-agent-toolkit" },
+                "pr": { "const": 379 },
+                "state": { "enum": ["OPEN", "CLOSED"] },
+                "github_state": { "enum": ["OPEN", "CLOSED"] },
+                "status": { "const": "RETIRED" },
+                "draft": { "const": true },
+                "merged": { "const": false },
+                "merged_at": { "const": null },
+                "head": { "const": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1" },
+                "tree": { "const": "2c712aa9c7c6e66a89bdd9d033acece5415fd575" },
+                "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
+                "base_ref": { "const": "main" },
+                "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+                "changed_files": { "const": 48 },
+                "retention_evidence_ref": { "const": "web-pr379-retained-5580538176" },
+                "retirement_evidence_ref": { "const": "post-merge-technical-finality-5144137683" },
+                "non_convergence_evidence_ref": { "const": "pr379-non-convergence-5579738186" },
+                "candidate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+                  "properties": {
+                    "repository": { "const": "weijunswj/ai-agent-toolkit" },
+                    "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
+                    "base_ref": { "const": "main" },
+                    "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+                    "head": { "const": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1" },
+                    "tree": { "const": "2c712aa9c7c6e66a89bdd9d033acece5415fd575" },
+                    "version": { "const": "2.11.0" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "pr_380": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "facts", "facts_digest", "pr", "revision"],
+          "properties": {
+            "pr": { "const": 380 },
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+            "facts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["accepted_evidence_ref", "accepted_head_tree", "base_ref", "base_sha", "candidate", "draft", "github_state", "head", "merged", "merge_commit", "merge_method", "ordered_parents", "pr", "repository", "state", "status", "tree"],
+              "properties": {
+                "repository": { "const": "weijunswj/ai-agent-toolkit" },
+                "pr": { "const": 380 },
+                "state": { "const": "MERGED" },
+                "github_state": { "const": "MERGED" },
+                "status": { "const": "ACCEPTED" },
+                "draft": { "const": false },
+                "merged": { "const": true },
+                "merge_method": { "const": "MERGE_COMMIT" },
+                "merge_commit": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+                "ordered_parents": { "const": ["c72028c63cc09dd07d3e522692065448b6b7dbb6", "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a"] },
+                "accepted_head_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+                "head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+                "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+                "base_ref": { "const": "main" },
+                "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+                "accepted_evidence_ref": { "const": "post-merge-g4-web-acceptance-5143994659" },
+                "candidate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+                  "properties": {
+                    "repository": { "const": "weijunswj/ai-agent-toolkit" },
+                    "branch": { "const": "codex/e3-v5-projection-bootstrap-recovery-001" },
+                    "base_ref": { "const": "main" },
+                    "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+                    "head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+                    "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+                    "version": { "const": "2.10.8" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "parent": {
       "type": "object",
       "additionalProperties": false,
@@ -113,7 +298,7 @@
     "pr_379": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["base_ref", "base_sha", "branch", "candidate", "changed_files", "complete", "draft", "github_state", "head", "merged", "merged_at", "non_convergence_evidence_ref", "pr", "repository", "retention_evidence_ref", "retirement_evidence_ref", "state", "status", "tree"],
+      "required": ["base_ref", "base_sha", "body_digest", "branch", "candidate", "changed_files", "complete", "draft", "facts", "facts_digest", "github_state", "head", "merged", "merged_at", "non_convergence_evidence_ref", "pr", "repository", "retention_evidence_ref", "retirement_evidence_ref", "revision", "state", "status", "tree"],
       "properties": {
         "repository": { "const": "weijunswj/ai-agent-toolkit" },
         "pr": { "const": 379 },
@@ -128,6 +313,10 @@
         "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
         "base_ref": { "const": "main" },
         "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+        "facts": { "$ref": "#/properties/source_binding/properties/pr_379/properties/facts" },
         "changed_files": { "const": 48 },
         "candidate": {
           "type": "object",
@@ -152,7 +341,7 @@
     "pr_380": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["accepted_evidence_ref", "accepted_head_tree", "base_ref", "base_sha", "candidate", "complete", "draft", "github_state", "head", "merged", "merge_commit", "merge_method", "ordered_parents", "pr", "repository", "state", "status", "tree"],
+      "required": ["accepted_evidence_ref", "accepted_head_tree", "base_ref", "base_sha", "body_digest", "candidate", "complete", "draft", "facts", "facts_digest", "github_state", "head", "merged", "merge_commit", "merge_method", "ordered_parents", "pr", "repository", "revision", "state", "status", "tree"],
       "properties": {
         "repository": { "const": "weijunswj/ai-agent-toolkit" },
         "pr": { "const": 380 },
@@ -169,6 +358,10 @@
         "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
         "base_ref": { "const": "main" },
         "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "revision": { "type": "string", "pattern": "^[^\\r\\n]{1,256}$" },
+        "facts": { "$ref": "#/properties/source_binding/properties/pr_380/properties/facts" },
         "candidate": {
           "type": "object",
           "additionalProperties": false,
@@ -344,7 +537,7 @@
     "transaction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["acknowledgement", "acknowledgement_loss_operation_order", "checkpoint", "complete", "completed_operation_orders", "continuation", "duplicate_event_count", "readback"],
+      "required": ["acknowledgement", "acknowledgement_loss_operation_order", "checkpoint", "complete", "completed_operation_orders", "continuation", "duplicate_event_count", "previous_source_binding", "readback"],
       "properties": {
         "checkpoint": { "type": "string" },
         "acknowledgement": { "enum": ["CONFIRMED", "LOST"] },
@@ -368,6 +561,12 @@
           "additionalProperties": false,
           "required": ["complete", "exact"],
           "properties": { "complete": { "const": true }, "exact": { "const": true } }
+        },
+        "previous_source_binding": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/properties/source_binding" }
+          ]
         },
         "duplicate_event_count": { "const": 1 },
         "complete": { "const": true }

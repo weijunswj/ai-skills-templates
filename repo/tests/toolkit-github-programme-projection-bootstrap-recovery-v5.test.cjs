@@ -5,6 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const programme = require('../scripts/toolkit-github-program-state-v5.cjs');
 const governance = require('../scripts/toolkit-github-governance-review-reconciler.cjs');
 const receipt = require('../scripts/toolkit-github-program-receipt.cjs');
@@ -43,8 +44,7 @@ function finalisationAuthority() {
   };
 }
 function finalisationDecision() {
-  const authority = finalisationAuthority();
-  return programme.postMergeEpochFinalisation.createDecision(authority);
+  return finalisationDecisionWithRevisions().decision;
 }
 function finalisationStateFixtures() {
   const source = parsedSources();
@@ -74,6 +74,195 @@ function finalisationStateFixtures() {
     stageBParent: programme.parseParentV5Body(renderedStageB.parent, { repository, parent_issue: 240 }),
     stageBChild: programme.parseChildV5Body(renderedStageB.child, { repository, parent_issue: 240 }),
   };
+}
+const FINALISATION_NORMAL_SPECS = Object.freeze({
+  BEFORE_STAGE_A: { previous: null, completed: [] },
+  CHILD_STAGE_A_OBSERVED: { previous: 'BEFORE_STAGE_A', completed: [1] },
+  PARENT_STAGE_A_OBSERVED: { previous: 'CHILD_STAGE_A_OBSERVED', completed: [1, 2] },
+  PR379_CLOSED_STAGE_A: { previous: 'PARENT_STAGE_A_OBSERVED', completed: [1, 2, 3] },
+  CHILD_STAGE_B_OBSERVED: { previous: 'PR379_CLOSED_STAGE_A', completed: [1, 2, 3, 4] },
+  FINAL_TARGET_OBSERVED: { previous: 'CHILD_STAGE_B_OBSERVED', completed: [1, 2, 3, 4, 5] },
+});
+const FINALISATION_ACK_SPECS = Object.freeze({
+  CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: { pre: 'BEFORE_STAGE_A', base: 'CHILD_STAGE_A_OBSERVED', order: 1, completed: [1] },
+  PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: { pre: 'CHILD_STAGE_A_OBSERVED', base: 'PARENT_STAGE_A_OBSERVED', order: 2, completed: [1, 2] },
+  PR379_CLOSE_ACKNOWLEDGEMENT_LOST: { pre: 'PARENT_STAGE_A_OBSERVED', base: 'PR379_CLOSED_STAGE_A', order: 3, completed: [1, 2] },
+  CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: { pre: 'PR379_CLOSED_STAGE_A', base: 'CHILD_STAGE_B_OBSERVED', order: 4, completed: [1, 2, 3, 4] },
+  PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: { pre: 'CHILD_STAGE_B_OBSERVED', base: 'FINAL_TARGET_OBSERVED', order: 5, completed: [1, 2, 3, 4, 5] },
+});
+function finalisationRevisionSet(overrides = {}) {
+  const source = {
+    parent: 'synthetic:parent:source',
+    child: 'synthetic:child:source',
+    pr379: 'synthetic:pr379:source',
+    pr380: 'synthetic:pr380:source',
+    ...overrides,
+  };
+  return {
+    BEFORE_STAGE_A: source,
+    CHILD_STAGE_A_OBSERVED: { ...source, child: 'synthetic:child:stage-a' },
+    PARENT_STAGE_A_OBSERVED: { ...source, parent: 'synthetic:parent:stage-a', child: 'synthetic:child:stage-a' },
+    PR379_CLOSED_STAGE_A: { ...source, parent: 'synthetic:parent:stage-a', child: 'synthetic:child:stage-a', pr379: 'synthetic:pr379:closed' },
+    CHILD_STAGE_B_OBSERVED: { parent: 'synthetic:parent:stage-a', child: 'synthetic:child:stage-b', pr379: 'synthetic:pr379:closed', pr380: source.pr380 },
+    FINAL_TARGET_OBSERVED: { parent: 'synthetic:parent:stage-b', child: 'synthetic:child:stage-b', pr379: 'synthetic:pr379:closed', pr380: source.pr380 },
+  };
+}
+function finalisationPr379Facts(githubState = 'OPEN') {
+  return {
+    repository,
+    pr: 379,
+    state: githubState,
+    github_state: githubState,
+    status: 'RETIRED',
+    draft: true,
+    merged: false,
+    merged_at: null,
+    head: programme.FROZEN_HEAD,
+    tree: programme.FROZEN_TREE,
+    branch: programme.FROZEN_BRANCH,
+    base_ref: 'main',
+    base_sha: programme.MAIN_SHA,
+    changed_files: 48,
+    candidate: {
+      repository,
+      branch: programme.FROZEN_BRANCH,
+      base_ref: 'main',
+      base_sha: programme.MAIN_SHA,
+      head: programme.FROZEN_HEAD,
+      tree: programme.FROZEN_TREE,
+      version: '2.11.0',
+    },
+    retention_evidence_ref: 'web-pr379-retained-5580538176',
+    retirement_evidence_ref: programme.POST_MERGE_TECHNICAL_EVIDENCE_REF,
+    non_convergence_evidence_ref: programme.PR379_NON_CONVERGENCE_EVIDENCE_REF,
+  };
+}
+function finalisationPr380Facts() {
+  return {
+    repository,
+    pr: 380,
+    state: 'MERGED',
+    github_state: 'MERGED',
+    status: 'ACCEPTED',
+    draft: false,
+    merged: true,
+    merge_method: 'MERGE_COMMIT',
+    merge_commit: programme.MERGE_COMMIT_SHA,
+    ordered_parents: [programme.PR380_BASE_SHA, programme.PR380_HEAD],
+    accepted_head_tree: programme.PR380_TREE,
+    head: programme.PR380_HEAD,
+    tree: programme.PR380_TREE,
+    base_ref: 'main',
+    base_sha: programme.PR380_BASE_SHA,
+    candidate: {
+      repository,
+      branch: programme.PR380_BRANCH,
+      base_ref: 'main',
+      base_sha: programme.PR380_BASE_SHA,
+      head: programme.PR380_HEAD,
+      tree: programme.PR380_TREE,
+      version: '2.10.8',
+    },
+    accepted_evidence_ref: programme.FINAL_G4_EVIDENCE_REF,
+  };
+}
+function finalisationCollector() {
+  return {
+    kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
+    identity: 'github-web-readonly-adapter',
+    version: 'v1',
+    authenticated: true,
+    provider_client_used: false,
+  };
+}
+function finalisationSourceBinding(parent, child, pr379State, revisions) {
+  const pr379FactsValue = finalisationPr379Facts(pr379State);
+  const pr380FactsValue = finalisationPr380Facts();
+  return programme.postMergeEpochFinalisation.buildSourceBinding({
+    canonical_main: {
+      ref: 'main',
+      sha: programme.MERGE_COMMIT_SHA,
+      tree: programme.MERGE_COMMIT_TREE,
+      equals_merge_commit: true,
+      complete: true,
+    },
+    child: {
+      body_digest: child.body_digest,
+      canonical_digest: child.canonical_digest,
+      dependencies: clone(child.dependencies),
+      issue: child.issue,
+      labels: clone(child.labels),
+      native_parent: child.native_parent,
+      prefix_digest: child.prefix_digest,
+      projection_digest: child.projection.projection_digest,
+      relationships: clone(child.relationships),
+      revision: revisions.child,
+      sole_current: child.sole_current,
+      suffix_digest: child.suffix_digest,
+    },
+    collector: finalisationCollector(),
+    complete: true,
+    parent: {
+      body_digest: parent.body_digest,
+      canonical_digest: parent.canonical_digest,
+      issue: parent.issue,
+      native_children: clone(parent.native_children),
+      prefix_digest: parent.prefix_digest,
+      relationships: clone(parent.relationships),
+      revision: revisions.parent,
+      suffix_digest: parent.suffix_digest,
+    },
+    pr_379: {
+      body_digest: digestText('synthetic provider body #379'),
+      facts: pr379FactsValue,
+      facts_digest: programme.digestValue(pr379FactsValue),
+      pr: 379,
+      revision: revisions.pr379,
+    },
+    pr_380: {
+      body_digest: digestText('synthetic provider body #380'),
+      facts: pr380FactsValue,
+      facts_digest: programme.digestValue(pr380FactsValue),
+      pr: 380,
+      revision: revisions.pr380,
+    },
+  });
+}
+function finalisationFixtureContext(revisionOverrides = {}) {
+  const fixtures = finalisationStateFixtures();
+  const revisions = finalisationRevisionSet(revisionOverrides);
+  const bodyByCheckpoint = {
+    BEFORE_STAGE_A: [fixtures.sourceParent, fixtures.sourceChild, fixtures.sourceState, 'OPEN'],
+    CHILD_STAGE_A_OBSERVED: [fixtures.sourceParent, fixtures.stageAChild, fixtures.sourceState, 'OPEN'],
+    PARENT_STAGE_A_OBSERVED: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
+    PR379_CLOSED_STAGE_A: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'CLOSED'],
+    CHILD_STAGE_B_OBSERVED: [fixtures.stageAParent, fixtures.stageBChild, fixtures.stageA, 'CLOSED'],
+    FINAL_TARGET_OBSERVED: [fixtures.stageBParent, fixtures.stageBChild, fixtures.stageB, 'CLOSED'],
+  };
+  const bindings = {};
+  const evidenceParts = {};
+  for (const checkpoint of Object.keys(bodyByCheckpoint)) {
+    const [parentParsed, childParsed, parentState, pr379State] = bodyByCheckpoint[checkpoint];
+    const childState = childParsed === fixtures.sourceChild ? fixtures.sourceState : childParsed === fixtures.stageAChild ? fixtures.stageA : fixtures.stageB;
+    const parts = {
+      parent: finalisationBodyEvidence(parentParsed, parentState, 'parent', revisions[checkpoint].parent),
+      child: finalisationBodyEvidence(childParsed, childState, 'child', revisions[checkpoint].child),
+      pr379State,
+    };
+    evidenceParts[checkpoint] = parts;
+    bindings[checkpoint] = finalisationSourceBinding(parts.parent, parts.child, pr379State, revisions[checkpoint]);
+    assert.ok(bindings[checkpoint], `${checkpoint}: source binding fixture`);
+  }
+  return { fixtures, revisions, bindings, evidenceParts };
+}
+function finalisationDecisionWithRevisions(revisionOverrides = {}) {
+  const context = finalisationFixtureContext(revisionOverrides);
+  const authority = finalisationAuthority();
+  const value = programme.postMergeEpochFinalisation.createDecision({
+    write_authority: authority,
+    source_snapshot: context.bindings.BEFORE_STAGE_A,
+  });
+  return { context, decision: value };
 }
 function finalisationBodyEvidence(parsed, state, kind, revision) {
   const rawBody = parsed.prefix + parsed.managed + parsed.suffix;
@@ -110,32 +299,17 @@ function finalisationBodyEvidence(parsed, state, kind, revision) {
     };
   return value;
 }
-function finalisationTransaction(checkpoint, decisionValue) {
-  const normal = {
-    BEFORE_STAGE_A: { completed: [], previous: null },
-    CHILD_STAGE_A_OBSERVED: { completed: [1], previous: 'BEFORE_STAGE_A' },
-    PARENT_STAGE_A_OBSERVED: { completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
-    PR379_CLOSED_STAGE_A: { completed: [1, 2, 3], previous: 'PARENT_STAGE_A_OBSERVED' },
-    CHILD_STAGE_B_OBSERVED: { completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
-    FINAL_TARGET_OBSERVED: { completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
-  };
-  const acknowledgement = {
-    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_A_OBSERVED', order: 1, completed: [1], previous: 'BEFORE_STAGE_A' },
-    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 2, completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
-    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 3, completed: [1, 2], previous: 'PARENT_STAGE_A_OBSERVED' },
-    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_B_OBSERVED', order: 4, completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
-    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'FINAL_TARGET_OBSERVED', order: 5, completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
-  };
-  const ack = acknowledgement[checkpoint] || null;
-  const base = ack ? ack.base : checkpoint;
-  const spec = normal[base];
+function finalisationTransaction(checkpoint, decisionValue, context = finalisationFixtureContext()) {
+  const ack = FINALISATION_ACK_SPECS[checkpoint] || null;
+  const spec = ack || FINALISATION_NORMAL_SPECS[checkpoint];
+  const previousCheckpoint = ack ? ack.pre : spec.previous;
   return {
     checkpoint,
     acknowledgement: ack ? 'LOST' : 'CONFIRMED',
     acknowledgement_loss_operation_order: ack ? ack.order : null,
     completed_operation_orders: ack ? ack.completed : spec.completed,
-    continuation: (ack || spec).previous === null ? null : {
-      previous_checkpoint: (ack || spec).previous,
+    continuation: previousCheckpoint === null ? null : {
+      previous_checkpoint: previousCheckpoint,
       decision_digest: programme.digestValue(decisionValue),
       authority_body_digest: decisionValue.write_authority.body_digest,
       fresh_complete_rebind: true,
@@ -144,83 +318,36 @@ function finalisationTransaction(checkpoint, decisionValue) {
     },
     readback: { complete: true, exact: true },
     duplicate_event_count: 1,
+    previous_source_binding: previousCheckpoint === null ? null : clone(context.bindings[previousCheckpoint]),
     complete: true,
   };
 }
-function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
-  const decisionValue = finalisationDecision();
+function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A', options = {}) {
+  const { context, decision: decisionValue } = finalisationDecisionWithRevisions(options.revision_overrides || {});
   assert.ok(decisionValue);
-  const fixtures = finalisationStateFixtures();
-  const sourceRevision = '2026-09-09T00:00:00Z';
-  const sourceParentRevision = programme.FINALISATION_SOURCE_PARENT_REVISION || '2026-09-08T11:02:43Z';
-  const sourceChildRevision = programme.FINALISATION_SOURCE_CHILD_REVISION || '2026-09-08T11:01:45Z';
-  const bodyByCheckpoint = {
-    BEFORE_STAGE_A: [fixtures.sourceParent, fixtures.sourceChild, fixtures.sourceState, 'OPEN'],
-    CHILD_STAGE_A_OBSERVED: [fixtures.sourceParent, fixtures.stageAChild, fixtures.sourceState, 'OPEN'],
-    PARENT_STAGE_A_OBSERVED: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
-    PR379_CLOSED_STAGE_A: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'CLOSED'],
-    CHILD_STAGE_B_OBSERVED: [fixtures.stageAParent, fixtures.stageBChild, fixtures.stageA, 'CLOSED'],
-    FINAL_TARGET_OBSERVED: [fixtures.stageBParent, fixtures.stageBChild, fixtures.stageB, 'CLOSED'],
-    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: [fixtures.sourceParent, fixtures.stageAChild, fixtures.sourceState, 'OPEN'],
-    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
-    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
-    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageBChild, fixtures.stageA, 'CLOSED'],
-    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: [fixtures.stageBParent, fixtures.stageBChild, fixtures.stageB, 'CLOSED'],
-  };
-  const [parentParsed, childParsed, parentState, pr379State] = bodyByCheckpoint[checkpoint] || [];
-  assert.ok(parentParsed && childParsed && parentState);
-  const parentRevision = parentParsed === fixtures.sourceParent ? sourceParentRevision : sourceRevision;
-  const childRevision = childParsed === fixtures.sourceChild ? sourceChildRevision : sourceRevision;
-  const childCanonicalState = childParsed === fixtures.sourceChild
-    ? fixtures.sourceState
-    : childParsed === fixtures.stageAChild ? fixtures.stageA : fixtures.stageB;
+  const ack = FINALISATION_ACK_SPECS[checkpoint] || null;
+  const observedCheckpoint = ack ? (options.ack_effect === false ? ack.pre : ack.base) : checkpoint;
+  const parts = context.evidenceParts[observedCheckpoint];
+  const revisions = context.revisions[observedCheckpoint];
+  const fixtures = context.fixtures;
+  const pr379State = parts.pr379State;
+  assert.ok(parts.parent && parts.child && pr379State);
+  const pr379FactsValue = finalisationPr379Facts(pr379State);
+  const pr380FactsValue = finalisationPr380Facts();
   const pr379 = {
-    repository,
-    pr: 379,
-    state: pr379State,
-    github_state: pr379State,
-    status: 'RETIRED',
-    draft: true,
-    merged: false,
-    merged_at: null,
-    head: programme.FROZEN_HEAD,
-    tree: programme.FROZEN_TREE,
-    branch: 'codex/e3-canonical-historical-receipt-resolution-003',
-    base_ref: 'main',
-    base_sha: programme.MAIN_SHA,
-    changed_files: 48,
-    candidate: clone(decision.pr_379.candidate),
-    retention_evidence_ref: 'web-pr379-retained-5580538176',
-    retirement_evidence_ref: programme.POST_MERGE_TECHNICAL_EVIDENCE_REF,
-    non_convergence_evidence_ref: programme.PR379_NON_CONVERGENCE_EVIDENCE_REF,
+    ...pr379FactsValue,
+    body_digest: digestText('synthetic provider body #379'),
+    facts: pr379FactsValue,
+    facts_digest: programme.digestValue(pr379FactsValue),
+    revision: revisions.pr379,
     complete: true,
   };
   const pr380 = {
-    repository,
-    pr: 380,
-    state: 'MERGED',
-    github_state: 'MERGED',
-    status: 'ACCEPTED',
-    draft: false,
-    merged: true,
-    merge_method: 'MERGE_COMMIT',
-    merge_commit: programme.MERGE_COMMIT_SHA,
-    ordered_parents: [programme.MAIN_SHA, programme.PR380_HEAD],
-    accepted_head_tree: programme.PR380_TREE,
-    head: programme.PR380_HEAD,
-    tree: programme.PR380_TREE,
-    base_ref: 'main',
-    base_sha: programme.MAIN_SHA,
-    candidate: {
-      repository,
-      branch: 'codex/e3-v5-projection-bootstrap-recovery-001',
-      base_ref: 'main',
-      base_sha: programme.MAIN_SHA,
-      head: programme.PR380_HEAD,
-      tree: programme.PR380_TREE,
-      version: '2.10.8',
-    },
-    accepted_evidence_ref: programme.FINAL_G4_EVIDENCE_REF,
+    ...pr380FactsValue,
+    body_digest: digestText('synthetic provider body #380'),
+    facts: pr380FactsValue,
+    facts_digest: programme.digestValue(pr380FactsValue),
+    revision: revisions.pr380,
     complete: true,
   };
   const canonicalMain = { ref: 'main', sha: programme.MERGE_COMMIT_SHA, tree: programme.MERGE_COMMIT_TREE, equals_merge_commit: true, complete: true };
@@ -233,8 +360,9 @@ function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
     repository,
     parent_issue: 240,
     child_issue: 359,
-    parent: finalisationBodyEvidence(parentParsed, parentState, 'parent', parentRevision),
-    child: finalisationBodyEvidence(childParsed, childCanonicalState, 'child', childRevision),
+    parent: clone(parts.parent),
+    child: clone(parts.child),
+    source_binding: clone(context.bindings[observedCheckpoint]),
     pr_379: pr379,
     pr_380: pr380,
     accepted_evidence: clone(decisionValue.accepted_evidence),
@@ -260,8 +388,8 @@ function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
     canonical_main: canonicalMain,
     source_revisions: {
       canonical_digest: programme.FINALISATION_SOURCE_CANONICAL_DIGEST || programme.TARGET_CANONICAL_DIGEST,
-      parent: { body_digest: fixtures.sourceParent.body_digest, prefix_digest: fixtures.sourceParent.prefix_digest, revision: sourceParentRevision, suffix_digest: fixtures.sourceParent.suffix_digest },
-      child: { body_digest: fixtures.sourceChild.body_digest, prefix_digest: fixtures.sourceChild.prefix_digest, revision: sourceChildRevision, suffix_digest: fixtures.sourceChild.suffix_digest },
+      parent: { body_digest: fixtures.sourceParent.body_digest, prefix_digest: fixtures.sourceParent.prefix_digest, revision: context.revisions.BEFORE_STAGE_A.parent, suffix_digest: fixtures.sourceParent.suffix_digest },
+      child: { body_digest: fixtures.sourceChild.body_digest, prefix_digest: fixtures.sourceChild.prefix_digest, revision: context.revisions.BEFORE_STAGE_A.child, suffix_digest: fixtures.sourceChild.suffix_digest },
       complete: true,
     },
     write_authority: authority,
@@ -269,7 +397,7 @@ function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
       inventory: 'EXACT_BOUNDED',
       provider_client_used: false,
       provider_cas_claim: false,
-      facts_digest: programme.digestValue({ pr_379: pr379, pr_380: pr380, canonical_main: canonicalMain }),
+      facts_digest: context.bindings[observedCheckpoint].snapshot_digest,
       complete: true,
     },
     collector: {
@@ -279,7 +407,7 @@ function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
       authenticated: true,
       provider_client_used: false,
     },
-    transaction: finalisationTransaction(checkpoint, decisionValue),
+    transaction: finalisationTransaction(checkpoint, decisionValue, context),
     pagination: null,
     evidence_digest: null,
   };
@@ -293,10 +421,49 @@ function replaceFinalisationEvidence(value, pathParts, replacement) {
   cursor[pathParts[pathParts.length - 1]] = replacement;
   return withEvidenceDigest(next);
 }
+function gitChangedPaths(args) {
+  try {
+    return execFileSync('git', args, { encoding: 'utf8' })
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } catch (_error) {
+    return [];
+  }
+}
+function sourceBootstrapRepinPending() {
+  const sourcePaths = new Set([
+    'repo/contracts/github-program-reconciler/programme-surface-contract-v5.json',
+    'repo/contracts/github-program-reconciler/post-merge-epoch-finalisation-decision-v1.schema.json',
+    'repo/contracts/github-program-reconciler/post-merge-epoch-finalisation-evidence-v1.schema.json',
+    'repo/scripts/toolkit-github-program-state-v5.cjs',
+    'repo/tests/toolkit-github-programme-projection-bootstrap-recovery-v5.test.cjs',
+  ]);
+  const workingTreePaths = [
+    ...gitChangedPaths(['diff', '--name-only']),
+    ...gitChangedPaths(['diff', '--cached', '--name-only']),
+  ];
+  const paths = workingTreePaths.length > 0 ? workingTreePaths : gitChangedPaths(['diff', '--name-only', 'HEAD^', 'HEAD']);
+  return paths.length > 0
+    && paths.every((item) => sourcePaths.has(item))
+    && paths.includes('repo/contracts/github-program-reconciler/programme-surface-contract-v5.json');
+}
+function rebindFinalisationProviderRevision(value, resource, revision) {
+  const next = clone(value);
+  if (!['parent', 'child', 'pr_379', 'pr_380'].includes(resource)) throw new Error(`unknown finalisation resource: ${resource}`);
+  next[resource].revision = revision;
+  next.source_binding[resource].revision = revision;
+  delete next.source_binding.snapshot_digest;
+  next.source_binding = programme.postMergeEpochFinalisation.buildSourceBinding(next.source_binding);
+  assert.ok(next.source_binding, `${resource}: rebuilt source binding`);
+  next.provider_facts.facts_digest = next.source_binding.snapshot_digest;
+  next.pagination = programme.postMergeEpochFinalisation.buildPaginationEvidence(next);
+  return withEvidenceDigest(next);
+}
 const DECISION_SCHEMA_TYPES = new Set(['null', 'boolean', 'object', 'array', 'number', 'integer', 'string']);
 const SUPPORTED_DECISION_SCHEMA_KEYWORDS = new Set([
   '$schema', '$id', '$ref', 'title', 'type', 'const', 'enum', 'required', 'properties',
-  'additionalProperties', 'items', 'minItems', 'maxItems', 'minimum', 'pattern',
+  'additionalProperties', 'items', 'minItems', 'maxItems', 'minimum', 'pattern', 'anyOf',
 ]);
 function isSchemaRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function deepEqual(left, right) {
@@ -358,6 +525,10 @@ function assertDecisionSchemaSupported(schema, schemaPath = '$') {
       assertDecisionSchemaSupported(propertySchema, `${schemaPath}.properties.${property}`);
     }
   }
+  if (Object.prototype.hasOwnProperty.call(schema, 'anyOf')) {
+    if (!Array.isArray(schema.anyOf) || schema.anyOf.length === 0) throw new Error(`Invalid decision schema anyOf at ${schemaPath}`);
+    schema.anyOf.forEach((branch, index) => assertDecisionSchemaSupported(branch, `${schemaPath}.anyOf[${index}]`));
+  }
   if (Object.prototype.hasOwnProperty.call(schema, 'items')) {
     assertDecisionSchemaSupported(schema.items, `${schemaPath}.items`);
   }
@@ -373,6 +544,7 @@ function matchesDecisionSchemaType(value, type) {
   return false;
 }
 function validateDecisionSchemaNode(value, schema) {
+  if (schema.anyOf !== undefined && !schema.anyOf.some((branch) => validateDecisionSchemaNode(value, branch))) return false;
   if (schema.type !== undefined) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
     if (!types.some((type) => matchesDecisionSchemaType(value, type))) return false;
@@ -1143,6 +1315,94 @@ test('finalisation recognises the exact operation order and all bounded normal c
   });
 });
 
+test('Repair 1 binds arbitrary execution-time provider revisions and rejects revision movement', () => {
+  const revisions = {
+    parent: 'github:issue:240:revision:2026-09-09T14:00:01Z',
+    child: 'github:issue:359:revision:2026-09-09T14:00:02Z',
+    pr379: 'github:pull:379:revision:2026-09-09T14:00:03Z',
+    pr380: 'github:pull:380:revision:2026-09-09T14:00:04Z',
+  };
+  const finalDecision = finalisationDecisionWithRevisions(revisions).decision;
+  const evidence = makeFinalisationEvidence('BEFORE_STAGE_A', { revision_overrides: revisions });
+  assert.equal(programme.postMergeEpochFinalisation.validateDecision(finalDecision).ok, true);
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision).ok, true);
+  assert.equal(evidence.source_binding.parent.revision, revisions.parent);
+  assert.equal(evidence.source_binding.child.revision, revisions.child);
+  assert.equal(evidence.source_binding.pr_379.revision, revisions.pr379);
+  assert.equal(evidence.source_binding.pr_380.revision, revisions.pr380);
+
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'toolkit-github-program-state-v5.cjs'), 'utf8');
+  assert.doesNotMatch(source, /FINALISATION_SOURCE_(PARENT|CHILD)_REVISION/);
+  assert.doesNotMatch(source, /2026-09-08T11:(02:43|01:45)Z/);
+
+  for (const resource of ['parent', 'child', 'pr_379', 'pr_380']) {
+    const moved = rebindFinalisationProviderRevision(evidence, resource, `${resource}:unexpected:movement`);
+    assert.equal(
+      programme.postMergeEpochFinalisation.validateEvidence(moved, finalDecision).ok,
+      false,
+      `${resource}: unexpected movement must fail closed`,
+    );
+  }
+});
+
+test('Repair 1 requires #379/#380 provider revisions and keeps provider state separate from revision', () => {
+  const finalDecision = finalisationDecision();
+  for (const resource of ['pr_379', 'pr_380']) {
+    const missing = makeFinalisationEvidence();
+    delete missing[resource].revision;
+    assert.equal(
+      programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(missing), finalDecision).ok,
+      false,
+      `${resource}: provider revision is mandatory`,
+    );
+  }
+
+  const evidence = makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED');
+  const preview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence });
+  assert.equal(preview.ok, true, preview.code);
+  const close = preview.operations.find((operation) => operation.operation_id === 'PR379_CLOSE');
+  assert.ok(close);
+  assert.equal(close.source_revision, evidence.pr_379.revision);
+  assert.notEqual(close.source_revision, 'OPEN');
+  assert.notEqual(close.source_revision, 'CLOSED');
+  assert.equal(close.expected_provider_state, 'OPEN');
+  assert.equal(close.target_provider_state, 'CLOSED');
+  assert.equal(close.source_body_digest, evidence.pr_379.body_digest);
+});
+
+test('Repair 1 accepts only the expected single-resource rebind at every normal checkpoint', () => {
+  const finalDecision = finalisationDecision();
+  const checkpoints = [
+    'CHILD_STAGE_A_OBSERVED',
+    'PARENT_STAGE_A_OBSERVED',
+    'PR379_CLOSED_STAGE_A',
+    'CHILD_STAGE_B_OBSERVED',
+    'FINAL_TARGET_OBSERVED',
+  ];
+  const expectedResource = {
+    CHILD_STAGE_A_OBSERVED: 'child',
+    PARENT_STAGE_A_OBSERVED: 'parent',
+    PR379_CLOSED_STAGE_A: 'pr_379',
+    CHILD_STAGE_B_OBSERVED: 'child',
+    FINAL_TARGET_OBSERVED: 'parent',
+  };
+  for (const checkpoint of checkpoints) {
+    const evidence = makeFinalisationEvidence(checkpoint);
+    const validation = programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision);
+    assert.equal(validation.ok, true, `${checkpoint}: ${validation.code}`);
+    const previous = makeFinalisationEvidence(FINALISATION_NORMAL_SPECS[checkpoint].previous);
+    for (const resource of ['parent', 'child', 'pr_379', 'pr_380']) {
+      if (resource === expectedResource[checkpoint]) {
+        assert.notDeepEqual(evidence.source_binding[resource], previous.source_binding[resource], `${checkpoint}: expected movement`);
+      } else {
+        assert.deepEqual(evidence.source_binding[resource], previous.source_binding[resource], `${checkpoint}: unexpected movement`);
+      }
+    }
+  }
+  const mixed = rebindFinalisationProviderRevision(makeFinalisationEvidence('CHILD_STAGE_A_OBSERVED'), 'parent', 'unexpected:parent:movement');
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(mixed, finalDecision).ok, false);
+});
+
 test('acknowledgement-loss checkpoints require a fresh rebind and never blindly repeat a write', () => {
   const finalDecision = finalisationDecision();
   for (const checkpoint of programme.FINALISATION_ACK_LOSS_CHECKPOINTS) {
@@ -1156,6 +1416,42 @@ test('acknowledgement-loss checkpoints require a fresh rebind and never blindly 
     assert.equal(preview.status, 'REQUIRES_FRESH_COMPLETE_REBIND');
     assert.equal(preview.fresh_complete_rebind_required, true);
     assert.equal(preview.duplicate_write, false);
+  }
+});
+
+test('Repair 1 acknowledgement loss recovers through a fresh normal checkpoint for all five operations', () => {
+  const finalDecision = finalisationDecision();
+  const operationIds = (checkpoint) => {
+    const completed = FINALISATION_NORMAL_SPECS[checkpoint].completed;
+    return programme.FINALISATION_OPERATION_ORDER
+      .filter((operation) => !completed.includes(operation.order))
+      .map((operation) => operation.operation_id);
+  };
+  for (const checkpoint of programme.FINALISATION_ACK_LOSS_CHECKPOINTS) {
+    const spec = FINALISATION_ACK_SPECS[checkpoint];
+    const lost = makeFinalisationEvidence(checkpoint, { ack_effect: false });
+    const lostValidation = programme.postMergeEpochFinalisation.validateEvidence(lost, finalDecision);
+    assert.equal(lostValidation.ok, true, `${checkpoint}: lost acknowledgement validation`);
+    const lostPreview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence: lost });
+    assert.equal(lostPreview.ok, true, `${checkpoint}: lost acknowledgement preview`);
+    assert.deepEqual(lostPreview.operations, []);
+    assert.equal(lostPreview.status, 'REQUIRES_FRESH_COMPLETE_REBIND');
+
+    const noEffect = makeFinalisationEvidence(spec.pre);
+    const noEffectClassification = programme.postMergeEpochFinalisation.classifyCheckpoint({ decision: finalDecision, evidence: noEffect });
+    assert.equal(noEffectClassification.ok, true, `${checkpoint}: no-effect classification`);
+    assert.equal(noEffectClassification.checkpoint, spec.pre);
+    const noEffectPreview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence: noEffect });
+    assert.equal(noEffectPreview.ok, true, `${checkpoint}: no-effect continuation`);
+    assert.deepEqual(noEffectPreview.operation_order, operationIds(spec.pre));
+
+    const effect = makeFinalisationEvidence(spec.base);
+    const effectClassification = programme.postMergeEpochFinalisation.classifyCheckpoint({ decision: finalDecision, evidence: effect });
+    assert.equal(effectClassification.ok, true, `${checkpoint}: effect classification`);
+    assert.equal(effectClassification.checkpoint, spec.base);
+    const effectPreview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence: effect });
+    assert.equal(effectPreview.ok, true, `${checkpoint}: effect continuation`);
+    assert.deepEqual(effectPreview.operation_order, operationIds(spec.base));
   }
 });
 

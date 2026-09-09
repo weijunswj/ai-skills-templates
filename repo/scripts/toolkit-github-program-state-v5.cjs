@@ -50,8 +50,6 @@ const FINALISATION_DECISION_SCHEMA = 'toolkit.github-program.post-merge-epoch-fi
 const FINALISATION_EVIDENCE_SCHEMA = 'toolkit.github-program.post-merge-epoch-finalisation-evidence.v1';
 const FINALISATION_OPERATION_SCHEMA = 'toolkit.github-program.post-merge-epoch-finalisation-operation.v1';
 const FINALISATION_SOURCE_CANONICAL_DIGEST = TARGET_CANONICAL_DIGEST;
-const FINALISATION_SOURCE_PARENT_REVISION = '2026-09-08T11:02:43Z';
-const FINALISATION_SOURCE_CHILD_REVISION = '2026-09-08T11:01:45Z';
 const PR380_HEAD = 'f8afc5df62b9e86a478ce24745b6aa481cbc7a1a';
 const PR380_TREE = 'd9e78e1a09fc53f88d077f3f4216027102534ce3';
 const PR380_BRANCH = 'codex/e3-v5-projection-bootstrap-recovery-001';
@@ -165,6 +163,9 @@ function isSafeRevision(value) {
     && value.length > 0
     && value.length <= 256
     && !/[\r\n]/.test(value);
+}
+function isProviderRevision(value) {
+  return isSafeRevision(value) && value !== 'OPEN' && value !== 'CLOSED';
 }
 function isTimestamp(value) {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}T/.test(value);
@@ -2098,13 +2099,13 @@ function previewRecovery(input = {}) {
 
 const FINALISATION_DECISION_KEYS = Object.freeze([
   'schema', 'root', 'lock', 'repository', 'parent_issue', 'child_issue',
-  'source_state', 'target_state', 'pr_379', 'pr_380', 'merge_ancestry',
+  'source_binding', 'source_state', 'target_state', 'pr_379', 'pr_380', 'merge_ancestry',
   'accepted_evidence', 'write_authority', 'allowed_operations',
   'allowed_checkpoints', 'prohibitions', 'write_safety',
 ]);
 const FINALISATION_EVIDENCE_KEYS = Object.freeze([
   'schema', 'root', 'lock', 'decision_digest', 'repository', 'parent_issue', 'child_issue',
-  'parent', 'child', 'pr_379', 'pr_380', 'accepted_evidence', 'accepted_epoch_event',
+  'parent', 'child', 'source_binding', 'pr_379', 'pr_380', 'accepted_evidence', 'accepted_epoch_event',
   'merge_ancestry', 'canonical_main', 'source_revisions', 'write_authority',
   'pagination', 'provider_facts', 'collector', 'transaction', 'evidence_digest',
 ]);
@@ -2154,14 +2155,18 @@ function normaliseFinalisationWriteAuthority(input) {
   if (!isRecord(candidate)) return null;
   const reference = candidate.reference ?? candidate.authority_ref;
   const bodyDigest = candidate.body_digest ?? candidate.authority_body_digest;
-  if (!isSafeId(reference, 512) || !isDigest(bodyDigest)) return null;
+  if (!isSafeId(reference, 512) || !isDigest(bodyDigest)
+    || candidate.repository !== REPOSITORY
+    || candidate.root !== FINALISATION_ROOT
+    || candidate.lock !== FINALISATION_LOCK
+    || candidate.scope !== FINALISATION_SCOPE) return null;
   return {
     reference,
     body_digest: bodyDigest,
-    repository: candidate.repository ?? REPOSITORY,
-    root: candidate.root ?? FINALISATION_ROOT,
-    lock: candidate.lock ?? FINALISATION_LOCK,
-    scope: candidate.scope ?? FINALISATION_SCOPE,
+    repository: candidate.repository,
+    root: candidate.root,
+    lock: candidate.lock,
+    scope: candidate.scope,
   };
 }
 function finalisationAuthorityValid(value) {
@@ -2174,7 +2179,229 @@ function finalisationAuthorityValid(value) {
     && value.lock === FINALISATION_LOCK
     && value.scope === FINALISATION_SCOPE;
 }
-function finalisationDecisionTemplate(authority) {
+const FINALISATION_PR379_FACT_KEYS = Object.freeze([
+  'base_ref', 'base_sha', 'branch', 'candidate', 'changed_files', 'draft', 'github_state',
+  'head', 'merged', 'merged_at', 'non_convergence_evidence_ref', 'pr', 'repository',
+  'retention_evidence_ref', 'retirement_evidence_ref', 'state', 'status', 'tree',
+]);
+const FINALISATION_PR380_FACT_KEYS = Object.freeze([
+  'accepted_evidence_ref', 'accepted_head_tree', 'base_ref', 'base_sha', 'candidate',
+  'draft', 'github_state', 'head', 'merged', 'merge_commit', 'merge_method',
+  'ordered_parents', 'pr', 'repository', 'state', 'status', 'tree',
+]);
+function finalisationPr379FactsFromObservation(value) {
+  return {
+    base_ref: value.base_ref,
+    base_sha: value.base_sha,
+    branch: value.branch,
+    candidate: clone(value.candidate),
+    changed_files: value.changed_files,
+    draft: value.draft,
+    github_state: value.github_state,
+    head: value.head,
+    merged: value.merged,
+    merged_at: value.merged_at,
+    non_convergence_evidence_ref: value.non_convergence_evidence_ref,
+    pr: value.pr,
+    repository: value.repository,
+    retention_evidence_ref: value.retention_evidence_ref,
+    retirement_evidence_ref: value.retirement_evidence_ref,
+    state: value.state,
+    status: value.status,
+    tree: value.tree,
+  };
+}
+function finalisationPr380FactsFromObservation(value) {
+  return {
+    accepted_evidence_ref: value.accepted_evidence_ref,
+    accepted_head_tree: value.accepted_head_tree,
+    base_ref: value.base_ref,
+    base_sha: value.base_sha,
+    candidate: clone(value.candidate),
+    draft: value.draft,
+    github_state: value.github_state,
+    head: value.head,
+    merged: value.merged,
+    merge_commit: value.merge_commit,
+    merge_method: value.merge_method,
+    ordered_parents: clone(value.ordered_parents),
+    pr: value.pr,
+    repository: value.repository,
+    state: value.state,
+    status: value.status,
+    tree: value.tree,
+  };
+}
+function finalisationPr379FactsValid(value) {
+  return isRecord(value)
+    && exactKeys(value, FINALISATION_PR379_FACT_KEYS)
+    && value.repository === REPOSITORY
+    && value.pr === 379
+    && value.state === value.github_state
+    && ['OPEN', 'CLOSED'].includes(value.github_state)
+    && value.status === 'RETIRED'
+    && value.draft === true
+    && value.merged === false
+    && value.merged_at === null
+    && value.head === FROZEN_HEAD
+    && value.tree === FROZEN_TREE
+    && value.branch === FROZEN_BRANCH
+    && value.base_ref === FROZEN_BASE_REF
+    && value.base_sha === MAIN_SHA
+    && value.changed_files === 48
+    && validateRecoveryCandidate(value.candidate)
+    && value.retention_evidence_ref === RETENTION_EVIDENCE_REF
+    && value.retirement_evidence_ref === POST_MERGE_TECHNICAL_EVIDENCE_REF
+    && value.non_convergence_evidence_ref === PR379_NON_CONVERGENCE_EVIDENCE_REF;
+}
+function finalisationPr380FactsValid(value) {
+  return isRecord(value)
+    && exactKeys(value, FINALISATION_PR380_FACT_KEYS)
+    && value.repository === REPOSITORY
+    && value.pr === 380
+    && value.state === 'MERGED'
+    && value.github_state === 'MERGED'
+    && value.status === 'ACCEPTED'
+    && value.draft === false
+    && value.merged === true
+    && value.merge_method === 'MERGE_COMMIT'
+    && value.merge_commit === MERGE_COMMIT_SHA
+    && same(value.ordered_parents, [PR380_BASE_SHA, PR380_HEAD])
+    && value.accepted_head_tree === PR380_TREE
+    && value.head === PR380_HEAD
+    && value.tree === PR380_TREE
+    && value.base_ref === 'main'
+    && value.base_sha === PR380_BASE_SHA
+    && validateFinalisationCandidate(value.candidate)
+    && value.accepted_evidence_ref === FINAL_G4_EVIDENCE_REF;
+}
+function finalisationParentBindingValid(value) {
+  return isRecord(value)
+    && exactKeys(value, ['body_digest', 'canonical_digest', 'issue', 'native_children', 'prefix_digest', 'relationships', 'revision', 'suffix_digest'])
+    && value.issue === PARENT_ISSUE
+    && isDigest(value.body_digest)
+    && isDigest(value.canonical_digest)
+    && isProviderRevision(value.revision)
+    && isDigest(value.prefix_digest)
+    && isDigest(value.suffix_digest)
+    && same(value.native_children, [358, 359, 360, 361, 362, 363])
+    && same(value.relationships, { child_issue: CHILD_ISSUE, child_is_native_sub_issue: true, parent_issue: PARENT_ISSUE, sole_current: true });
+}
+function finalisationChildBindingValid(value) {
+  return isRecord(value)
+    && exactKeys(value, ['body_digest', 'canonical_digest', 'dependencies', 'issue', 'labels', 'native_parent', 'prefix_digest', 'projection_digest', 'relationships', 'revision', 'sole_current', 'suffix_digest'])
+    && value.issue === CHILD_ISSUE
+    && isDigest(value.body_digest)
+    && isDigest(value.canonical_digest)
+    && same(value.dependencies, [])
+    && same(value.labels, ['current'])
+    && value.native_parent === PARENT_ISSUE
+    && isDigest(value.prefix_digest)
+    && isDigest(value.projection_digest)
+    && same(value.relationships, { child_issue: CHILD_ISSUE, child_is_native_sub_issue: true, parent_issue: PARENT_ISSUE, sole_current: true })
+    && isProviderRevision(value.revision)
+    && value.sole_current === true
+    && isDigest(value.suffix_digest);
+}
+function finalisationProviderBindingValid(value, kind) {
+  const factsValid = kind === 'pr_379' ? finalisationPr379FactsValid(value?.facts) : finalisationPr380FactsValid(value?.facts);
+  return isRecord(value)
+    && exactKeys(value, ['body_digest', 'facts', 'facts_digest', 'pr', 'revision'])
+    && value.pr === (kind === 'pr_379' ? 379 : 380)
+    && isDigest(value.body_digest)
+    && factsValid
+    && isDigest(value.facts_digest)
+    && value.facts_digest === digestValue(value.facts)
+    && isProviderRevision(value.revision);
+}
+function finalisationSourceBindingValid(value, options = {}) {
+  if (!isRecord(value)
+    || !exactKeys(value, ['canonical_main', 'child', 'collector', 'complete', 'parent', 'pr_379', 'pr_380', 'snapshot_digest'])
+    || value.complete !== true
+    || !finalisationParentBindingValid(value.parent)
+    || !finalisationChildBindingValid(value.child)
+    || !finalisationProviderBindingValid(value.pr_379, 'pr_379')
+    || !finalisationProviderBindingValid(value.pr_380, 'pr_380')
+    || !finalisationCanonicalMainValid(value.canonical_main)
+    || !finalisationCollectorValid(value.collector)
+    || !isDigest(value.snapshot_digest)
+    || value.snapshot_digest !== digestValue(without(value, 'snapshot_digest'))) return false;
+  if (options.source === true && (value.parent.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST
+    || value.child.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST
+    || value.pr_379.facts.github_state !== 'OPEN'
+    || value.pr_380.facts.github_state !== 'MERGED')) return false;
+  return true;
+}
+function normaliseFinalisationSourceBinding(input) {
+  if (!isRecord(input)) return null;
+  const candidate = isRecord(input.source_snapshot)
+    ? input.source_snapshot
+    : isRecord(input.execution_snapshot)
+      ? input.execution_snapshot
+      : isRecord(input.provider_snapshot)
+        ? input.provider_snapshot
+        : isRecord(input.source_binding)
+          ? input.source_binding
+          : input;
+  return clone(candidate);
+}
+function finalisationSourceBindingFromEvidence(value) {
+  const binding = {
+    canonical_main: clone(value.canonical_main),
+    child: {
+      body_digest: value.child.body_digest,
+      canonical_digest: value.child.canonical_digest,
+      dependencies: clone(value.child.dependencies),
+      issue: value.child.issue,
+      labels: clone(value.child.labels),
+      native_parent: value.child.native_parent,
+      prefix_digest: value.child.prefix_digest,
+      projection_digest: value.child.projection.projection_digest,
+      relationships: clone(value.child.relationships),
+      revision: value.child.revision,
+      sole_current: value.child.sole_current,
+      suffix_digest: value.child.suffix_digest,
+    },
+    collector: clone(value.collector),
+    complete: true,
+    parent: {
+      body_digest: value.parent.body_digest,
+      canonical_digest: value.parent.canonical_digest,
+      issue: value.parent.issue,
+      native_children: clone(value.parent.native_children),
+      prefix_digest: value.parent.prefix_digest,
+      relationships: clone(value.parent.relationships),
+      revision: value.parent.revision,
+      suffix_digest: value.parent.suffix_digest,
+    },
+    pr_379: {
+      body_digest: value.pr_379.body_digest,
+      facts: clone(value.pr_379.facts),
+      facts_digest: value.pr_379.facts_digest,
+      pr: value.pr_379.pr,
+      revision: value.pr_379.revision,
+    },
+    pr_380: {
+      body_digest: value.pr_380.body_digest,
+      facts: clone(value.pr_380.facts),
+      facts_digest: value.pr_380.facts_digest,
+      pr: value.pr_380.pr,
+      revision: value.pr_380.revision,
+    },
+  };
+  return { ...binding, snapshot_digest: digestValue(binding) };
+}
+function buildPostMergeEpochFinalisationSourceBinding(input = {}, options = {}) {
+  const candidate = normaliseFinalisationSourceBinding(input);
+  if (!candidate) return null;
+  const binding = {
+    ...without(candidate, 'snapshot_digest'),
+    snapshot_digest: digestValue(without(candidate, 'snapshot_digest')),
+  };
+  if (candidate.snapshot_digest !== undefined && candidate.snapshot_digest !== binding.snapshot_digest) return null;
+  return binding && finalisationSourceBindingValid(binding, options) ? binding : null;
+}
+function finalisationDecisionTemplate(authority, sourceBinding) {
   return {
     schema: FINALISATION_DECISION_SCHEMA,
     root: FINALISATION_ROOT,
@@ -2182,6 +2409,7 @@ function finalisationDecisionTemplate(authority) {
     repository: REPOSITORY,
     parent_issue: PARENT_ISSUE,
     child_issue: CHILD_ISSUE,
+    source_binding: clone(sourceBinding),
     source_state: {
       canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
       lifecycle: 'CURRENT',
@@ -2254,8 +2482,10 @@ function createPostMergeEpochFinalisationDecision(input = {}) {
   if (!isRecord(input)
     || Object.keys(input).some((key) => ['desired', 'patch', 'transition', 'target', 'programme_apply', 'e4_activation'].includes(key))) return null;
   const authority = normaliseFinalisationWriteAuthority(input);
-  if (!authority || !finalisationAuthorityValid(authority)) return null;
-  return finalisationDecisionTemplate(authority);
+  const sourceBinding = buildPostMergeEpochFinalisationSourceBinding(input, { source: true });
+  if (!authority || !finalisationAuthorityValid(authority)
+    || !sourceBinding || !finalisationSourceBindingValid(sourceBinding, { source: true })) return null;
+  return finalisationDecisionTemplate(authority, sourceBinding);
 }
 function validateFinalisationOperationOrder(value) {
   return Array.isArray(value)
@@ -2272,13 +2502,14 @@ function validateFinalisationDecision(value) {
     || value.repository !== REPOSITORY
     || value.parent_issue !== PARENT_ISSUE
     || value.child_issue !== CHILD_ISSUE
+    || !finalisationSourceBindingValid(value.source_binding, { source: true })
     || !finalisationAuthorityValid(value.write_authority)
     || !validateFinalisationOperationOrder(value.allowed_operations)
     || !same(value.allowed_checkpoints, [...FINALISATION_CHECKPOINTS])
     || !same(value.prohibitions, FINALISATION_PROHIBITIONS)
     || !same(value.write_safety, FINALISATION_WRITE_SAFETY)
     || !same(value.accepted_evidence, finalisationAcceptedEvidence())) return failure('FINALISATION_DECISION_INVALID', { reason: 'fixed_contract_mismatch' });
-  const expected = finalisationDecisionTemplate(value.write_authority);
+  const expected = finalisationDecisionTemplate(value.write_authority, value.source_binding);
   if (!same(value, expected)) return failure('FINALISATION_DECISION_INVALID', { reason: 'fixed_identity_or_target_mismatch' });
   return success('FINALISATION_DECISION_VALID', { decision: clone(value), decision_digest: digestValue(value) });
 }
@@ -2317,10 +2548,10 @@ function validateFinalisationAcceptedEpochEvent(value) {
     && value.occurrence === 1
     && value.complete === true;
 }
-function validateFinalisationSourceRevisions(value, evidence) {
+function validateFinalisationSourceRevisions(value, evidence, decision) {
   if (!isRecord(value)
     || !exactKeys(value, ['canonical_digest', 'child', 'complete', 'parent'])
-    || value.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST
+    || value.canonical_digest !== decision.source_binding.parent.canonical_digest
     || value.complete !== true) return false;
   for (const key of ['parent', 'child']) {
     const item = value[key];
@@ -2329,26 +2560,27 @@ function validateFinalisationSourceRevisions(value, evidence) {
       || !isDigest(item.body_digest)
       || !isDigest(item.prefix_digest)
       || !isDigest(item.suffix_digest)
-      || !isSafeRevision(item.revision)) return false;
+      || !isProviderRevision(item.revision)) return false;
   }
-  if (value.parent.revision !== FINALISATION_SOURCE_PARENT_REVISION
-    || value.child.revision !== FINALISATION_SOURCE_CHILD_REVISION) return false;
-  const sourceParent = evidence.parent.canonical_digest === FINALISATION_SOURCE_CANONICAL_DIGEST;
-  const sourceChild = evidence.child.canonical_digest === FINALISATION_SOURCE_CANONICAL_DIGEST;
-  if (sourceParent && (value.parent.body_digest !== evidence.parent.body_digest
-    || value.parent.prefix_digest !== evidence.parent.prefix_digest
-    || value.parent.suffix_digest !== evidence.parent.suffix_digest)) return false;
-  if (sourceChild && (value.child.body_digest !== evidence.child.body_digest
-    || value.child.prefix_digest !== evidence.child.prefix_digest
-    || value.child.suffix_digest !== evidence.child.suffix_digest)) return false;
-  return true;
+  const sourceParent = decision.source_binding.parent;
+  const sourceChild = decision.source_binding.child;
+  return value.parent.revision === sourceParent.revision
+    && value.parent.body_digest === sourceParent.body_digest
+    && value.parent.prefix_digest === sourceParent.prefix_digest
+    && value.parent.suffix_digest === sourceParent.suffix_digest
+    && value.child.revision === sourceChild.revision
+    && value.child.body_digest === sourceChild.body_digest
+    && value.child.prefix_digest === sourceChild.prefix_digest
+    && value.child.suffix_digest === sourceChild.suffix_digest
+    && evidence.parent.issue === sourceParent.issue
+    && evidence.child.issue === sourceChild.issue;
 }
 function finalisationProviderPr379Valid(value) {
   return isRecord(value)
     && exactKeys(value, [
-      'base_ref', 'base_sha', 'branch', 'candidate', 'changed_files', 'complete', 'draft', 'github_state',
-      'head', 'merged', 'merged_at', 'non_convergence_evidence_ref', 'pr', 'repository',
-      'retention_evidence_ref', 'retirement_evidence_ref', 'state', 'status', 'tree',
+      'base_ref', 'base_sha', 'body_digest', 'branch', 'candidate', 'changed_files', 'complete', 'draft', 'facts',
+      'facts_digest', 'github_state', 'head', 'merged', 'merged_at', 'non_convergence_evidence_ref', 'pr', 'repository',
+      'retention_evidence_ref', 'retirement_evidence_ref', 'revision', 'state', 'status', 'tree',
     ])
     && value.repository === REPOSITORY
     && value.pr === 379
@@ -2365,6 +2597,12 @@ function finalisationProviderPr379Valid(value) {
     && value.base_sha === MAIN_SHA
     && value.changed_files === 48
     && validateRecoveryCandidate(value.candidate)
+    && isDigest(value.body_digest)
+    && finalisationPr379FactsValid(value.facts)
+    && same(value.facts, finalisationPr379FactsFromObservation(value))
+    && isDigest(value.facts_digest)
+    && value.facts_digest === digestValue(value.facts)
+    && isProviderRevision(value.revision)
     && value.retention_evidence_ref === RETENTION_EVIDENCE_REF
     && value.retirement_evidence_ref === POST_MERGE_TECHNICAL_EVIDENCE_REF
     && value.non_convergence_evidence_ref === PR379_NON_CONVERGENCE_EVIDENCE_REF
@@ -2373,9 +2611,9 @@ function finalisationProviderPr379Valid(value) {
 function finalisationProviderPr380Valid(value) {
   return isRecord(value)
     && exactKeys(value, [
-      'accepted_evidence_ref', 'accepted_head_tree', 'base_ref', 'base_sha', 'candidate', 'complete',
-      'draft', 'github_state', 'head', 'merged', 'merge_commit', 'merge_method', 'ordered_parents',
-      'pr', 'repository', 'state', 'status', 'tree',
+      'accepted_evidence_ref', 'accepted_head_tree', 'base_ref', 'base_sha', 'body_digest', 'candidate', 'complete',
+      'draft', 'facts', 'facts_digest', 'github_state', 'head', 'merged', 'merge_commit', 'merge_method', 'ordered_parents',
+      'pr', 'repository', 'revision', 'state', 'status', 'tree',
     ])
     && value.repository === REPOSITORY
     && value.pr === 380
@@ -2393,6 +2631,12 @@ function finalisationProviderPr380Valid(value) {
     && value.base_ref === 'main'
     && value.base_sha === PR380_BASE_SHA
     && validateFinalisationCandidate(value.candidate)
+    && isDigest(value.body_digest)
+    && finalisationPr380FactsValid(value.facts)
+    && same(value.facts, finalisationPr380FactsFromObservation(value))
+    && isDigest(value.facts_digest)
+    && value.facts_digest === digestValue(value.facts)
+    && isProviderRevision(value.revision)
     && value.accepted_evidence_ref === FINAL_G4_EVIDENCE_REF
     && value.complete === true;
 }
@@ -2425,12 +2669,12 @@ function finalisationCollectorValid(value) {
     && value.authenticated === true
     && value.provider_client_used === false;
 }
-function finalisationProviderFacts(value, pr379, pr380, canonicalMain) {
+function finalisationProviderFacts(sourceBinding) {
   return {
     inventory: 'EXACT_BOUNDED',
     provider_client_used: false,
     provider_cas_claim: false,
-    facts_digest: digestValue({ pr_379: pr379, pr_380: pr380, canonical_main: canonicalMain }),
+    facts_digest: sourceBinding.snapshot_digest,
     complete: true,
   };
 }
@@ -2441,7 +2685,7 @@ function finalisationProviderFactsValid(value, evidence) {
     && value.provider_client_used === false
     && value.provider_cas_claim === false
     && value.complete === true
-    && value.facts_digest === digestValue({ pr_379: evidence.pr_379, pr_380: evidence.pr_380, canonical_main: evidence.canonical_main });
+    && value.facts_digest === evidence.source_binding.snapshot_digest;
 }
 function finalisationPaginationInventory(id, evidence) {
   switch (id) {
@@ -2508,7 +2752,7 @@ function finalisationBodyEvidenceValid(value, kind) {
     || !isDigest(value.body_digest)
     || sha256Text(value.raw_body) !== value.body_digest
     || !isDigest(value.canonical_digest)
-    || !isSafeRevision(value.revision)
+    || !isProviderRevision(value.revision)
     || !isDigest(value.prefix_digest)
     || !isDigest(value.suffix_digest)
     || value.complete !== true
@@ -2595,17 +2839,78 @@ function finalisationTransactionSpec(baseCheckpoint) {
 }
 function finalisationAcknowledgementSpec(checkpoint) {
   const table = {
-    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_A_OBSERVED', order: 1, completed: [1], previous: 'BEFORE_STAGE_A' },
-    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 2, completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
-    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 3, completed: [1, 2], previous: 'PARENT_STAGE_A_OBSERVED' },
-    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_B_OBSERVED', order: 4, completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
-    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'FINAL_TARGET_OBSERVED', order: 5, completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
+    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_A_OBSERVED', pre: 'BEFORE_STAGE_A', order: 1, resource: 'child', completed: [1], previous: 'BEFORE_STAGE_A' },
+    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', pre: 'CHILD_STAGE_A_OBSERVED', order: 2, resource: 'parent', completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
+    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: { base: 'PR379_CLOSED_STAGE_A', pre: 'PARENT_STAGE_A_OBSERVED', order: 3, resource: 'pr_379', completed: [1, 2], previous: 'PARENT_STAGE_A_OBSERVED' },
+    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_B_OBSERVED', pre: 'PR379_CLOSED_STAGE_A', order: 4, resource: 'child', completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
+    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'FINAL_TARGET_OBSERVED', pre: 'CHILD_STAGE_B_OBSERVED', order: 5, resource: 'parent', completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
   };
   return table[checkpoint] || null;
 }
-function finalisationTransactionValid(value, observed, decisionValid) {
+const FINALISATION_OPERATION_RESOURCE = Object.freeze({
+  1: 'child',
+  2: 'parent',
+  3: 'pr_379',
+  4: 'child',
+  5: 'parent',
+});
+function finalisationBindingCheckpoint(binding, stages, decision) {
+  if (!finalisationSourceBindingValid(binding)) return null;
+  const sourceDigest = stages.source ? digestValue(stages.source) : decision.source_state.canonical_digest;
+  const stageADigest = stages.stageA ? digestValue(stages.stageA) : null;
+  const stageBDigest = stages.stageB ? digestValue(stages.stageB) : null;
+  const parentDigest = binding.parent.canonical_digest;
+  const childDigest = binding.child.canonical_digest;
+  const providerState = binding.pr_379.facts.github_state;
+  if (sourceDigest && parentDigest === sourceDigest && childDigest === sourceDigest && providerState === 'OPEN') return 'BEFORE_STAGE_A';
+  if (sourceDigest && parentDigest === sourceDigest && childDigest === stageADigest && providerState === 'OPEN') return 'CHILD_STAGE_A_OBSERVED';
+  if (stageADigest && parentDigest === stageADigest && childDigest === stageADigest && providerState === 'OPEN') return 'PARENT_STAGE_A_OBSERVED';
+  if (stageADigest && parentDigest === stageADigest && childDigest === stageADigest && providerState === 'CLOSED') return 'PR379_CLOSED_STAGE_A';
+  if (stageADigest && stageBDigest && parentDigest === stageADigest && childDigest === stageBDigest && providerState === 'CLOSED') return 'CHILD_STAGE_B_OBSERVED';
+  if (stageBDigest && parentDigest === stageBDigest && childDigest === stageBDigest && providerState === 'CLOSED') return 'FINAL_TARGET_OBSERVED';
+  return null;
+}
+function finalisationBindingChangedResources(current, previous) {
+  return ['parent', 'child', 'pr_379', 'pr_380'].filter((key) => !same(current[key], previous[key]));
+}
+function finalisationRebindValid(current, decision, observed, transaction) {
+  const currentCheckpoint = finalisationBindingCheckpoint(current, observed.stages, decision);
+  if (!currentCheckpoint) return failure('FINALISATION_SOURCE_BINDING_CHECKPOINT_INVALID');
+  const acknowledgement = finalisationAcknowledgementSpec(transaction.checkpoint);
+  const normal = finalisationTransactionSpec(transaction.checkpoint);
+  if (!acknowledgement && (!normal || currentCheckpoint !== transaction.checkpoint)) {
+    return failure('FINALISATION_SOURCE_BINDING_CHECKPOINT_INVALID');
+  }
+  if (!acknowledgement && transaction.checkpoint === 'BEFORE_STAGE_A') {
+    if (transaction.previous_source_binding !== null || !same(current, decision.source_binding)) return failure('FINALISATION_SOURCE_BINDING_INVALID');
+    return success('FINALISATION_SOURCE_BINDING_VALID', { changed_resources: [] });
+  }
+  if (!isRecord(transaction.previous_source_binding)
+    || !finalisationSourceBindingValid(transaction.previous_source_binding)) return failure('FINALISATION_PREVIOUS_SOURCE_BINDING_INVALID');
+  const previousCheckpoint = finalisationBindingCheckpoint(transaction.previous_source_binding, observed.stages, decision);
+  const expectedPrevious = acknowledgement ? acknowledgement.pre : normal.previous;
+  if (previousCheckpoint !== expectedPrevious) return failure('FINALISATION_PREVIOUS_SOURCE_BINDING_CHECKPOINT_INVALID');
+  const changedResources = finalisationBindingChangedResources(current, transaction.previous_source_binding);
+  if (acknowledgement) {
+    if (![acknowledgement.pre, acknowledgement.base].includes(currentCheckpoint)
+      || !changedResources.every((resource) => resource === acknowledgement.resource)
+      || changedResources.length > 1) return failure('FINALISATION_ACKNOWLEDGEMENT_REBIND_INVALID');
+    if (changedResources.length === 1
+      && current[acknowledgement.resource].revision === transaction.previous_source_binding[acknowledgement.resource].revision) {
+      return failure('FINALISATION_ACKNOWLEDGEMENT_REVISION_INVALID');
+    }
+    return success('FINALISATION_SOURCE_BINDING_VALID', { changed_resources: changedResources });
+  }
+  const resource = FINALISATION_OPERATION_RESOURCE[normal.completed.length];
+  if (changedResources.length !== 1 || changedResources[0] !== resource
+    || current[resource].revision === transaction.previous_source_binding[resource].revision) {
+    return failure('FINALISATION_REBIND_MOVEMENT_INVALID');
+  }
+  return success('FINALISATION_SOURCE_BINDING_VALID', { changed_resources: changedResources });
+}
+function finalisationTransactionValid(value, observed, decisionValid, currentBinding) {
   if (!isRecord(value)
-    || !exactKeys(value, ['acknowledgement', 'acknowledgement_loss_operation_order', 'complete', 'completed_operation_orders', 'continuation', 'duplicate_event_count', 'readback', 'checkpoint'])
+    || !exactKeys(value, ['acknowledgement', 'acknowledgement_loss_operation_order', 'complete', 'completed_operation_orders', 'continuation', 'duplicate_event_count', 'previous_source_binding', 'readback', 'checkpoint'])
     || !FINALISATION_CHECKPOINTS.includes(value.checkpoint)
     || value.complete !== true
     || value.duplicate_event_count !== 1
@@ -2618,7 +2923,9 @@ function finalisationTransactionValid(value, observed, decisionValid) {
   if (!ack && (!normal || value.checkpoint !== observed.base_checkpoint)) return failure('FINALISATION_UNKNOWN_PARTIAL_CHECKPOINT');
   const expected = ack || { base: observed.base_checkpoint, order: null, completed: normal.completed, previous: normal.previous };
   if (ack) {
-    if (observed.base_checkpoint !== ack.base || value.acknowledgement !== 'LOST' || value.acknowledgement_loss_operation_order !== ack.order) return failure('FINALISATION_ACKNOWLEDGEMENT_CHECKPOINT_INVALID');
+    if (![ack.pre, ack.base].includes(observed.base_checkpoint)
+      || value.acknowledgement !== 'LOST'
+      || value.acknowledgement_loss_operation_order !== ack.order) return failure('FINALISATION_ACKNOWLEDGEMENT_CHECKPOINT_INVALID');
   } else if (value.acknowledgement !== 'CONFIRMED' || value.acknowledgement_loss_operation_order !== null) return failure('FINALISATION_ACKNOWLEDGEMENT_INVALID');
   if (!same(value.completed_operation_orders, expected.completed)) return failure('FINALISATION_TRANSACTION_ORDER_INVALID');
   if (expected.previous === null) {
@@ -2634,6 +2941,8 @@ function finalisationTransactionValid(value, observed, decisionValid) {
       || continuation.exact_readback !== true
       || continuation.complete !== true) return failure('FINALISATION_CONTINUATION_INVALID');
   }
+  const rebind = finalisationRebindValid(currentBinding, decisionValid.decision, observed, value);
+  if (!rebind.ok) return rebind;
   return success('FINALISATION_TRANSACTION_VALID', { acknowledgement_loss: Boolean(ack), base_checkpoint: expected.base, completed_operation_orders: expected.completed });
 }
 function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
@@ -2647,6 +2956,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
     || value.repository !== REPOSITORY
     || value.parent_issue !== PARENT_ISSUE
     || value.child_issue !== CHILD_ISSUE
+    || !finalisationSourceBindingValid(value.source_binding)
     || !finalisationAuthorityValid(decisionValid.decision.write_authority)
     || !finalisationWriteAuthorityEvidenceValid(value.write_authority, decisionValid.decision)
     || !finalisationAcceptedEvidenceValid(value.accepted_evidence, decisionValid.decision)
@@ -2659,7 +2969,8 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
     || !finalisationProviderFactsValid(value.provider_facts, value)
     || !finalisationBodyEvidenceValid(value.parent, 'parent')
     || !finalisationBodyEvidenceValid(value.child, 'child')
-    || !validateFinalisationSourceRevisions(value.source_revisions, value)) return failure('FINALISATION_EVIDENCE_INVALID');
+    || !validateFinalisationSourceRevisions(value.source_revisions, value, decisionValid.decision)) return failure('FINALISATION_EVIDENCE_INVALID');
+  if (!same(value.source_binding, finalisationSourceBindingFromEvidence(value))) return failure('FINALISATION_SOURCE_BINDING_INVALID');
   const parentParsed = parseParentV5Body(value.parent.raw_body, { repository: REPOSITORY, parent_issue: PARENT_ISSUE });
   if (!parentParsed.ok
     || parentParsed.body_digest !== value.parent.body_digest
@@ -2678,6 +2989,9 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
   if (!parentStateValid.ok) return failure('FINALISATION_PARENT_STATE_INVALID');
   const observed = finalisationObservedCheckpoint(value.parent.state, value.child.canonical_digest, value.pr_379.github_state);
   if (!observed) return failure('FINALISATION_UNKNOWN_PARTIAL_CHECKPOINT');
+  if (finalisationBindingCheckpoint(value.source_binding, observed.stages, decisionValid.decision) !== observed.base_checkpoint) {
+    return failure('FINALISATION_SOURCE_BINDING_CHECKPOINT_INVALID');
+  }
   const recognisedProjectionDivergence = ['CHILD_STAGE_A_OBSERVED', 'CHILD_STAGE_B_OBSERVED'].includes(observed.base_checkpoint);
   if (value.child.canonical_digest !== value.parent.canonical_digest
     && value.parent.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST
@@ -2688,7 +3002,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput) {
       ? observed.stages.stageA
       : observed.stages.stageB;
   if (!observedChildState || !validateSnapshotState(value.child.state, expectedChildSnapshotState(observedChildState))) return failure('FINALISATION_CHILD_STATE_DIVERGENCE');
-  const transactionValid = finalisationTransactionValid(value.transaction, observed, decisionValid);
+  const transactionValid = finalisationTransactionValid(value.transaction, observed, decisionValid, value.source_binding);
   if (!transactionValid.ok) return transactionValid;
   if (!finalisationPaginationValid(value.pagination, value)) return failure('FINALISATION_PAGINATION_INCOMPLETE');
   if (value.evidence_digest !== digestValue(without(value, 'evidence_digest'))) return failure('FINALISATION_EVIDENCE_DIGEST_INVALID');
@@ -2787,6 +3101,7 @@ function buildFinalisationOperationDescriptor(input = {}) {
     || descriptor.target_body_digest !== null
     || descriptor.target_projection_digest !== null
     || descriptor.target_revision !== null
+    || ['OPEN', 'CLOSED'].includes(descriptor.source_revision)
     || descriptor.expected_provider_state !== 'OPEN'
     || descriptor.target_provider_state !== 'CLOSED'
     || !isDigest(descriptor.expected_provider_digest)
@@ -2803,7 +3118,6 @@ function previewPostMergeEpochFinalisation(input = {}) {
   if (!evidenceValid.ok) return evidenceValid;
   const decisionValid = validateFinalisationDecision(input.decision);
   const parsed = evidenceValid.parsed;
-  const normal = finalisationTransactionSpec(parsed.base_checkpoint);
   const completed = parsed.completed_operation_orders;
   const targetStates = { stage_a: parsed.stage_a_state, stage_b: parsed.stage_b_state };
   const operations = [];
@@ -2838,8 +3152,8 @@ function previewPostMergeEpochFinalisation(input = {}) {
         order: spec.order,
         decision_digest: decisionValid.decision_digest,
         authority_body_digest: decisionValid.decision.write_authority.body_digest,
-        source_revision: input.evidence.pr_379.github_state,
-        source_body_digest: digestValue(input.evidence.pr_379),
+        source_revision: input.evidence.pr_379.revision,
+        source_body_digest: input.evidence.pr_379.body_digest,
         target_canonical_digest: digestValue(targetStates.stage_a),
         expected_provider_state: 'OPEN',
         target_provider_state: 'CLOSED',
@@ -3028,6 +3342,8 @@ const postMergeEpochFinalisation = Object.freeze({
   evidenceSchema: FINALISATION_EVIDENCE_SCHEMA,
   operationSchema: FINALISATION_OPERATION_SCHEMA,
   createDecision: createPostMergeEpochFinalisationDecision,
+  buildSourceBinding: buildPostMergeEpochFinalisationSourceBinding,
+  bindSourceSnapshot: buildPostMergeEpochFinalisationSourceBinding,
   validateDecision: validateFinalisationDecision,
   validateEvidence: validatePostMergeEpochFinalisationEvidence,
   preview: previewPostMergeEpochFinalisation,
@@ -3085,8 +3401,6 @@ module.exports = Object.freeze({
   FINALISATION_EVIDENCE_SCHEMA,
   FINALISATION_OPERATION_SCHEMA,
   FINALISATION_SOURCE_CANONICAL_DIGEST,
-  FINALISATION_SOURCE_PARENT_REVISION,
-  FINALISATION_SOURCE_CHILD_REVISION,
   PR380_HEAD,
   PR380_TREE,
   PR380_BRANCH,
@@ -3127,6 +3441,7 @@ module.exports = Object.freeze({
   buildPostMergeEpochFinalisationStageATargetState,
   buildPostMergeEpochFinalisationStageBTargetState,
   createPostMergeEpochFinalisationDecision,
+  buildPostMergeEpochFinalisationSourceBinding,
   validateFinalisationDecision,
   validatePostMergeEpochFinalisationEvidence,
   previewPostMergeEpochFinalisation,
