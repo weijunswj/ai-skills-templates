@@ -42,6 +42,50 @@ const PR366_TREE = '2c88782fa274e502fb6c8c5126d55470112f38e9';
 const PR366_BASE_SHA = 'e86a2d74fd771f6500aa02fe0892940933bf7647';
 const PR366_VERSION = '2.12.0';
 const TARGET_CANONICAL_DIGEST = '1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa';
+const FINALISATION_ROOT = 'E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002';
+const FINALISATION_LOCK = 'DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002';
+const FINALISATION_SCOPE = 'POST_MERGE_FINALISATION_SOURCE_ANCHORED_TARGETS';
+const FINALISATION_WRITE_SAFETY_MODE = 'WEB_EXCLUSIVE_POST_MERGE_FINALISATION';
+const FINALISATION_DECISION_SCHEMA = 'toolkit.github-program.post-merge-finalisation-decision.v1';
+const FINALISATION_EVIDENCE_SCHEMA = 'toolkit.github-program.post-merge-finalisation-evidence.v1';
+const FINALISATION_OPERATION_SCHEMA = 'toolkit.github-program.post-merge-finalisation-operation.v1';
+const FINALISATION_SOURCE_CANONICAL_DIGEST = '1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa';
+const FINALISATION_STAGE_A_CANONICAL_DIGEST = 'c1a84af3e7ea7baf3129cd64ce12ba038e3c71fe8d1610eb516d4955d488eb65';
+const FINALISATION_STAGE_B_CANONICAL_DIGEST = '4122eead6382d95be5e0593d2e2f35b54a6c07bf8592cf4c5a5d9a67ee8b95c2';
+const PR380_HEAD = 'f8afc5df62b9e86a478ce24745b6aa481cbc7a1a';
+const PR380_TREE = 'd9e78e1a09fc53f88d077f3f4216027102534ce3';
+const PR380_BRANCH = 'codex/e3-v5-projection-bootstrap-recovery-001';
+const PR380_BASE_SHA = MAIN_SHA;
+const PR380_VERSION = '2.10.8';
+const PR380_MERGE_COMMIT = '4381386c5fdfa45b8848af9b30b9082df06d99a0';
+const FINAL_G4_EVIDENCE_REF = 'post-merge-g4-web-acceptance-5143994659';
+const FINAL_G4_EVIDENCE_REFERENCE = 'github:pull-request-review:380:5143994659';
+const POST_MERGE_TECHNICAL_EVIDENCE_REF = 'post-merge-technical-finality-5144137683';
+const POST_MERGE_TECHNICAL_EVIDENCE_REFERENCE = 'github:pull-request-review:380:5144137683';
+const PR379_NON_CONVERGENCE_EVIDENCE_REF = 'pr379-non-convergence-5579738186';
+const PR379_NON_CONVERGENCE_EVIDENCE_REFERENCE = 'github:issue-comment:379:5579738186';
+const FINALISATION_TRANSITION_ID = 'e3-post-merge-finalisation-source-anchored';
+const FINALISATION_PR379_SOURCE_REVISION = '2026-09-08T07:22:12Z';
+const FINALISATION_AUTHORITY = Object.freeze([
+  Object.freeze({ issue: 381, comment_id: 5596298954 }),
+  Object.freeze({ issue: 359, comment_id: 5596300487 }),
+  Object.freeze({ issue: 240, comment_id: 5596302075 }),
+]);
+const FINALISATION_CHECKPOINTS = Object.freeze([
+  'BEFORE_STAGE_A',
+  'CHILD_STAGE_A_OBSERVED',
+  'PARENT_STAGE_A_OBSERVED',
+  'PR379_CLOSED_STAGE_A',
+  'CHILD_STAGE_B_OBSERVED',
+  'FINAL_TARGET_OBSERVED',
+]);
+const FINALISATION_OPERATION_ORDER = Object.freeze([
+  Object.freeze({ order: 1, operation_id: 'CHILD_STAGE_A', issue: CHILD_ISSUE, target_kind: 'ISSUE_BODY', target_stage: 'STAGE_A', operation_kind: 'IDEMPOTENT_SET' }),
+  Object.freeze({ order: 2, operation_id: 'PARENT_STAGE_A', issue: PARENT_ISSUE, target_kind: 'ISSUE_BODY', target_stage: 'STAGE_A', operation_kind: 'IDEMPOTENT_SET' }),
+  Object.freeze({ order: 3, operation_id: 'PR379_CLOSE', issue: 379, target_kind: 'PULL_REQUEST_STATE', target_stage: null, operation_kind: 'IDEMPOTENT_CLOSE' }),
+  Object.freeze({ order: 4, operation_id: 'CHILD_STAGE_B', issue: CHILD_ISSUE, target_kind: 'ISSUE_BODY', target_stage: 'STAGE_B', operation_kind: 'IDEMPOTENT_SET' }),
+  Object.freeze({ order: 5, operation_id: 'PARENT_STAGE_B', issue: PARENT_ISSUE, target_kind: 'ISSUE_BODY', target_stage: 'STAGE_B', operation_kind: 'IDEMPOTENT_SET' }),
+]);
 
 const AUTHORITY_CONTROLLING = Object.freeze([
   Object.freeze({ issue: CHILD_ISSUE, comment_id: 5580972753, body_digest: 'e9054376b3c26a640034496f1cfb5c2605c04ed9083dc04000b6832dd3aa6e5e' }),
@@ -83,6 +127,680 @@ function success(code, extra = {}) { return { ok: true, code, ...extra }; }
 function failure(code, extra = {}) { return { ok: false, code, ...extra }; }
 function isRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+const FINALISATION_SOURCE_STATE = deepFreeze(
+{
+  "active_lanes": [],
+  "children": [
+    {
+      "boundaries": [
+        "Keep completed and merged S1 scope closed.",
+        "S2 through S6 remain outside S1."
+      ],
+      "deliverables": [
+        "Canonical Toolkit topology collapse.",
+        "Permanent retirement of obsolete topology and external executor-evaluation Ledger coupling."
+      ],
+      "dependencies": [],
+      "done_when": [
+        "Canonical surfaces are retained, obsolete topology and Ledger coupling are permanently retired, and completed scope remains closed."
+      ],
+      "eli5": "The old layout was cleaned up and this finished step stays closed.",
+      "epochs": [
+        {
+          "evidence_ref": "s1-accepted",
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "S1",
+          "lock": "DL-S1-CANONICAL-TOPOLOGY-COLLAPSE-001-G2",
+          "name": "S1 - Canonical topology collapse",
+          "purpose": "Canonical topology collapse",
+          "terminal_disposition": "ACCEPTED"
+        }
+      ],
+      "finality": {
+        "authority_ref": "s1-accepted",
+        "state": "MERGED"
+      },
+      "holds": [],
+      "issue": 358,
+      "lifecycle": "COMPLETED",
+      "objective": "Collapse Toolkit to canonical surfaces and permanently retire obsolete topology residue.",
+      "order": 1,
+      "out_of_scope": [
+        "Reopening completed or merged S1 scope.",
+        "S2 through S6 work."
+      ],
+      "pr_registry": [],
+      "scope": [
+        "Completed S1 topology collapse and permanent obsolete/Ledger coupling retirement."
+      ],
+      "summary": "Collapse Toolkit to canonical surfaces and permanently retire obsolete topology residue.",
+      "title": "S1 — Canonical topology collapse + permanent Ledger retirement"
+    },
+    {
+      "boundaries": [
+        "Web owns E3 acceptance, Ready, merge and finality.",
+        "The recovery hold is Web-exclusive and has no provider CAS claim.",
+        "E4 and S3 through S6 remain pending or blocked/queued."
+      ],
+      "deliverables": [
+        "Retained-skill productisation.",
+        "GitHub programme reconciler v5.",
+        "Future E4 truthful native adapters."
+      ],
+      "dependencies": [],
+      "done_when": [
+        "E1 and E2 remain accepted with retained evidence.",
+        "The v5 projection recovery is read back exactly and separate Web authority records E3 acceptance.",
+        "E4 truthful native adapters are complete and Web records S2 finality."
+      ],
+      "eli5": "The programme is paused safely while the two managed views are repaired from trusted Web evidence; no normal work lane is running.",
+      "epochs": [
+        {
+          "evidence_ref": "e1-accepted",
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "E1",
+          "lock": "DL-S2-CREATION-GATE-003",
+          "name": "E1 - Creation Gate",
+          "purpose": "Creation and admission gate",
+          "terminal_disposition": "ACCEPTED"
+        },
+        {
+          "evidence_ref": "e2-accepted",
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "E2",
+          "lock": "DL-S2-PRODUCT-PORTFOLIO-015",
+          "name": "E2 - Product Portfolio",
+          "purpose": "Retained product portfolio",
+          "terminal_disposition": "ACCEPTED"
+        },
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "E3",
+          "lock": "DL-S2-GITHUB-PROGRAM-CONVERGENCE-002",
+          "name": "E3 - GitHub Programme Product",
+          "purpose": "Managed GitHub programme reconciliation",
+          "terminal_disposition": null
+        },
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "E4",
+          "lock": "DL-S2-NATIVE-ADAPTERS-002",
+          "name": "E4 - Native Adapters",
+          "purpose": "Truthful native host adapters",
+          "terminal_disposition": null
+        }
+      ],
+      "finality": {
+        "authority_ref": null,
+        "state": "HELD"
+      },
+      "holds": [
+        {
+          "id": "E3-V5-PROGRAMME-PROJECTION-BOOTSTRAP-RECOVERY-001",
+          "root": "E3-V5-PROGRAMME-PROJECTION-BOOTSTRAP-RECOVERY-001",
+          "lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+          "kind": "BLOCKING",
+          "scope": "PROGRAMME_PROJECTION_RECOVERY",
+          "active": true,
+          "blocks_normal_lanes": true,
+          "evidence_ref": "web-recovery-g1-accepted-5580530088",
+          "summary": "Managed v5 parent and child projections are stale and remain held pending separately authorised recovery."
+        }
+      ],
+      "issue": 359,
+      "lifecycle": "CURRENT",
+      "objective": "Productise retained skills, complete the GitHub programme reconciler, then finish truthful native host adapters.",
+      "order": 2,
+      "out_of_scope": [
+        "G4 result or E3 acceptance before separate Web authority.",
+        "Ready, merge, finality, E4 execution and S3 through S6 progression.",
+        "Programme Apply or any provider operation in this recovery window."
+      ],
+      "pr_registry": [
+        {
+          "accepted_evidence_ref": null,
+          "candidate": null,
+          "completes_child": false,
+          "draft": true,
+          "epoch_id": "E3",
+          "github_state": "CLOSED",
+          "merged": false,
+          "pr": 366,
+          "retention_evidence_ref": null,
+          "retirement_evidence_ref": "recovery-g2-web-authority",
+          "role": "INTERMEDIATE",
+          "status": "RETIRED"
+        },
+        {
+          "accepted_evidence_ref": null,
+          "candidate": {
+            "repository": "weijunswj/ai-agent-toolkit",
+            "branch": "codex/e3-canonical-historical-receipt-resolution-003",
+            "base_ref": "main",
+            "base_sha": "c72028c63cc09dd07d3e522692065448b6b7dbb6",
+            "head": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1",
+            "tree": "2c712aa9c7c6e66a89bdd9d033acece5415fd575",
+            "version": "2.11.0"
+          },
+          "completes_child": false,
+          "draft": true,
+          "epoch_id": "E3",
+          "github_state": "OPEN",
+          "merged": false,
+          "pr": 379,
+          "retention_evidence_ref": "web-pr379-retained-5580538176",
+          "retirement_evidence_ref": null,
+          "role": "INTERMEDIATE",
+          "status": "RETAINED"
+        }
+      ],
+      "scope": [
+        "Read-only v5 programme projection bootstrap recovery for the canonical parent and current child.",
+        "Preservation of retained and historical PR chronology without launching a normal gate."
+      ],
+      "summary": "E1 and E2 remain accepted; E3 is held in a zero-lane recovery window pending separate Web acceptance.",
+      "title": "S2 — Productize retained skills + native host adapters"
+    },
+    {
+      "boundaries": [
+        "Consequential live or repository-protection mutation requires explicit authority.",
+        "This queued child does not start until its dependencies are complete or retired."
+      ],
+      "deliverables": [
+        "Repository Loop Manager and work graph.",
+        "Leases, fences, durable recovery and idempotency.",
+        "Bounded convergence with a two-repair stop.",
+        "Trusted CI and permanent host-backed orchestration."
+      ],
+      "dependencies": [
+        358
+      ],
+      "done_when": [
+        "The Loop Manager, work graph, leases/fences, durable recovery, idempotency and bounded convergence are proven.",
+        "Trusted CI and permanent host-backed orchestration are operational under accepted authority boundaries."
+      ],
+      "eli5": "This later step will automate the loop around the programme tool.",
+      "epochs": [
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "S3",
+          "lock": "S3-DESIGN-LOCK-PENDING",
+          "name": "S3 - Repository Loop Manager",
+          "purpose": "Repository loop and trusted CI automation",
+          "terminal_disposition": null
+        }
+      ],
+      "finality": {
+        "authority_ref": null,
+        "state": "HELD"
+      },
+      "holds": [],
+      "issue": 360,
+      "lifecycle": "QUEUED",
+      "objective": "Build the Repository Loop Manager and trusted-CI automation around the E3 primitive.",
+      "order": 3,
+      "out_of_scope": [
+        "S4 through S6 execution.",
+        "Unapproved consequential live or repository-protection mutation."
+      ],
+      "pr_registry": [],
+      "scope": [
+        "Repository Loop Manager, work graph, leases/fences, durable recovery, idempotency, bounded convergence/two-repair stop, trusted CI and permanent host-backed orchestration."
+      ],
+      "summary": "Build the Repository Loop Manager and trusted-CI automation around the E3 primitive.",
+      "title": "S3 — Repository Loop Manager + trusted CI live integration"
+    },
+    {
+      "boundaries": [
+        "Live n8n operations require explicit authority.",
+        "This queued child does not start until its dependencies are complete or retired."
+      ],
+      "deliverables": [
+        "Exact-pinned official n8n Skills.",
+        "API-first workflow transport.",
+        "Credential- and identity-safe boundaries.",
+        "Pause-before-exit and JSON primitive import regressions fixed and covered."
+      ],
+      "dependencies": [
+        358,
+        359,
+        360
+      ],
+      "done_when": [
+        "Official n8n Skills are exact-pinned and API-first transport is proven.",
+        "Credential/identity safety, pause-before-exit and JSON primitive import regressions pass their required evidence."
+      ],
+      "eli5": "This later step will make n8n support official and safely transport workflows.",
+      "epochs": [
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "S4",
+          "lock": "S4-DESIGN-LOCK-PENDING",
+          "name": "S4 - n8n skills and transport",
+          "purpose": "Official n8n skills and API-first transport",
+          "terminal_disposition": null
+        }
+      ],
+      "finality": {
+        "authority_ref": null,
+        "state": "HELD"
+      },
+      "holds": [],
+      "issue": 361,
+      "lifecycle": "QUEUED",
+      "objective": "Move n8n support to official n8n Skills and safe API-first workflow transport.",
+      "order": 4,
+      "out_of_scope": [
+        "Custom n8n MCP revival.",
+        "Live n8n operations without explicit authority.",
+        "S5 and S6 execution."
+      ],
+      "pr_registry": [],
+      "scope": [
+        "Official n8n Skills, API-first transport, credential/identity-safe boundaries and the two reported regressions."
+      ],
+      "summary": "Move n8n support to official n8n Skills and safe API-first workflow transport.",
+      "title": "S4 — Official n8n Skills + API-first workflow transport"
+    },
+    {
+      "boundaries": [
+        "No secret values in repo, prompts, logs or public evidence.",
+        "Consequential provider actions require explicit authority.",
+        "This queued child does not start until its dependencies are complete or retired."
+      ],
+      "deliverables": [
+        "External authority and secret-reference boundaries.",
+        "Sensitive-file boundaries.",
+        "Hosted operations, backup, rollback and health.",
+        "Privacy-safe telemetry."
+      ],
+      "dependencies": [
+        358,
+        359,
+        360
+      ],
+      "done_when": [
+        "External authority, secret-reference and sensitive-file boundaries are proven.",
+        "Hosted operations, backup/rollback/health and privacy-safe telemetry meet accepted evidence requirements."
+      ],
+      "eli5": "This later step will define who may touch providers, secrets and hosted systems.",
+      "epochs": [
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "S5",
+          "lock": "S5-DESIGN-LOCK-PENDING",
+          "name": "S5 - External authority boundaries",
+          "purpose": "External authority and hosted-operation boundaries",
+          "terminal_disposition": null
+        }
+      ],
+      "finality": {
+        "authority_ref": null,
+        "state": "HELD"
+      },
+      "holds": [],
+      "issue": 362,
+      "lifecycle": "QUEUED",
+      "objective": "Establish external authority, secrets, provider/deployment and hosted-operation boundaries.",
+      "order": 5,
+      "out_of_scope": [
+        "Secret values in repository files, prompts, logs or public evidence.",
+        "Consequential provider actions without explicit authority.",
+        "S6 execution."
+      ],
+      "pr_registry": [],
+      "scope": [
+        "External authority, secret references, sensitive files, hosted operations, backup/rollback/health and privacy-safe telemetry."
+      ],
+      "summary": "Establish external authority, secrets, provider/deployment and hosted-operation boundaries.",
+      "title": "S5 — External authority, secrets + hosted operations"
+    },
+    {
+      "boundaries": [
+        "S6 remains last.",
+        "Consequential live actions require separate authority."
+      ],
+      "deliverables": [
+        "Final native/live UAT.",
+        "Loop Manager, trusted-CI and n8n UAT.",
+        "Residue verification.",
+        "Final whole-Toolkit assurance."
+      ],
+      "dependencies": [
+        358,
+        359,
+        360,
+        361,
+        362
+      ],
+      "done_when": [
+        "Native/live, Loop Manager, trusted-CI and n8n UAT are complete under their authorities.",
+        "Residue verification and final whole-Toolkit assurance are accepted by Web."
+      ],
+      "eli5": "This final step will test the whole Toolkit after every earlier step is done.",
+      "epochs": [
+        {
+          "evidence_ref": null,
+          "gates": [
+            "G1",
+            "G2",
+            "G3",
+            "G4"
+          ],
+          "id": "S6",
+          "lock": "S6-DESIGN-LOCK-PENDING",
+          "name": "S6 - Native UAT and assurance",
+          "purpose": "Native UAT, cleanup and final assurance",
+          "terminal_disposition": null
+        }
+      ],
+      "finality": {
+        "authority_ref": null,
+        "state": "HELD"
+      },
+      "holds": [],
+      "issue": 363,
+      "lifecycle": "QUEUED",
+      "objective": "Perform native/live UAT, residue cleanup and final whole-Toolkit assurance.",
+      "order": 6,
+      "out_of_scope": [
+        "Starting before S1 through S5 obligations are terminal and accepted.",
+        "Consequential live actions without separate authority."
+      ],
+      "pr_registry": [],
+      "scope": [
+        "Final native/live UAT, Loop Manager/trusted-CI/n8n UAT, residue verification and whole-Toolkit assurance."
+      ],
+      "summary": "Perform native/live UAT, residue cleanup and final whole-Toolkit assurance.",
+      "title": "S6 — Native UAT + final whole-Toolkit assurance"
+    }
+  ],
+  "concurrency_authority": {
+    "authority_digest": null,
+    "authority_ref": null,
+    "max_active_lanes": 1,
+    "mode": "SINGLE_DEFAULT",
+    "permitted_child_issues": []
+  },
+  "design_lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+  "evidence_refs": [
+    {
+      "id": "e3-g4-active-transition",
+      "kind": "WEB",
+      "reference": "github:issue-comment:356:5456077647",
+      "summary": "E3 G4 control-plane transition - PREVIEW ONLY."
+    },
+    {
+      "id": "repair1-current",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5452138390",
+      "summary": "E3 G3 convergence Repair 1 is current and awaits Web reconciliation."
+    },
+    {
+      "id": "prior-g4-amend",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5448818142",
+      "summary": "Prior isolated E3 G4 returned AMEND and required convergence G2 re-entry."
+    },
+    {
+      "id": "convergence-g2-accepted",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5449075304",
+      "summary": "E3 convergence G2 design Lock was accepted and G3 authorised."
+    },
+    {
+      "id": "e1-accepted",
+      "kind": "WEB",
+      "reference": "github:issue-comment:366:5428741231",
+      "summary": "S2 E1 Creation Gate was Web accepted."
+    },
+    {
+      "id": "e2-accepted",
+      "kind": "WEB",
+      "reference": "github:issue-comment:366:5437266157",
+      "summary": "S2 E2 Product Portfolio was Web accepted."
+    },
+    {
+      "id": "s1-accepted",
+      "kind": "WEB",
+      "reference": "github:issue-comment:358:5426948394",
+      "summary": "S1 was terminal, canonical, and accepted."
+    },
+    {
+      "id": "predecessor-coverage",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5437827030",
+      "summary": "Predecessor coverage is exactly 45 issues, 84 criteria, and zero unmapped."
+    },
+    {
+      "id": "repair-head",
+      "kind": "COMMIT",
+      "reference": "git:commit:446471e6248bf8bc6540d4a03aa2a0e1ab625f3d",
+      "summary": "Exact Repair 1 candidate commit."
+    },
+    {
+      "id": "repair-checks",
+      "kind": "CHECK",
+      "reference": "github:checks:446471e6248bf8bc6540d4a03aa2a0e1ab625f3d",
+      "summary": "Exact-head validation and CodeQL passed."
+    },
+    {
+      "id": "web_7704ca0d87256b427f63",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5462985071",
+      "summary": "Web-controlled E3 architecture and exact-candidate admission authority."
+    },
+    {
+      "id": "e3-g3-dogfood-accepted",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5466912566",
+      "summary": "Web accepted E3 G3 dogfood and authorised the fresh G4 transition preview."
+    },
+    {
+      "id": "recovery-authority-5580972753",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5580972753",
+      "summary": "Accepted recovery authority body bound by digest."
+    },
+    {
+      "id": "recovery-authority-5580975069",
+      "kind": "WEB",
+      "reference": "github:issue-comment:240:5580975069",
+      "summary": "Accepted recovery authority body bound by digest."
+    },
+    {
+      "id": "recovery-authority-5580978455",
+      "kind": "WEB",
+      "reference": "github:issue-comment:379:5580978455",
+      "summary": "Accepted recovery authority body bound by digest."
+    },
+    {
+      "id": "web-recovery-g1-accepted-5580530088",
+      "kind": "WEB",
+      "reference": "github:issue-comment:359:5580530088",
+      "summary": "Accepted G1 recovery-hold authority body bound by digest."
+    },
+    {
+      "id": "recovery-predecessor-5580534575",
+      "kind": "WEB",
+      "reference": "github:issue-comment:240:5580534575",
+      "summary": "Predecessor non-convergence evidence bound by digest."
+    },
+    {
+      "id": "web-pr379-retained-5580538176",
+      "kind": "WEB",
+      "reference": "github:issue-comment:379:5580538176",
+      "summary": "Accepted retained PR #379 chronology body bound by digest."
+    }
+  ],
+  "extensions": [],
+  "historical_transitions": [
+    {
+      "child_issue": 359,
+      "disposition": "AMEND",
+      "epoch_id": "E3",
+      "evidence_ref": "prior-g4-amend",
+      "gate": "G4",
+      "id": "e3-prior-g4-amend"
+    },
+    {
+      "child_issue": 359,
+      "disposition": "ACCEPTED",
+      "epoch_id": "E3",
+      "evidence_ref": "convergence-g2-accepted",
+      "gate": "G2",
+      "id": "e3-convergence-g2-accepted"
+    },
+    {
+      "child_issue": 359,
+      "disposition": "ACCEPTED",
+      "epoch_id": "E3",
+      "evidence_ref": "e3-g3-dogfood-accepted",
+      "gate": "G3",
+      "id": "e3-g3-dogfood-accepted"
+    }
+  ],
+  "parent": {
+    "goal": "Deliver the six-stage Toolkit programme through truthful, deterministic, source-traceable programme views.",
+    "issue": 240,
+    "title": "[ PARENT THREAD ] AI Agent Toolkit — Rolling Work Queue"
+  },
+  "predecessor_contract_digest": "6ea9a35397376995730c042f7cd915084348c423eae76db058a480ac9c9e2276",
+  "prs": [
+    {
+      "changed_surfaces": [
+        "GitHub programme reconciler runtime and policy.",
+        "Programme surface and predecessor contracts.",
+        "Focused reconciliation and bridge tests.",
+        "Aligned native plugin and bridge version surfaces."
+      ],
+      "child_issue": 359,
+      "design_constraints": [
+        "Role remains INTERMEDIATE and completes_child remains false.",
+        "PR remains draft.",
+        "No finality operation is authorised by this reconciliation."
+      ],
+      "eli5": "The repair and dogfood correction are accepted, and the final independent E3 review gate is active without a result.",
+      "evidence_refs": [],
+      "number": 366,
+      "out_of_scope": [
+        "G4 result or E3 acceptance before separate Web authority.",
+        "Ready, merge, finality, E4 and S3 through S6 execution.",
+        "Provider, deployment, credential and live n8n operations."
+      ],
+      "purpose": "Implement and prove the deterministic GitHub programme reconciler product for S2 E3.",
+      "scope": [
+        "Canonical parent, child and PR views.",
+        "Managed lifecycle labels and typed events.",
+        "Existing-issue sub-issue and blocked-by relationships.",
+        "Preview, explicit apply, readback verification and exact rerun zero delta."
+      ],
+      "summary": "Historical PR #366 is closed and retired; no merged candidate is active.",
+      "validation_requirements": [
+        "Repair-2 focused tests passed 24/24.",
+        "Relevant reconciler suite passed 255/255.",
+        "Toolkit validation and audits passed.",
+        "Exact-head Validate passed.",
+        "Exact-head Validate toolkit passed.",
+        "CodeQL and language analyses passed.",
+        "Dynamic GHAS unsupported-model failure is external/non-candidate evidence.",
+        "Durable original migration preview and receipt were read back.",
+        "Exactly one authorised v5 migration Apply completed.",
+        "Migration event: 87851b36e0f54dd969ac1b85e49e2f159aeefee1497861f20e2fd45b02128e66.",
+        "Immediate migration rerun: PROGRAMME_ZERO_DELTA / mutation_count=0.",
+        "Dogfood UX correction accepted by Web under authority comment 5466912566.",
+        "Fresh G4: ACTIVE / NO RESULT."
+      ]
+    }
+  ],
+  "repository": "weijunswj/ai-agent-toolkit",
+  "schema": "toolkit.github-program.state.v5",
+  "recovery": {
+    "root": "E3-V5-PROGRAMME-PROJECTION-BOOTSTRAP-RECOVERY-001",
+    "lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+    "status": "HELD",
+    "normal_active_lanes": 0,
+    "active_blocking_recovery_hold": true,
+    "e3_status": "UNACCEPTED",
+    "e4_status": "PENDING",
+    "queued_children": [
+      360,
+      361,
+      362,
+      363
+    ],
+    "old_root": {
+      "root": "E3-CANONICAL-HISTORICAL-RECEIPT-RESOLUTION-003",
+      "disposition": "NON_CONVERGENT",
+      "terminal": true,
+      "repair_budget": {
+        "used": 2,
+        "limit": 2,
+        "further_repair_authorised": false
+      }
+    },
+    "parked_root": {
+      "root": "E3-HISTORICAL-RECEIPT-CI-PROOF-BOUNDARY-SIMPLIFICATION-004",
+      "status": "NOT_LAUNCHED"
+    }
+  }
+}
+);
+if (digestValue(FINALISATION_SOURCE_STATE) !== FINALISATION_SOURCE_CANONICAL_DIGEST) {
+  throw new Error('FINALISATION_SOURCE_DIGEST_MISMATCH');
+}
 function same(left, right) { return canonicalSerialize(left) === canonicalSerialize(right); }
 function exactKeys(value, keys) {
   if (!isRecord(value)) return false;
@@ -339,9 +1057,14 @@ function createRecoveryDecision() { return clone(DECISION_TEMPLATE); }
 function validateCandidate(value) {
   if (!isRecord(value) || !exactKeys(value, ['repository', 'branch', 'base_ref', 'base_sha', 'head', 'tree', 'version'])
     || value.repository !== REPOSITORY || !isSafeId(value.branch, 240)
-    || value.base_ref !== FROZEN_BASE_REF || value.base_sha !== MAIN_SHA
-    || !isSha(value.head) || !isSha(value.tree) || value.head !== FROZEN_HEAD
-    || value.tree !== FROZEN_TREE || value.version !== FROZEN_VERSION) return false;
+    || value.base_ref !== FROZEN_BASE_REF || !isSha(value.base_sha)
+    || !isSha(value.head) || !isSha(value.tree)) return false;
+  const retained = value.base_sha === MAIN_SHA
+    && value.head === FROZEN_HEAD && value.tree === FROZEN_TREE && value.version === FROZEN_VERSION;
+  const accepted = value.base_ref === 'main'
+    && value.base_sha === PR380_BASE_SHA && value.head === PR380_HEAD
+    && value.tree === PR380_TREE && value.version === PR380_VERSION;
+  if (!retained && !accepted) return false;
   return true;
 }
 function validateEpoch(value) {
@@ -520,6 +1243,7 @@ function eligibleRecoveryHold(child, state) {
     && hasWebEvidence(state, HOLD_EVIDENCE_REF, HOLD_EVIDENCE_REFERENCE);
 }
 function validateCanonicalStateV5(value) {
+  if (looksLikeInterEpochState(value)) return validateInterEpochStateV5(value);
   const required = ['active_lanes', 'children', 'concurrency_authority', 'design_lock', 'evidence_refs', 'extensions', 'historical_transitions', 'parent', 'predecessor_contract_digest', 'prs', 'repository', 'schema'];
   const optional = ['recovery'];
   if (!hasOnly(value, required, optional)
@@ -702,8 +1426,9 @@ function childSnapshotState(state) {
 }
 function projectionPayload(state, kind) {
   const child = childByIssue(state, CHILD_ISSUE);
+  const interEpoch = looksLikeInterEpochState(state);
   if (kind === 'parent') {
-    return {
+    const payload = {
       schema: PROJECTION_SCHEMA,
       kind: 'parent',
       number: PARENT_ISSUE,
@@ -716,14 +1441,21 @@ function projectionPayload(state, kind) {
       current_child_issues: state.children.filter((item) => item.lifecycle === 'CURRENT').map((item) => item.issue),
       queued_children: state.children.filter((item) => item.lifecycle === 'QUEUED').map((item) => item.issue),
       retained_pr: state.recovery ? 379 : null,
-      retired_pr: state.recovery ? 366 : null,
-      e3_status: state.recovery ? 'UNACCEPTED' : null,
-      e4_status: state.recovery ? 'PENDING' : null,
+      retired_pr: state.recovery ? 366 : interEpoch ? 379 : null,
+      accepted_pr: interEpoch ? 380 : null,
+      pr_379_github_state: interEpoch ? child.pr_registry.find((entry) => entry.pr === 379)?.github_state : null,
+      e3_status: state.recovery ? 'UNACCEPTED' : interEpoch ? 'ACCEPTED' : null,
+      e4_status: state.recovery || interEpoch ? 'PENDING' : null,
       old_root: state.recovery ? OLD_ROOT : null,
       parked_root: state.recovery ? PARKED_ROOT : null,
     };
+    if (state.recovery) {
+      delete payload.accepted_pr;
+      delete payload.pr_379_github_state;
+    }
+    return payload;
   }
-  return {
+  const payload = {
     schema: PROJECTION_SCHEMA,
     kind: 'child',
     number: CHILD_ISSUE,
@@ -732,24 +1464,36 @@ function projectionPayload(state, kind) {
     lifecycle: child.lifecycle,
     finality: child.finality.state,
     epoch: 'E3',
-    gate: state.recovery ? 'NONE' : 'G4',
-    gate_state: state.recovery ? 'HELD' : 'ACTIVE',
+    gate: state.recovery || interEpoch ? 'NONE' : 'G4',
+    gate_state: state.recovery ? 'HELD' : interEpoch ? 'NONE' : 'ACTIVE',
     normal_active_lanes: state.active_lanes.length,
     active_blocking_recovery_hold: Boolean(state.recovery && eligibleRecoveryHold(child, state)),
-    e3_status: state.recovery ? 'UNACCEPTED' : 'ACTIVE',
+    e3_status: state.recovery ? 'UNACCEPTED' : interEpoch ? 'ACCEPTED' : 'ACTIVE',
     e4_status: 'PENDING',
     retained_pr: state.recovery ? 379 : null,
-    retired_pr: state.recovery ? 366 : null,
+    retired_pr: state.recovery ? 366 : interEpoch ? 379 : null,
+    accepted_pr: interEpoch ? 380 : null,
+    pr_379_github_state: interEpoch ? child.pr_registry.find((entry) => entry.pr === 379)?.github_state : null,
     queued_children: [360, 361, 362, 363],
     old_root: state.recovery ? OLD_ROOT : null,
     parked_root: state.recovery ? PARKED_ROOT : null,
   };
+  if (state.recovery) {
+    delete payload.accepted_pr;
+    delete payload.pr_379_github_state;
+  }
+  return payload;
 }
 function projectionEnvelope(state, kind) {
   const payload = projectionPayload(state, kind);
+  const extension = {
+    schema: SURFACE_SCHEMA,
+    recovery: state.recovery || null,
+  };
+  if (looksLikeInterEpochState(state)) extension.finalisation = FINALISATION_ROOT;
   return {
     canonical_digest: digestValue(state),
-    extension_digest: digestValue({ schema: SURFACE_SCHEMA, recovery: state.recovery || null }),
+    extension_digest: digestValue(extension),
     kind,
     number: kind === 'parent' ? PARENT_ISSUE : CHILD_ISSUE,
     parent_issue: PARENT_ISSUE,
@@ -859,6 +1603,13 @@ function parseProgrammeV5Body(body, kind, options = {}) {
 function managedContent(kind, state) {
   const child = childByIssue(state, CHILD_ISSUE);
   const recovery = state.recovery || null;
+  const interEpoch = looksLikeInterEpochState(state);
+  const registry = child.pr_registry;
+  const registryRows = registry.map((entry) => '| #' + String(entry.pr) + ' | ' + entry.status + ' | ' + (entry.github_state || 'UNKNOWN') + ' | ' + String(entry.draft ?? false) + ' | ' + String(entry.merged ?? false) + ' | ' + entry.role + ' | ' + String(entry.completes_child) + ' | ' + entry.epoch_id + ' |');
+  const e3Status = recovery ? 'UNACCEPTED / HELD' : interEpoch ? 'ACCEPTED' : 'ACTIVE';
+  const e3LegacyStatus = recovery ? 'UNACCEPTED' : e3Status;
+  const e4Status = 'PENDING';
+  const gateState = recovery ? 'HELD' : interEpoch ? 'NONE' : 'ACTIVE';
   const lines = [];
   if (kind === 'parent') {
     lines.push(
@@ -891,8 +1642,7 @@ function managedContent(kind, state) {
       '## PR registry',
       '| PR | Status | GitHub state | Draft | Merged | Role | Completes child | Epoch |',
       '| --- | --- | --- | --- | --- | --- | --- | --- |',
-      '| #366 | RETIRED | CLOSED | true | false | INTERMEDIATE | false | E3 |',
-      '| #379 | RETAINED | OPEN | true | false | INTERMEDIATE | false | E3 |',
+      ...registryRows,
       '',
       '## Recovery hold',
       recovery ? '- Active blocking recovery hold: YES' : '- Active blocking recovery hold: NO',
@@ -906,8 +1656,8 @@ function managedContent(kind, state) {
       recovery ? '- Parked root: ' + PARKED_ROOT + ' / NOT_LAUNCHED' : '',
       '',
       '## Epoch and queue status',
-      '- E3: UNACCEPTED',
-      '- E4: PENDING',
+      '- E3: ' + e3LegacyStatus,
+      '- E4: ' + e4Status,
       '- S3-S6: BLOCKED/QUEUED',
       '- G4 active: NO',
       '',
@@ -917,13 +1667,19 @@ function managedContent(kind, state) {
       '- Programme Apply is not authorised.',
       '',
       '## Next action',
-      'Maintain the Web-exclusive recovery hold and wait for fresh prewrite evidence; do not launch G4 or Programme Apply.',
+      recovery
+        ? 'Maintain the Web-exclusive recovery hold and wait for fresh prewrite evidence; do not launch G4 or Programme Apply.'
+        : 'E3 is accepted at a clean inter-epoch boundary; keep E4 pending and do not launch E4 or Programme Apply.',
       '',
       '## ELI5',
-      'The programme is paused safely while its two managed views are rebuilt from trusted Web evidence.',
+      recovery
+        ? 'The programme is paused safely while its two managed views are rebuilt from trusted Web evidence.'
+        : 'E3 is accepted, E4 is still pending, and no normal work lane is running.',
       '',
       '## Additional context',
-      'The retained PR is chronology only; it is not active execution, accepted, Ready, G4, merged or child completion.',
+      interEpoch
+        ? 'PR #380 is the accepted merged intermediate candidate; PR #379 is retired chronology and does not complete the child.'
+        : 'The retained PR is chronology only; it is not active execution, accepted, Ready, G4, merged or child completion.',
       '',
       '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CANONICAL v5 ' + base64url(JSON.stringify({ envelope: projectionEnvelope(state, 'parent'), state })) + ' -->',
       MANAGED_MARKERS.parent.end,
@@ -941,13 +1697,13 @@ function managedContent(kind, state) {
     '| Field | Value |',
     '| --- | --- |',
     '| Parent | #240 |',
-    '| Lane | None |',
+    '| Lane | ' + (state.active_lanes.length === 0 ? 'None' : String(state.active_lanes.length)) + ' |',
     '| Lifecycle | CURRENT |',
     '| Epoch | E3 |',
-    '| Gate | None |',
-    '| Gate state | HELD |',
-    '| Lock | ' + LOCK + ' |',
-    '| Finality | HELD |',
+    '| Gate | ' + (recovery ? 'None' : interEpoch ? 'None' : 'G4') + ' |',
+    '| Gate state | ' + gateState + ' |',
+    '| Lock | ' + state.design_lock + ' |',
+    '| Finality | ' + child.finality.state + ' |',
     '',
     '## Objective',
     child.objective,
@@ -955,39 +1711,40 @@ function managedContent(kind, state) {
     '## Progress',
     '- E1: ACCEPTED',
     '- E2: ACCEPTED',
-    '- E3: UNACCEPTED',
-    '- E4: PENDING',
-    '- Normal active lanes: 0',
-    '- Active blocking recovery hold: YES',
+    '- E3: ' + e3LegacyStatus,
+    '- E4: ' + e4Status,
+    '- Normal active lanes: ' + String(state.active_lanes.length),
+    '- Active blocking recovery hold: ' + (recovery ? 'YES' : 'NO'),
     '',
     '## PR registry',
     '| PR | Status | GitHub state | Draft | Merged | Role | Completes child | Epoch |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',
-    '| #366 | RETIRED | CLOSED | true | false | INTERMEDIATE | false | E3 |',
-    '| #379 | RETAINED | OPEN | true | false | INTERMEDIATE | false | E3 |',
+    ...registryRows,
     '',
     '## Holds',
-    '- Active blocking recovery hold: YES',
-    '- Write safety: ' + WRITE_SAFETY_MODE,
+    '- Active blocking recovery hold: ' + (recovery ? 'YES' : 'NO'),
+    recovery ? '- Write safety: ' + WRITE_SAFETY_MODE : '- Write safety: ' + FINALISATION_WRITE_SAFETY_MODE,
     '- Provider CAS claim: NO',
-    '- Hold evidence: ' + HOLD_EVIDENCE_REF,
+    recovery ? '- Hold evidence: ' + HOLD_EVIDENCE_REF : '- No recovery hold is active.',
     '',
     '## Epochs / Locks',
     '| Epoch | State |',
     '| --- | --- |',
     '| E1 | ACCEPTED |',
     '| E2 | ACCEPTED |',
-    '| E3 | UNACCEPTED / HELD |',
+    '| E3 | ' + e3Status + ' |',
     '| E4 | PENDING |',
     '',
     '## Boundaries',
-    '- G4 active: NO.',
+    '- G4 active: ' + (interEpoch ? 'NO.' : 'NO.'),
     '- E3 acceptance, Ready, merge and finality remain Web-owned.',
     '- S3-S6 remain BLOCKED/QUEUED.',
     '- Programme Apply is not authorised.',
     '',
     '## Next action',
-    'Maintain the blocking recovery hold; collect fresh prewrite evidence and exact readback only under the authorised Web window.',
+    recovery
+      ? 'Maintain the blocking recovery hold; collect fresh prewrite evidence and exact readback only under the authorised Web window.'
+      : 'Keep E4 pending; no E4 activation, Programme Apply, or provider operation is performed by this source-only contract.',
     '',
     '## Root dispositions',
     '- Old root: ' + OLD_ROOT + ' / NON_CONVERGENT / terminal=true / repair budget=2/2 / further repair authorised=false',
@@ -995,10 +1752,14 @@ function managedContent(kind, state) {
     '- #379 retention evidence: ' + RETENTION_EVIDENCE_REF,
     '',
     '## ELI5',
-    'The current child is held safely with no normal work lane while the parent and child views are repaired together.',
+    recovery
+      ? 'The current child is held safely with no normal work lane while the parent and child views are repaired together.'
+      : 'The current child remains unmerged at a clean inter-epoch boundary while E4 waits for separate authority.',
     '',
     '## Additional context',
-    'Retained PR #379 remains frozen chronology. Retired PR #366 is historical only.',
+    interEpoch
+      ? 'PR #380 remains immutable accepted merge evidence. PR #379 transitions from OPEN to CLOSED while its registry status is RETIRED.'
+      : 'Retained PR #379 remains frozen chronology. Retired PR #366 is historical only.',
     '',
     '<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PROJECTION v1 ' + base64url(JSON.stringify(projectionEnvelope(state, 'child'))) + ' -->',
     MANAGED_MARKERS.child.end,
@@ -1744,6 +2505,1059 @@ function previewRecovery(input = {}) {
   return response;
 }
 
+function isProviderRevision(value) {
+  return isSafeRevision(value) && value !== 'OPEN' && value !== 'CLOSED' && value !== 'MERGED';
+}
+function acceptedCandidate380() {
+  return {
+    repository: REPOSITORY,
+    branch: PR380_BRANCH,
+    base_ref: 'main',
+    base_sha: PR380_BASE_SHA,
+    head: PR380_HEAD,
+    tree: PR380_TREE,
+    version: PR380_VERSION,
+  };
+}
+function finalisationEvidenceRefs() {
+  return [
+    {
+      id: FINAL_G4_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: FINAL_G4_EVIDENCE_REFERENCE,
+      summary: 'Accepted final G4 Web review for the merged E3 candidate.',
+    },
+    {
+      id: POST_MERGE_TECHNICAL_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: POST_MERGE_TECHNICAL_EVIDENCE_REFERENCE,
+      summary: 'Accepted post-merge technical E3 finality review.',
+    },
+    {
+      id: PR379_NON_CONVERGENCE_EVIDENCE_REF,
+      kind: 'WEB',
+      reference: PR379_NON_CONVERGENCE_EVIDENCE_REFERENCE,
+      summary: 'Retained #379 non-convergence history evidence.',
+    },
+  ];
+}
+function retired379RegistryEntry(githubState = 'OPEN') {
+  return {
+    accepted_evidence_ref: null,
+    candidate: retainedCandidate(),
+    completes_child: false,
+    draft: true,
+    epoch_id: 'E3',
+    github_state: githubState,
+    merged: false,
+    pr: 379,
+    retention_evidence_ref: RETENTION_EVIDENCE_REF,
+    retirement_evidence_ref: POST_MERGE_TECHNICAL_EVIDENCE_REF,
+    role: 'INTERMEDIATE',
+    status: 'RETIRED',
+  };
+}
+function accepted380RegistryEntry() {
+  return {
+    accepted_evidence_ref: FINAL_G4_EVIDENCE_REF,
+    candidate: acceptedCandidate380(),
+    completes_child: false,
+    draft: false,
+    epoch_id: 'E3',
+    github_state: 'MERGED',
+    merged: true,
+    pr: 380,
+    retention_evidence_ref: null,
+    retirement_evidence_ref: null,
+    role: 'INTERMEDIATE',
+    status: 'ACCEPTED',
+  };
+}
+function finalisationPr380Descriptor() {
+  return {
+    changed_surfaces: [
+      'GitHub programme reconciler runtime and v5 source-anchored finalisation contract.',
+      'Focused source-bound target and provider-observation tests.',
+    ],
+    child_issue: CHILD_ISSUE,
+    design_constraints: [
+      'Role remains INTERMEDIATE and completes_child remains false.',
+      'The merged candidate is immutable throughout post-merge finalisation.',
+      'No E4 activation or Programme Apply is part of this source-only contract.',
+    ],
+    eli5: 'The accepted merge is recorded as E3 history while the child stays unmerged and E4 waits.',
+    evidence_refs: [FINAL_G4_EVIDENCE_REF, POST_MERGE_TECHNICAL_EVIDENCE_REF],
+    number: 380,
+    out_of_scope: [
+      'E4 activation, Ready, merge or finality mutation.',
+      'Programme Apply and provider client or CAS operations.',
+    ],
+    purpose: 'Record the accepted merged E3 candidate without completing the current child.',
+    scope: [
+      'Immutable PR #380 acceptance and merge ancestry.',
+      'Source-anchored Stage A and Stage B managed projections.',
+    ],
+    summary: 'PR #380 is accepted and merged as the intermediate E3 candidate; it does not complete #359.',
+    validation_requirements: [
+      'Exact merge commit and ordered parent ancestry are preserved.',
+      'PR #379 remains chronology only until the separately selected close operation.',
+    ],
+  };
+}
+function finalisationTransitionCount(state) {
+  return state.historical_transitions.filter((item) => item.id === FINALISATION_TRANSITION_ID).length;
+}
+function finalisationEvidenceCount(state, id) {
+  return state.evidence_refs.filter((item) => item.id === id).length;
+}
+function finalisationDiffPaths(left, right, path = '') {
+  if (same(left, right)) return [];
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return [path || '$'];
+    return left.flatMap((item, index) => finalisationDiffPaths(item, right[index], path + '[' + String(index) + ']'));
+  }
+  if (!isRecord(left) || !isRecord(right)) return [path || '$'];
+  const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])].sort();
+  return keys.flatMap((key) => finalisationDiffPaths(left[key], right[key], path ? path + '.' + key : key));
+}
+function validateInterEpochShapeV5(value) {
+  const required = ['active_lanes', 'children', 'concurrency_authority', 'design_lock', 'evidence_refs', 'extensions', 'historical_transitions', 'parent', 'predecessor_contract_digest', 'prs', 'repository', 'schema'];
+  if (!hasOnly(value, required)
+    || value.schema !== STATE_SCHEMA
+    || value.repository !== REPOSITORY
+    || value.design_lock !== FINALISATION_LOCK
+    || !validateParent(value.parent)
+    || !isDigest(value.predecessor_contract_digest)
+    || !Array.isArray(value.children)
+    || value.children.length !== 6
+    || !value.children.every(validateChild)
+    || !Array.isArray(value.prs)
+    || !value.prs.every(validatePrDescriptor)
+    || !isRecord(value.concurrency_authority)
+    || !exactKeys(value.concurrency_authority, ['authority_digest', 'authority_ref', 'max_active_lanes', 'mode', 'permitted_child_issues'])
+    || value.concurrency_authority.authority_digest !== null
+    || value.concurrency_authority.authority_ref !== null
+    || value.concurrency_authority.max_active_lanes !== 1
+    || value.concurrency_authority.mode !== 'SINGLE_DEFAULT'
+    || !same(value.concurrency_authority.permitted_child_issues, [])
+    || !Array.isArray(value.active_lanes)
+    || value.active_lanes.length !== 0
+    || !Array.isArray(value.evidence_refs)
+    || !value.evidence_refs.every(validateEvidenceRef)
+    || !Array.isArray(value.historical_transitions)
+    || !value.historical_transitions.every(validateTransition)
+    || !Array.isArray(value.extensions)
+    || value.extensions.some((item) => !isRecord(item))) return failure('V5_INTER_EPOCH_STATE_INVALID');
+  const expectedIssues = [358, 359, 360, 361, 362, 363];
+  const issues = value.children.map((child) => child.issue);
+  if (!same(issues, expectedIssues) || value.children.some((child, index) => child.order !== index + 1)) {
+    return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'child_topology' });
+  }
+  const child = childByIssue(value, CHILD_ISSUE);
+  if (!child
+    || child.lifecycle !== 'CURRENT'
+    || child.finality.state !== 'UNMERGED'
+    || child.finality.authority_ref !== null
+    || child.holds.length !== 0
+    || child.epochs.length !== 4
+    || !same(child.epochs.map((epoch) => epoch.id), ['E1', 'E2', 'E3', 'E4'])
+    || child.epochs.find((epoch) => epoch.id === 'E1')?.terminal_disposition !== 'ACCEPTED'
+    || child.epochs.find((epoch) => epoch.id === 'E2')?.terminal_disposition !== 'ACCEPTED'
+    || child.epochs.find((epoch) => epoch.id === 'E3')?.evidence_ref !== FINAL_G4_EVIDENCE_REF
+    || child.epochs.find((epoch) => epoch.id === 'E3')?.terminal_disposition !== 'ACCEPTED'
+    || child.epochs.find((epoch) => epoch.id === 'E4')?.evidence_ref !== null
+    || child.epochs.find((epoch) => epoch.id === 'E4')?.terminal_disposition !== null) {
+    return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'epoch_boundary' });
+  }
+  const byPr = new Map(child.pr_registry.map((entry) => [entry.pr, entry]));
+  const pr379 = byPr.get(379);
+  if (child.pr_registry.length !== 3
+    || !byPr.has(366) || !byPr.has(379) || !byPr.has(380)
+    || !validateRegistryEntry(byPr.get(366), true)
+    || !validateRegistryEntry(pr379, true)
+    || !validateRegistryEntry(byPr.get(380), true)
+    || !same(byPr.get(366), retired366RegistryEntry())
+    || !same(byPr.get(380), accepted380RegistryEntry())
+    || !same(pr379, retired379RegistryEntry(pr379?.github_state))) {
+    return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'pr_registry' });
+  }
+  if ([FINAL_G4_EVIDENCE_REF, POST_MERGE_TECHNICAL_EVIDENCE_REF, PR379_NON_CONVERGENCE_EVIDENCE_REF]
+    .some((id) => finalisationEvidenceCount(value, id) !== 1)
+    || finalisationTransitionCount(value) !== 1) {
+    return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'accepted_evidence_or_history' });
+  }
+  const acceptedTransition = value.historical_transitions.find((item) => item.id === FINALISATION_TRANSITION_ID);
+  if (!acceptedTransition
+    || acceptedTransition.child_issue !== CHILD_ISSUE
+    || acceptedTransition.disposition !== 'ACCEPTED'
+    || acceptedTransition.epoch_id !== 'E3'
+    || acceptedTransition.evidence_ref !== FINAL_G4_EVIDENCE_REF
+    || acceptedTransition.gate !== 'G4') return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'accepted_transition' });
+  if (!value.prs.some((item) => item.number === 380)
+    || !value.prs.some((item) => item.number === 366)) return failure('V5_INTER_EPOCH_STATE_INVALID', { reason: 'parent_pr_registry' });
+  return success('V5_INTER_EPOCH_SHAPE_VALID', { state: clone(value), canonical_digest: digestValue(value) });
+}
+function looksLikeInterEpochState(value) {
+  return isRecord(value)
+    && value.schema === STATE_SCHEMA
+    && value.design_lock === FINALISATION_LOCK
+    && !Object.prototype.hasOwnProperty.call(value, 'recovery');
+}
+function validateInterEpochStateV5(value) {
+  const shape = validateInterEpochShapeV5(value);
+  if (!shape.ok) return shape;
+  if (![FINALISATION_STAGE_A_CANONICAL_DIGEST, FINALISATION_STAGE_B_CANONICAL_DIGEST].includes(shape.canonical_digest)) {
+    return failure('V5_INTER_EPOCH_TARGET_NOT_EXACT');
+  }
+  return success('V5_INTER_EPOCH_STATE_VALID', { state: shape.state, canonical_digest: shape.canonical_digest });
+}
+function validateFinalisationSourceState(value = FINALISATION_SOURCE_STATE) {
+  if (!same(value, FINALISATION_SOURCE_STATE)) return failure('FINALISATION_SOURCE_STATE_INVALID', { reason: 'source_not_fixed' });
+  const valid = validateCanonicalStateV5(value);
+  if (!valid.ok || !Object.prototype.hasOwnProperty.call(value, 'recovery')
+    || valid.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST) {
+    return failure('FINALISATION_SOURCE_STATE_INVALID');
+  }
+  const child = childByIssue(value, CHILD_ISSUE);
+  const registry = child?.pr_registry || [];
+  const byPr = new Map(registry.map((entry) => [entry.pr, entry]));
+  if (registry.length !== 2
+    || !same([...byPr.keys()].sort((a, b) => a - b), [366, 379])
+    || !same(byPr.get(366), retired366RegistryEntry())
+    || !same(byPr.get(379), retainedRegistryEntry())) {
+    return failure('FINALISATION_SOURCE_STATE_INVALID', { reason: 'source_registry' });
+  }
+  return success('FINALISATION_SOURCE_STATE_VALID', { state: FINALISATION_SOURCE_STATE, canonical_digest: valid.canonical_digest });
+}
+function deriveStageAFromFixedSource() {
+  const sourceValid = validateFinalisationSourceState();
+  if (!sourceValid.ok) return null;
+  const next = clone(FINALISATION_SOURCE_STATE);
+  next.design_lock = FINALISATION_LOCK;
+  next.active_lanes = [];
+  next.concurrency_authority.permitted_child_issues = [];
+  delete next.recovery;
+  const child = childByIssue(next, CHILD_ISSUE);
+  child.summary = 'E1, E2 and E3 are accepted; E4 remains pending while the current child stays unmerged and waits for separate Web E4 authority.';
+  child.done_when = [
+    'E1, E2 and E3 remain accepted with retained evidence.',
+    'E3 merge/finality and #380/#379 chronology are recorded exactly; the current child remains unmerged.',
+    'E4 truthful native adapters are complete and Web records S2 finality.',
+  ];
+  child.scope = [
+    'Retained-skill productisation, the v5 GitHub programme reconciler and truthful post-merge epoch finalisation.',
+    'A clean inter-epoch boundary with E3 accepted and E4 pending.',
+  ];
+  child.out_of_scope = [
+    'E4 execution, E4 activation and S3 through S6 progression.',
+    'Programme Apply or provider state changes not separately authorised by future Web finalisation authority.',
+  ];
+  child.boundaries = [
+    'Web owns E4 authority, Ready, merge, finality and consequential provider operations.',
+    'This clean inter-epoch state has no recovery hold, normal lane, active gate or provider CAS claim.',
+    'E4 remains pending and no automatic transition is performed.',
+  ];
+  child.eli5 = 'E3 is accepted and the next epoch is waiting; the current child is still not finished and no work lane is running.';
+  child.finality = { authority_ref: null, state: 'UNMERGED' };
+  child.holds = [];
+  child.epochs = child.epochs.map((epoch) => epoch.id === 'E3'
+    ? { ...epoch, evidence_ref: FINAL_G4_EVIDENCE_REF, terminal_disposition: 'ACCEPTED' }
+    : epoch.id === 'E4'
+      ? { ...epoch, evidence_ref: null, terminal_disposition: null }
+      : epoch);
+  child.pr_registry = [retired366RegistryEntry(), retired379RegistryEntry('OPEN'), accepted380RegistryEntry()];
+  const oldPr = next.prs.find((item) => item.number === 366);
+  if (oldPr) oldPr.summary = 'Historical PR #366 is closed and retired; no merged candidate is active.';
+  if (!next.prs.some((item) => item.number === 380)) next.prs.push(finalisationPr380Descriptor());
+  next.evidence_refs = [
+    ...next.evidence_refs,
+    ...finalisationEvidenceRefs().filter((item) => !next.evidence_refs.some((existing) => existing.id === item.id)),
+  ];
+  if (finalisationTransitionCount(next) === 0) {
+    next.historical_transitions = [
+      ...next.historical_transitions,
+      {
+        child_issue: CHILD_ISSUE,
+        disposition: 'ACCEPTED',
+        epoch_id: 'E3',
+        evidence_ref: FINAL_G4_EVIDENCE_REF,
+        gate: 'G4',
+        id: FINALISATION_TRANSITION_ID,
+      },
+    ];
+  }
+  const shape = validateInterEpochShapeV5(next);
+  return shape.ok ? next : null;
+}
+function deriveStageBFromStageA(stageA) {
+  if (!stageA || !validateInterEpochShapeV5(stageA).ok
+    || childByIssue(stageA, CHILD_ISSUE)?.pr_registry.find((entry) => entry.pr === 379)?.github_state !== 'OPEN') return null;
+  const next = clone(stageA);
+  const child = childByIssue(next, CHILD_ISSUE);
+  child.pr_registry = child.pr_registry.map((entry) => entry.pr === 379 ? retired379RegistryEntry('CLOSED') : entry);
+  const changed = finalisationDiffPaths(stageA, next);
+  return same(changed, ['children[1].pr_registry[1].github_state']) ? next : null;
+}
+const FINALISATION_STAGE_A_TARGET_STATE = deepFreeze(deriveStageAFromFixedSource());
+const FINALISATION_STAGE_B_TARGET_STATE = deepFreeze(deriveStageBFromStageA(FINALISATION_STAGE_A_TARGET_STATE));
+if (!FINALISATION_STAGE_A_TARGET_STATE || !FINALISATION_STAGE_B_TARGET_STATE
+  || digestValue(FINALISATION_STAGE_A_TARGET_STATE) !== FINALISATION_STAGE_A_CANONICAL_DIGEST
+  || digestValue(FINALISATION_STAGE_B_TARGET_STATE) !== FINALISATION_STAGE_B_CANONICAL_DIGEST) {
+  throw new Error('FINALISATION_TARGET_DERIVATION_MISMATCH');
+}
+const FINALISATION_SOURCE_RENDERED = deepFreeze(renderProgrammeV5(FINALISATION_SOURCE_STATE));
+const FINALISATION_STAGE_A_RENDERED = deepFreeze(renderProgrammeV5(FINALISATION_STAGE_A_TARGET_STATE));
+const FINALISATION_STAGE_B_RENDERED = deepFreeze(renderProgrammeV5(FINALISATION_STAGE_B_TARGET_STATE));
+if (!FINALISATION_SOURCE_RENDERED.ok || !FINALISATION_STAGE_A_RENDERED.ok || !FINALISATION_STAGE_B_RENDERED.ok) {
+  throw new Error('FINALISATION_TARGET_RENDER_INVALID');
+}
+if (FINALISATION_SOURCE_RENDERED.canonical_digest !== FINALISATION_SOURCE_CANONICAL_DIGEST
+  || FINALISATION_STAGE_A_RENDERED.canonical_digest !== FINALISATION_STAGE_A_CANONICAL_DIGEST
+  || FINALISATION_STAGE_B_RENDERED.canonical_digest !== FINALISATION_STAGE_B_CANONICAL_DIGEST) {
+  throw new Error('FINALISATION_TARGET_RENDER_DIGEST_MISMATCH');
+}
+function finalisationRenderedTarget(rendered) {
+  return {
+    canonical_digest: rendered.canonical_digest,
+    parent: rendered.parent,
+    child: rendered.child,
+    parent_body_digest: sha256Text(rendered.parent),
+    child_body_digest: sha256Text(rendered.child),
+    projections: {
+      parent: rendered.projections.parent,
+      child: rendered.projections.child,
+    },
+  };
+}
+const FINALISATION_SOURCE_PARENT_BODY_DIGEST = sha256Text(FINALISATION_SOURCE_RENDERED.parent);
+const FINALISATION_SOURCE_CHILD_BODY_DIGEST = sha256Text(FINALISATION_SOURCE_RENDERED.child);
+const FINALISATION_RENDERED_TARGETS = deepFreeze({
+  source: finalisationRenderedTarget(FINALISATION_SOURCE_RENDERED),
+  stage_a: finalisationRenderedTarget(FINALISATION_STAGE_A_RENDERED),
+  stage_b: finalisationRenderedTarget(FINALISATION_STAGE_B_RENDERED),
+});
+function finalisationCheckpointTargetRecord(checkpoint, states, rendered) {
+  const spec = finalisationCheckpointSpec(checkpoint);
+  const parentState = states[spec.parent];
+  const childState = states[spec.child];
+  const parentRendered = rendered[spec.parent];
+  const childRendered = rendered[spec.child];
+  return {
+    checkpoint,
+    parent_stage: spec.parent,
+    child_stage: spec.child,
+    parent_canonical_digest: digestValue(parentState),
+    child_canonical_digest: digestValue(childState),
+    parent_body_digest: parentRendered.parent_body_digest,
+    child_body_digest: childRendered.child_body_digest,
+    parent_projection_digest: parentRendered.projections.parent.projection_digest,
+    child_projection_digest: childRendered.projections.child.projection_digest,
+    pr_379_github_state: spec.pr_379,
+    next_operation_order: spec.next_order,
+  };
+}
+const FINALISATION_CHECKPOINT_TABLE = deepFreeze(Object.fromEntries(
+  FINALISATION_CHECKPOINTS.map((checkpoint) => [checkpoint, finalisationCheckpointTargetRecord(
+    checkpoint,
+    { source: FINALISATION_SOURCE_STATE, stage_a: FINALISATION_STAGE_A_TARGET_STATE, stage_b: FINALISATION_STAGE_B_TARGET_STATE },
+    FINALISATION_RENDERED_TARGETS,
+  )]),
+));
+const FINALISATION_TARGET_TABLE = deepFreeze({
+  source: FINALISATION_SOURCE_STATE,
+  stage_a: FINALISATION_STAGE_A_TARGET_STATE,
+  stage_b: FINALISATION_STAGE_B_TARGET_STATE,
+  rendered: FINALISATION_RENDERED_TARGETS,
+  checkpoints: FINALISATION_CHECKPOINT_TABLE,
+});
+function finalisationSourceBodyBinding() {
+  return {
+    kind: 'RECOVERY_HELD_CANONICAL',
+    canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+    parent_body_sha256: FINALISATION_SOURCE_PARENT_BODY_DIGEST,
+    child_body_sha256: FINALISATION_SOURCE_CHILD_BODY_DIGEST,
+    parent_revision: SOURCE_PARENT_REVISION,
+    child_revision: SOURCE_CHILD_REVISION,
+    pr_379_revision: FINALISATION_PR379_SOURCE_REVISION,
+    parent_prefix_digest: EMPTY_DIGEST,
+    parent_suffix_digest: EMPTY_DIGEST,
+    child_prefix_digest: EMPTY_DIGEST,
+    child_suffix_digest: EMPTY_DIGEST,
+  };
+}
+function finalisationPr379DecisionFacts() {
+  return {
+    pr: 379,
+    provider_state: 'OPEN',
+    github_state: 'OPEN',
+    draft: true,
+    merged: false,
+    head: FROZEN_HEAD,
+    tree: FROZEN_TREE,
+    branch: FROZEN_BRANCH,
+    base_ref: FROZEN_BASE_REF,
+    base_sha: MAIN_SHA,
+    version: FROZEN_VERSION,
+  };
+}
+function finalisationPr380DecisionFacts() {
+  return {
+    pr: 380,
+    provider_state: 'MERGED',
+    github_state: 'MERGED',
+    status: 'ACCEPTED',
+    draft: false,
+    merged: true,
+    merge_method: 'MERGE_COMMIT',
+    merge_commit: PR380_MERGE_COMMIT,
+    ordered_parents: [PR380_BASE_SHA, PR380_HEAD],
+    head: PR380_HEAD,
+    tree: PR380_TREE,
+    branch: PR380_BRANCH,
+    base_ref: 'main',
+    base_sha: PR380_BASE_SHA,
+    version: PR380_VERSION,
+    accepted_evidence_ref: FINAL_G4_EVIDENCE_REF,
+  };
+}
+const FINALISATION_PROHIBITIONS = Object.freeze({
+  arbitrary_target: false,
+  desired_state_api: false,
+  arbitrary_patch: false,
+  arbitrary_transition: false,
+  provider_current_state_constructor: false,
+  provider_client: false,
+  provider_cas: false,
+  programme_apply: false,
+  e4_activation: false,
+  pr_body_mutation: false,
+});
+const FINALISATION_WRITE_SAFETY = Object.freeze({
+  mode: FINALISATION_WRITE_SAFETY_MODE,
+  provider_client_used: false,
+  provider_cas_claim: false,
+  fresh_complete_rebind: true,
+  exact_readback_required: true,
+  one_next_operation_only: true,
+});
+const FINALISATION_DECISION_KEYS = Object.freeze([
+  'schema', 'root', 'lock', 'scope', 'repository', 'parent_issue', 'child_issue',
+  'source', 'accepted_authority', 'pr_379', 'pr_380', 'allowed_checkpoints',
+  'allowed_operations', 'prohibitions', 'write_safety',
+]);
+function makeFinalisationDecisionTemplate() {
+  return {
+    schema: FINALISATION_DECISION_SCHEMA,
+    root: FINALISATION_ROOT,
+    lock: FINALISATION_LOCK,
+    scope: FINALISATION_SCOPE,
+    repository: REPOSITORY,
+    parent_issue: PARENT_ISSUE,
+    child_issue: CHILD_ISSUE,
+    source: finalisationSourceBodyBinding(),
+    accepted_authority: clone(FINALISATION_AUTHORITY),
+    pr_379: finalisationPr379DecisionFacts(),
+    pr_380: finalisationPr380DecisionFacts(),
+    allowed_checkpoints: [...FINALISATION_CHECKPOINTS],
+    allowed_operations: clone(FINALISATION_OPERATION_ORDER),
+    prohibitions: clone(FINALISATION_PROHIBITIONS),
+    write_safety: clone(FINALISATION_WRITE_SAFETY),
+  };
+}
+const FINALISATION_DECISION_TEMPLATE = deepFreeze(makeFinalisationDecisionTemplate());
+function validatePostMergeEpochFinalisationDecision(value) {
+  if (!isRecord(value) || !exactKeys(value, FINALISATION_DECISION_KEYS)
+    || !same(value, FINALISATION_DECISION_TEMPLATE)
+    || Object.prototype.hasOwnProperty.call(value, 'target')
+    || Object.prototype.hasOwnProperty.call(value, 'desired')
+    || Object.prototype.hasOwnProperty.call(value, 'patch')
+    || Object.prototype.hasOwnProperty.call(value, 'transition')
+    || Object.prototype.hasOwnProperty.call(value, 'state')) {
+    return failure('FINALISATION_DECISION_INVALID');
+  }
+  return success('FINALISATION_DECISION_VALID', { decision: clone(value), decision_digest: digestValue(value) });
+}
+function createPostMergeEpochFinalisationDecision() {
+  return clone(FINALISATION_DECISION_TEMPLATE);
+}
+function derivePostMergeEpochFinalisationTargets(decisionInput = FINALISATION_DECISION_TEMPLATE, evidenceInput) {
+  if (arguments.length > 1 && evidenceInput !== undefined) return failure('FINALISATION_PROVIDER_TARGET_INPUT_FORBIDDEN');
+  const decisionValid = validatePostMergeEpochFinalisationDecision(decisionInput);
+  if (!decisionValid.ok) return decisionValid;
+  const sourceValid = validateFinalisationSourceState();
+  if (!sourceValid.ok
+    || digestValue(FINALISATION_STAGE_A_TARGET_STATE) !== FINALISATION_STAGE_A_CANONICAL_DIGEST
+    || digestValue(FINALISATION_STAGE_B_TARGET_STATE) !== FINALISATION_STAGE_B_CANONICAL_DIGEST) {
+    return failure('FINALISATION_TARGET_DERIVATION_INVALID');
+  }
+  return success('FINALISATION_TARGETS_DERIVED', {
+    targets: FINALISATION_TARGET_TABLE,
+    decision_digest: decisionValid.decision_digest,
+  });
+}
+function buildPostMergeEpochFinalisationStageATargetState(input) {
+  if (arguments.length > 0 && input !== undefined && !same(input, FINALISATION_SOURCE_STATE)) return null;
+  return FINALISATION_STAGE_A_TARGET_STATE;
+}
+function buildPostMergeEpochFinalisationStageBTargetState(input) {
+  if (arguments.length > 0 && input !== undefined && !same(input, FINALISATION_STAGE_A_TARGET_STATE)) return null;
+  return FINALISATION_STAGE_B_TARGET_STATE;
+}
+function finalisationCheckpointSpec(checkpoint) {
+  const table = {
+    BEFORE_STAGE_A: { parent: 'source', child: 'source', pr_379: 'OPEN', completed: [], previous: null, next_order: 1 },
+    CHILD_STAGE_A_OBSERVED: { parent: 'source', child: 'stage_a', pr_379: 'OPEN', completed: [1], previous: 'BEFORE_STAGE_A', next_order: 2 },
+    PARENT_STAGE_A_OBSERVED: { parent: 'stage_a', child: 'stage_a', pr_379: 'OPEN', completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED', next_order: 3 },
+    PR379_CLOSED_STAGE_A: { parent: 'stage_a', child: 'stage_a', pr_379: 'CLOSED', completed: [1, 2, 3], previous: 'PARENT_STAGE_A_OBSERVED', next_order: 4 },
+    CHILD_STAGE_B_OBSERVED: { parent: 'stage_a', child: 'stage_b', pr_379: 'CLOSED', completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A', next_order: 5 },
+    FINAL_TARGET_OBSERVED: { parent: 'stage_b', child: 'stage_b', pr_379: 'CLOSED', completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED', next_order: null },
+  };
+  return table[checkpoint] || null;
+}
+function finalisationStateForKind(targets, kind) {
+  return kind === 'source' ? targets.source : kind === 'stage_a' ? targets.stage_a : targets.stage_b;
+}
+function finalisationCheckpointBindingDigest(checkpoint) {
+  const spec = finalisationCheckpointSpec(checkpoint);
+  if (!spec) return null;
+  const target = FINALISATION_CHECKPOINT_TABLE[checkpoint];
+  return digestValue({
+    checkpoint,
+    parent: target.parent_canonical_digest,
+    child: target.child_canonical_digest,
+    pr_379: spec.pr_379,
+    pr_380: digestValue(finalisationPr380DecisionFacts()),
+  });
+}
+function finalisationObservedCheckpoint(parentDigest, childDigest, pr379State) {
+  for (const checkpoint of FINALISATION_CHECKPOINTS) {
+    const target = FINALISATION_CHECKPOINT_TABLE[checkpoint];
+    if (parentDigest === target.parent_canonical_digest
+      && childDigest === target.child_canonical_digest
+      && pr379State === target.pr_379_github_state) return checkpoint;
+  }
+  return null;
+}
+function classifyPostMergeEpochFinalisationCheckpoint(input = {}) {
+  if (!isRecord(input)) return failure('FINALISATION_CHECKPOINT_INPUT_INVALID');
+  const parentDigest = input.parent_canonical_digest ?? input.parent?.canonical_digest;
+  const childDigest = input.child_canonical_digest ?? input.child?.canonical_digest;
+  const pr379State = input.pr_379_github_state ?? input.pr_379?.github_state;
+  if (!isDigest(parentDigest) || !isDigest(childDigest) || !['OPEN', 'CLOSED'].includes(pr379State)) {
+    return failure('FINALISATION_CHECKPOINT_INPUT_INVALID');
+  }
+  const checkpoint = finalisationObservedCheckpoint(parentDigest, childDigest, pr379State);
+  return checkpoint
+    ? success('FINALISATION_CHECKPOINT_RECOGNISED', { checkpoint })
+    : failure('FINALISATION_UNKNOWN_CHECKPOINT');
+}
+function finalisationCollectorValid(value) {
+  return isRecord(value)
+    && exactKeys(value, ['kind', 'identity', 'version', 'authenticated', 'provider_client_used'])
+    && value.kind === 'WEB_AUTHENTICATED_GITHUB_COLLECTION'
+    && value.identity === 'github-web-readonly-adapter'
+    && value.version === 'v1'
+    && value.authenticated === true
+    && value.provider_client_used === false;
+}
+function finalisationFreshnessValid(value) {
+  return isRecord(value)
+    && exactKeys(value, ['authenticated', 'complete', 'observed_at', 'collection_revision'])
+    && value.authenticated === true
+    && value.complete === true
+    && isTimestamp(value.observed_at)
+    && isProviderRevision(value.collection_revision);
+}
+function finalisationPr379FactsForState(githubState) {
+  const facts = finalisationPr379DecisionFacts();
+  return { ...facts, provider_state: githubState, github_state: githubState };
+}
+function finalisationPr380Facts() {
+  return finalisationPr380DecisionFacts();
+}
+function validateFinalisationPr379(value) {
+  const required = ['pr', 'provider_state', 'github_state', 'draft', 'merged', 'head', 'tree', 'branch', 'base_ref', 'base_sha', 'version', 'revision', 'facts', 'facts_digest', 'complete'];
+  if (!isRecord(value) || !exactKeys(value, required)
+    || value.pr !== 379
+    || !['OPEN', 'CLOSED'].includes(value.provider_state)
+    || value.github_state !== value.provider_state
+    || value.draft !== true
+    || value.merged !== false
+    || value.head !== FROZEN_HEAD
+    || value.tree !== FROZEN_TREE
+    || value.branch !== FROZEN_BRANCH
+    || value.base_ref !== FROZEN_BASE_REF
+    || value.base_sha !== MAIN_SHA
+    || value.version !== FROZEN_VERSION
+    || !isProviderRevision(value.revision)
+    || !isRecord(value.facts)
+    || !isDigest(value.facts_digest)
+    || value.facts_digest !== digestValue(value.facts)
+    || !same(value.facts, finalisationPr379FactsForState(value.provider_state))
+    || value.complete !== true) return false;
+  return true;
+}
+function validateFinalisationPr380(value) {
+  const required = ['pr', 'provider_state', 'github_state', 'status', 'draft', 'merged', 'merge_method', 'merge_commit', 'ordered_parents', 'head', 'tree', 'branch', 'base_ref', 'base_sha', 'version', 'accepted_evidence_ref', 'revision', 'facts', 'facts_digest', 'complete'];
+  if (!isRecord(value) || !exactKeys(value, required)
+    || value.pr !== 380
+    || value.provider_state !== 'MERGED'
+    || value.github_state !== 'MERGED'
+    || value.status !== 'ACCEPTED'
+    || value.draft !== false
+    || value.merged !== true
+    || value.merge_method !== 'MERGE_COMMIT'
+    || value.merge_commit !== PR380_MERGE_COMMIT
+    || !same(value.ordered_parents, [PR380_BASE_SHA, PR380_HEAD])
+    || value.head !== PR380_HEAD
+    || value.tree !== PR380_TREE
+    || value.branch !== PR380_BRANCH
+    || value.base_ref !== 'main'
+    || value.base_sha !== PR380_BASE_SHA
+    || value.version !== PR380_VERSION
+    || value.accepted_evidence_ref !== FINAL_G4_EVIDENCE_REF
+    || !isProviderRevision(value.revision)
+    || !isRecord(value.facts)
+    || !isDigest(value.facts_digest)
+    || value.facts_digest !== digestValue(value.facts)
+    || !same(value.facts, finalisationPr380Facts())
+    || value.complete !== true) return false;
+  return true;
+}
+function finalisationExecutionCurrentMainFixture() {
+  const acceptedHead = digestValue({
+    fixture: 'post-merge-finalisation-implementation-head',
+    root: FINALISATION_ROOT,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const acceptedHeadTree = digestValue({
+    fixture: 'post-merge-finalisation-implementation-head-tree',
+    accepted_head: acceptedHead,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const mergeCommit = digestValue({
+    fixture: 'post-merge-finalisation-implementation-merge',
+    accepted_head: acceptedHead,
+    parent: PR380_MERGE_COMMIT,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const mergeTree = digestValue({
+    fixture: 'post-merge-finalisation-implementation-merge-tree',
+    merge_commit: mergeCommit,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  return {
+    ref: 'main',
+    sha: mergeCommit,
+    tree: mergeTree,
+    implementation_merge: {
+      accepted_head: acceptedHead,
+      accepted_head_tree: acceptedHeadTree,
+      merge_commit: mergeCommit,
+      merge_tree: mergeTree,
+      method: 'MERGE_COMMIT',
+      ordered_parents: [PR380_MERGE_COMMIT, acceptedHead],
+      source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+      contains_finalisation_implementation: true,
+      complete: true,
+    },
+    fresh: true,
+    complete: true,
+  };
+}
+function validateFinalisationImmutableSourceMain(value) {
+  const required = ['ref', 'sha', 'tree', 'equals_merge_commit', 'complete'];
+  return isRecord(value)
+    && exactKeys(value, required)
+    && value.ref === 'main'
+    && value.sha === PR380_MERGE_COMMIT
+    && value.tree === PR380_TREE
+    && value.equals_merge_commit === true
+    && value.complete === true;
+}
+function validateFinalisationExecutionCurrentMain(value) {
+  const required = ['ref', 'sha', 'tree', 'implementation_merge', 'fresh', 'complete'];
+  const mergeRequired = [
+    'accepted_head', 'accepted_head_tree', 'merge_commit', 'merge_tree', 'method',
+    'ordered_parents', 'source_canonical_digest', 'contains_finalisation_implementation', 'complete',
+  ];
+  const merge = isRecord(value) ? value.implementation_merge : null;
+  return isRecord(value)
+    && exactKeys(value, required)
+    && value.ref === 'main'
+    && isSha(value.sha)
+    && value.sha !== PR380_MERGE_COMMIT
+    && isSha(value.tree)
+    && value.fresh === true
+    && value.complete === true
+    && isRecord(merge)
+    && exactKeys(merge, mergeRequired)
+    && isSha(merge.accepted_head)
+    && isSha(merge.accepted_head_tree)
+    && isSha(merge.merge_commit)
+    && merge.merge_commit === value.sha
+    && isSha(merge.merge_tree)
+    && merge.merge_tree === value.tree
+    && merge.method === 'MERGE_COMMIT'
+    && Array.isArray(merge.ordered_parents)
+    && merge.ordered_parents.length === 2
+    && same(merge.ordered_parents, [PR380_MERGE_COMMIT, merge.accepted_head])
+    && merge.source_canonical_digest === FINALISATION_SOURCE_CANONICAL_DIGEST
+    && merge.contains_finalisation_implementation === true
+    && merge.complete === true;
+}
+function finalisationBindingFromEvidence(value) {
+  return {
+    parent_canonical_digest: value.parent.canonical_digest,
+    child_canonical_digest: value.child.canonical_digest,
+    parent_body_digest: value.parent.body_digest,
+    child_body_digest: value.child.body_digest,
+    parent_projection_digest: value.parent.projection_digest,
+    child_projection_digest: value.child.projection_digest,
+    parent_prefix_digest: value.parent.prefix_digest,
+    parent_suffix_digest: value.parent.suffix_digest,
+    child_prefix_digest: value.child.prefix_digest,
+    child_suffix_digest: value.child.suffix_digest,
+    pr_379_facts_digest: value.pr_379.facts_digest,
+    pr_379_github_state: value.pr_379.github_state,
+    pr_379_revision: value.pr_379.revision,
+    pr_380_facts_digest: value.pr_380.facts_digest,
+    immutable_source_main_digest: digestValue(value.immutable_source_main),
+    merge_ancestry_digest: digestValue(value.merge_ancestry),
+    execution_current_main_digest: digestValue(value.execution_current_main),
+  };
+}
+function validateFinalisationSourceBinding(value, evidence) {
+  const expected = finalisationBindingFromEvidence(evidence);
+  return isRecord(value)
+    && exactKeys(value, [...Object.keys(expected), 'snapshot_digest'])
+    && same(without(value, 'snapshot_digest'), expected)
+    && value.snapshot_digest === digestValue(expected);
+}
+function validateFinalisationBodyObservation(value, kind) {
+  const required = ['issue', 'raw_body', 'body_digest', 'canonical_digest', 'projection_digest', 'prefix_digest', 'suffix_digest', 'revision', 'complete'];
+  const childRequired = kind === 'child' ? ['projection'] : [];
+  if (!isRecord(value) || !exactKeys(value, [...required, ...childRequired])
+    || value.issue !== (kind === 'parent' ? PARENT_ISSUE : CHILD_ISSUE)
+    || typeof value.raw_body !== 'string'
+    || !isDigest(value.body_digest)
+    || sha256Text(value.raw_body) !== value.body_digest
+    || !isDigest(value.canonical_digest)
+    || !isDigest(value.projection_digest)
+    || !isDigest(value.prefix_digest)
+    || !isDigest(value.suffix_digest)
+    || !isProviderRevision(value.revision)
+    || value.complete !== true) return false;
+  if (kind === 'child' && !validateProjectionEnvelope(value.projection, 'child', value.canonical_digest)) return false;
+  return true;
+}
+function validateFinalisationTransaction(value, checkpoint) {
+  const spec = finalisationCheckpointSpec(checkpoint);
+  if (!spec || !isRecord(value)
+    || !exactKeys(value, ['acknowledgement', 'acknowledgement_loss_operation_order', 'complete', 'completed_operation_orders', 'previous_source_binding', 'readback', 'checkpoint'])
+    || value.checkpoint !== checkpoint
+    || !['CONFIRMED', 'LOST'].includes(value.acknowledgement)
+    || !Array.isArray(value.completed_operation_orders)
+    || !same(value.completed_operation_orders, spec.completed)
+    || value.complete !== true
+    || !isRecord(value.readback)
+    || !exactKeys(value.readback, ['complete', 'exact', 'fresh_complete_rebind'])
+    || value.readback.complete !== true
+    || value.readback.exact !== true
+    || value.readback.fresh_complete_rebind !== true) return failure('FINALISATION_TRANSACTION_INVALID');
+  if (value.acknowledgement === 'CONFIRMED') {
+    if (value.acknowledgement_loss_operation_order !== null) return failure('FINALISATION_ACKNOWLEDGEMENT_INVALID');
+  } else {
+    const last = spec.completed[spec.completed.length - 1] || null;
+    if (!last || value.acknowledgement_loss_operation_order !== last) return failure('FINALISATION_ACKNOWLEDGEMENT_INVALID');
+  }
+  if (spec.previous === null) {
+    if (value.previous_source_binding !== null) return failure('FINALISATION_PREVIOUS_SOURCE_BINDING_INVALID');
+  } else if (!isRecord(value.previous_source_binding)
+    || !exactKeys(value.previous_source_binding, ['checkpoint', 'binding_digest', 'complete'])
+    || value.previous_source_binding.checkpoint !== spec.previous
+    || value.previous_source_binding.binding_digest !== finalisationCheckpointBindingDigest(spec.previous)
+    || value.previous_source_binding.complete !== true) {
+    return failure('FINALISATION_PREVIOUS_SOURCE_BINDING_INVALID');
+  }
+  return success('FINALISATION_TRANSACTION_VALID');
+}
+const FINALISATION_EVIDENCE_KEYS = Object.freeze([
+  'schema', 'root', 'lock', 'decision_digest', 'repository', 'parent_issue', 'child_issue',
+  'parent', 'child', 'pr_379', 'pr_380', 'immutable_source_main', 'merge_ancestry', 'execution_current_main',
+  'collector', 'freshness', 'source_binding', 'transaction', 'evidence_digest',
+]);
+function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINALISATION_DECISION_TEMPLATE) {
+  const targetsResult = derivePostMergeEpochFinalisationTargets(decisionInput);
+  if (!targetsResult.ok) return targetsResult;
+  const decisionValid = validatePostMergeEpochFinalisationDecision(decisionInput);
+  if (!isRecord(value) || !exactKeys(value, FINALISATION_EVIDENCE_KEYS)
+    || value.schema !== FINALISATION_EVIDENCE_SCHEMA
+    || value.root !== FINALISATION_ROOT
+    || value.lock !== FINALISATION_LOCK
+    || value.decision_digest !== decisionValid.decision_digest
+    || value.repository !== REPOSITORY
+    || value.parent_issue !== PARENT_ISSUE
+    || value.child_issue !== CHILD_ISSUE
+    || !validateFinalisationBodyObservation(value.parent, 'parent')
+    || !validateFinalisationBodyObservation(value.child, 'child')
+    || !validateFinalisationPr379(value.pr_379)
+    || !validateFinalisationPr380(value.pr_380)
+    || !validateFinalisationImmutableSourceMain(value.immutable_source_main)
+    || !isRecord(value.merge_ancestry)
+    || !exactKeys(value.merge_ancestry, ['accepted_head', 'accepted_head_tree', 'merge_commit', 'merge_tree', 'method', 'ordered_parents', 'merged'])
+    || value.merge_ancestry.accepted_head !== PR380_HEAD
+    || value.merge_ancestry.accepted_head_tree !== PR380_TREE
+    || value.merge_ancestry.merge_commit !== PR380_MERGE_COMMIT
+    || value.merge_ancestry.merge_tree !== PR380_TREE
+    || value.merge_ancestry.method !== 'MERGE_COMMIT'
+    || !same(value.merge_ancestry.ordered_parents, [PR380_BASE_SHA, PR380_HEAD])
+    || value.merge_ancestry.merged !== true
+    || !validateFinalisationExecutionCurrentMain(value.execution_current_main)
+    || !finalisationCollectorValid(value.collector)
+    || !finalisationFreshnessValid(value.freshness)
+    || !isDigest(value.evidence_digest)) return failure('FINALISATION_EVIDENCE_INVALID');
+  const parentParsed = parseParentV5Body(value.parent.raw_body, { repository: REPOSITORY, parent_issue: PARENT_ISSUE });
+  const childParsed = parseChildV5Body(value.child.raw_body, { repository: REPOSITORY, parent_issue: PARENT_ISSUE });
+  if (!parentParsed.ok || !childParsed.ok
+    || parentParsed.body_digest !== value.parent.body_digest
+    || childParsed.body_digest !== value.child.body_digest
+    || parentParsed.envelope.canonical_digest !== value.parent.canonical_digest
+    || childParsed.envelope.canonical_digest !== value.child.canonical_digest
+    || parentParsed.envelope.projection_digest !== value.parent.projection_digest
+    || childParsed.envelope.projection_digest !== value.child.projection_digest
+    || !same(value.child.projection, childParsed.envelope)
+    || parentParsed.prefix_digest !== value.parent.prefix_digest
+    || parentParsed.suffix_digest !== value.parent.suffix_digest
+    || childParsed.prefix_digest !== value.child.prefix_digest
+    || childParsed.suffix_digest !== value.child.suffix_digest
+    || value.parent.prefix_digest !== EMPTY_DIGEST
+    || value.parent.suffix_digest !== EMPTY_DIGEST
+    || value.child.prefix_digest !== EMPTY_DIGEST
+    || value.child.suffix_digest !== EMPTY_DIGEST
+    || !validateFinalisationSourceBinding(value.source_binding, value)) return failure('FINALISATION_EVIDENCE_RECOMPUTATION_INVALID');
+  const checkpoint = finalisationObservedCheckpoint(value.parent.canonical_digest, value.child.canonical_digest, value.pr_379.github_state);
+  if (!checkpoint) return failure('FINALISATION_UNKNOWN_CHECKPOINT');
+  const spec = finalisationCheckpointSpec(checkpoint);
+  const expectedParentState = finalisationStateForKind(targetsResult.targets, spec.parent);
+  const expectedChildState = finalisationStateForKind(targetsResult.targets, spec.child);
+  if (value.pr_380.facts_digest !== digestValue(finalisationPr380Facts())
+    || value.parent.canonical_digest !== digestValue(expectedParentState)
+    || value.child.canonical_digest !== digestValue(expectedChildState)) return failure('FINALISATION_CHECKPOINT_BINDING_INVALID');
+  const expectedParentBody = spec.parent === 'source' ? targetsResult.targets.rendered.source.parent
+    : spec.parent === 'stage_a' ? targetsResult.targets.rendered.stage_a.parent : targetsResult.targets.rendered.stage_b.parent;
+  const expectedChildBody = spec.child === 'source' ? targetsResult.targets.rendered.source.child
+    : spec.child === 'stage_a' ? targetsResult.targets.rendered.stage_a.child : targetsResult.targets.rendered.stage_b.child;
+  if ((expectedParentBody !== null && value.parent.raw_body !== expectedParentBody)
+    || (expectedChildBody !== null && value.child.raw_body !== expectedChildBody)
+    || (spec.parent === 'source' && value.parent.body_digest !== FINALISATION_SOURCE_PARENT_BODY_DIGEST)
+    || (spec.child === 'source' && value.child.body_digest !== FINALISATION_SOURCE_CHILD_BODY_DIGEST)) {
+    return failure('FINALISATION_TARGET_BYTES_INVALID');
+  }
+  const transactionValid = validateFinalisationTransaction(value.transaction, checkpoint);
+  if (!transactionValid.ok) return transactionValid;
+  const expectedEvidenceDigest = digestValue(without(value, 'evidence_digest'));
+  if (value.evidence_digest !== expectedEvidenceDigest) return failure('FINALISATION_EVIDENCE_DIGEST_INVALID');
+  return success('FINALISATION_EVIDENCE_VALID', {
+    evidence: clone(value),
+    checkpoint,
+    targets: targetsResult.targets,
+    parsed: { parent: parentParsed, child: childParsed },
+    evidence_digest: value.evidence_digest,
+  });
+}
+function finalisationBodyObservation(rawBody, kind, revision) {
+  const parsed = kind === 'parent'
+    ? parseParentV5Body(rawBody, { repository: REPOSITORY, parent_issue: PARENT_ISSUE })
+    : parseChildV5Body(rawBody, { repository: REPOSITORY, parent_issue: PARENT_ISSUE });
+  if (!parsed.ok) return null;
+  return {
+    issue: kind === 'parent' ? PARENT_ISSUE : CHILD_ISSUE,
+    raw_body: rawBody,
+    body_digest: parsed.body_digest,
+    canonical_digest: parsed.envelope.canonical_digest,
+    projection_digest: parsed.envelope.projection_digest,
+    prefix_digest: parsed.prefix_digest,
+    suffix_digest: parsed.suffix_digest,
+    revision,
+    ...(kind === 'child' ? { projection: parsed.envelope } : {}),
+    complete: true,
+  };
+}
+function buildPostMergeEpochFinalisationEvidence(input = {}) {
+  if (!isRecord(input)
+    || !FINALISATION_CHECKPOINTS.includes(input.checkpoint)
+    || typeof input.parent_body !== 'string'
+    || typeof input.child_body !== 'string'
+    || (input.acknowledgement !== undefined && !['CONFIRMED', 'LOST'].includes(input.acknowledgement))) return failure('FINALISATION_EVIDENCE_FIXTURE_INVALID');
+  const decision = createPostMergeEpochFinalisationDecision();
+  const spec = finalisationCheckpointSpec(input.checkpoint);
+  const parentBody = input.parent_body;
+  const childBody = input.child_body;
+  const parentRevision = input.parent_revision ?? (spec.parent === 'source' ? SOURCE_PARENT_REVISION : '2026-09-09T00:00:01Z');
+  const childRevision = input.child_revision ?? (spec.child === 'source' ? SOURCE_CHILD_REVISION : '2026-09-09T00:00:02Z');
+  const pr379Revision = input.pr_379_revision ?? (spec.pr_379 === 'OPEN' ? FINALISATION_PR379_SOURCE_REVISION : '2026-09-09T00:00:03Z');
+  const evidence = {
+    schema: FINALISATION_EVIDENCE_SCHEMA,
+    root: FINALISATION_ROOT,
+    lock: FINALISATION_LOCK,
+    decision_digest: digestValue(decision),
+    repository: REPOSITORY,
+    parent_issue: PARENT_ISSUE,
+    child_issue: CHILD_ISSUE,
+    parent: finalisationBodyObservation(parentBody, 'parent', parentRevision),
+    child: finalisationBodyObservation(childBody, 'child', childRevision),
+    pr_379: {
+      ...finalisationPr379FactsForState(spec.pr_379),
+      revision: pr379Revision,
+      facts: finalisationPr379FactsForState(spec.pr_379),
+      facts_digest: digestValue(finalisationPr379FactsForState(spec.pr_379)),
+      complete: true,
+    },
+    pr_380: {
+      ...finalisationPr380Facts(),
+      revision: input.pr_380_revision || '2026-09-09T00:00:04Z',
+      facts: finalisationPr380Facts(),
+      facts_digest: digestValue(finalisationPr380Facts()),
+      complete: true,
+    },
+    immutable_source_main: { ref: 'main', sha: PR380_MERGE_COMMIT, tree: PR380_TREE, equals_merge_commit: true, complete: true },
+    merge_ancestry: {
+      accepted_head: PR380_HEAD,
+      accepted_head_tree: PR380_TREE,
+      merge_commit: PR380_MERGE_COMMIT,
+      merge_tree: PR380_TREE,
+      method: 'MERGE_COMMIT',
+      ordered_parents: [PR380_BASE_SHA, PR380_HEAD],
+      merged: true,
+    },
+    execution_current_main: input.execution_current_main === undefined
+      ? finalisationExecutionCurrentMainFixture()
+      : clone(input.execution_current_main),
+    collector: {
+      kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
+      identity: 'github-web-readonly-adapter',
+      version: 'v1',
+      authenticated: true,
+      provider_client_used: false,
+    },
+    freshness: {
+      authenticated: true,
+      complete: true,
+      observed_at: input.observed_at || '2026-09-09T00:00:05Z',
+      collection_revision: input.collection_revision || '2026-09-09T00:00:06Z',
+    },
+    source_binding: null,
+    transaction: {
+      acknowledgement: input.acknowledgement || 'CONFIRMED',
+      acknowledgement_loss_operation_order: input.acknowledgement === 'LOST' ? spec.completed[spec.completed.length - 1] || null : null,
+      complete: true,
+      completed_operation_orders: spec.completed,
+      previous_source_binding: spec.previous === null ? null : {
+        checkpoint: spec.previous,
+        binding_digest: finalisationCheckpointBindingDigest(spec.previous),
+        complete: true,
+      },
+      readback: { complete: true, exact: true, fresh_complete_rebind: true },
+      checkpoint: input.checkpoint,
+    },
+    evidence_digest: null,
+  };
+  if (!evidence.parent || !evidence.child) return failure('FINALISATION_EVIDENCE_FIXTURE_INVALID');
+  evidence.source_binding = finalisationBindingFromEvidence(evidence);
+  evidence.source_binding.snapshot_digest = digestValue(without(evidence.source_binding, 'snapshot_digest'));
+  evidence.evidence_digest = digestValue(without(evidence, 'evidence_digest'));
+  return evidence;
+}
+function finalisationOperationTarget(spec, targets) {
+  if (spec.operation_kind === 'IDEMPOTENT_CLOSE') {
+    return {
+      target_github_state: 'CLOSED',
+      target_pr_facts_digest: digestValue(finalisationPr379FactsForState('CLOSED')),
+    };
+  }
+  const state = spec.target_stage === 'STAGE_A' ? targets.stage_a : targets.stage_b;
+  const kind = spec.issue === CHILD_ISSUE ? 'child' : 'parent';
+  const rendered = spec.target_stage === 'STAGE_A' ? targets.rendered.stage_a : targets.rendered.stage_b;
+  const targetBytes = rendered[kind];
+  return {
+    target_canonical_digest: digestValue(state),
+    target_body_digest: sha256Text(targetBytes),
+    target_projection_digest: rendered.projections[kind].projection_digest,
+    target_bytes: targetBytes,
+  };
+}
+function buildPostMergeEpochFinalisationOperation(evidence, parsed) {
+  const spec = finalisationCheckpointSpec(parsed.checkpoint);
+  if (!spec || spec.next_order === null) return null;
+  const order = FINALISATION_OPERATION_ORDER[spec.next_order - 1];
+  const resourceRevision = order.issue === CHILD_ISSUE
+    ? evidence.child.revision
+    : order.issue === PARENT_ISSUE
+      ? evidence.parent.revision
+      : evidence.pr_379.revision;
+  return {
+    schema: FINALISATION_OPERATION_SCHEMA,
+    order: order.order,
+    operation_id: order.operation_id,
+    issue: order.issue,
+    target_kind: order.target_kind,
+    operation_kind: order.operation_kind,
+    derived_from_checkpoint: parsed.checkpoint,
+    ...finalisationOperationTarget(order, FINALISATION_TARGET_TABLE),
+    precondition: {
+      complete: true,
+      resource_revision: resourceRevision,
+      source_binding_digest: evidence.source_binding.snapshot_digest,
+    },
+    provider_client_used: false,
+    provider_cas_claim: false,
+    write_safety_mode: FINALISATION_WRITE_SAFETY_MODE,
+    operation_digest: digestValue({
+      schema: FINALISATION_OPERATION_SCHEMA,
+      order: order.order,
+      operation_id: order.operation_id,
+      issue: order.issue,
+      target_kind: order.target_kind,
+      operation_kind: order.operation_kind,
+      derived_from_checkpoint: parsed.checkpoint,
+      target_canonical_digest: order.target_stage ? digestValue(finalisationStateForKind(FINALISATION_TARGET_TABLE, order.target_stage === 'STAGE_A' ? 'stage_a' : 'stage_b')) : null,
+      target_github_state: order.operation_kind === 'IDEMPOTENT_CLOSE' ? 'CLOSED' : null,
+    }),
+  };
+}
+function previewPostMergeEpochFinalisation(input = {}) {
+  if (!isRecord(input) || !exactKeys(input, ['decision', 'evidence'])) return failure('FINALISATION_PREVIEW_INPUT_INVALID');
+  const decisionValid = validatePostMergeEpochFinalisationDecision(input.decision);
+  if (!decisionValid.ok) return decisionValid;
+  const evidenceValid = validatePostMergeEpochFinalisationEvidence(input.evidence, input.decision);
+  if (!evidenceValid.ok) return evidenceValid;
+  const operations = [];
+  const nextOperation = buildPostMergeEpochFinalisationOperation(input.evidence, evidenceValid);
+  if (nextOperation) operations.push(nextOperation);
+  const zeroDelta = evidenceValid.checkpoint === 'FINAL_TARGET_OBSERVED';
+  return success(zeroDelta ? 'FINALISATION_ZERO_DELTA' : 'FINALISATION_NEXT_OPERATION_READY', {
+    schema: FINALISATION_OPERATION_SCHEMA,
+    root: FINALISATION_ROOT,
+    lock: FINALISATION_LOCK,
+    checkpoint: evidenceValid.checkpoint,
+    status: zeroDelta ? 'FINAL_TARGET_OBSERVED' : 'NEXT_OPERATION_ONLY',
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+    stage_a_canonical_digest: FINALISATION_STAGE_A_CANONICAL_DIGEST,
+    stage_b_canonical_digest: FINALISATION_STAGE_B_CANONICAL_DIGEST,
+    acknowledgement_loss_rebind: input.evidence.transaction.acknowledgement === 'LOST',
+    operations,
+    operation_count: operations.length,
+    operation_order: operations.map((operation) => operation.order),
+    next_operation: nextOperation,
+    provider_client_used: false,
+    provider_cas_claim: false,
+    programme_apply_performed: false,
+    e4_started: false,
+    readback_required: true,
+  });
+}
+
 function validateControllerBootstrap(value) {
   const keys = ['schema', 'profile', 'repository', 'parent_issue', 'programme_state_schema', 'surface_contract_schema', 'toolkit_package_version', 'toolkit_contract', 'conformance', 'compatibility'];
   if (!isRecord(value) || !exactKeys(value, keys)
@@ -1813,6 +3627,20 @@ const projectionBootstrapRecovery = Object.freeze({
   validateControllerBootstrap,
   verifyBootstrapWorkspaceProof,
 });
+const postMergeEpochFinalisation = Object.freeze({
+  schema: FINALISATION_DECISION_SCHEMA,
+  evidenceSchema: FINALISATION_EVIDENCE_SCHEMA,
+  operationSchema: FINALISATION_OPERATION_SCHEMA,
+  createDecision: createPostMergeEpochFinalisationDecision,
+  validateDecision: validatePostMergeEpochFinalisationDecision,
+  deriveTargets: derivePostMergeEpochFinalisationTargets,
+  buildStageATargetState: buildPostMergeEpochFinalisationStageATargetState,
+  buildStageBTargetState: buildPostMergeEpochFinalisationStageBTargetState,
+  validateEvidence: validatePostMergeEpochFinalisationEvidence,
+  buildEvidence: buildPostMergeEpochFinalisationEvidence,
+  classifyCheckpoint: classifyPostMergeEpochFinalisationCheckpoint,
+  preview: previewPostMergeEpochFinalisation,
+});
 const programmeV5 = Object.freeze({
   schema: STATE_SCHEMA,
   validateCanonicalStateV5,
@@ -1823,6 +3651,7 @@ const programmeV5 = Object.freeze({
   renderProgrammeV5,
   parseProgrammeV5Body,
   projectionBootstrapRecovery,
+  postMergeEpochFinalisation,
 });
 
 module.exports = Object.freeze({
@@ -1847,6 +3676,39 @@ module.exports = Object.freeze({
   SOURCE_PARENT_REVISION,
   SOURCE_CHILD_REVISION,
   TARGET_CANONICAL_DIGEST,
+  FINALISATION_ROOT,
+  FINALISATION_LOCK,
+  FINALISATION_SCOPE,
+  FINALISATION_WRITE_SAFETY_MODE,
+  FINALISATION_DECISION_SCHEMA,
+  FINALISATION_EVIDENCE_SCHEMA,
+  FINALISATION_OPERATION_SCHEMA,
+  FINALISATION_SOURCE_CANONICAL_DIGEST,
+  FINALISATION_STAGE_A_CANONICAL_DIGEST,
+  FINALISATION_STAGE_B_CANONICAL_DIGEST,
+  PR380_HEAD,
+  PR380_TREE,
+  PR380_BRANCH,
+  PR380_BASE_SHA,
+  PR380_VERSION,
+  PR380_MERGE_COMMIT,
+  FINAL_G4_EVIDENCE_REF,
+  POST_MERGE_TECHNICAL_EVIDENCE_REF,
+  PR379_NON_CONVERGENCE_EVIDENCE_REF,
+  FINALISATION_AUTHORITY,
+  FINALISATION_CHECKPOINTS,
+  FINALISATION_OPERATION_ORDER,
+  FINALISATION_TRANSITION_ID,
+  FINALISATION_PR379_SOURCE_REVISION,
+  FINALISATION_SOURCE_STATE,
+  FINALISATION_SOURCE_RENDERED,
+  FINALISATION_SOURCE_PARENT_BODY_DIGEST,
+  FINALISATION_SOURCE_CHILD_BODY_DIGEST,
+  FINALISATION_STAGE_A_TARGET_STATE,
+  FINALISATION_STAGE_B_TARGET_STATE,
+  FINALISATION_RENDERED_TARGETS,
+  FINALISATION_CHECKPOINT_TABLE,
+  FINALISATION_TARGET_TABLE,
   RECOVERY_EVIDENCE_REF,
   HOLD_EVIDENCE_REF,
   RETENTION_EVIDENCE_REF,
@@ -1872,6 +3734,17 @@ module.exports = Object.freeze({
   validateDecision,
   validateCanonicalStateV5,
   buildRecoveryTargetState,
+  validateInterEpochStateV5,
+  validateFinalisationSourceState,
+  createPostMergeEpochFinalisationDecision,
+  validatePostMergeEpochFinalisationDecision,
+  derivePostMergeEpochFinalisationTargets,
+  buildPostMergeEpochFinalisationStageATargetState,
+  buildPostMergeEpochFinalisationStageBTargetState,
+  validatePostMergeEpochFinalisationEvidence,
+  buildPostMergeEpochFinalisationEvidence,
+  classifyPostMergeEpochFinalisationCheckpoint,
+  previewPostMergeEpochFinalisation,
   deriveProjectionV5: programmeV5.deriveProjectionV5,
   renderProgrammeV5,
   parseParentV5Body,
@@ -1885,5 +3758,6 @@ module.exports = Object.freeze({
   verifyBootstrapWorkspaceProof,
   validateControllerBootstrap,
   projectionBootstrapRecovery,
+  postMergeEpochFinalisation,
   programmeV5,
 });

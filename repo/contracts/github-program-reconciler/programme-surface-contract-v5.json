@@ -4,13 +4,30 @@
   "schema": "toolkit.github-program.surface.v5",
   "additionalProperties": false,
   "repository": "weijunswj/ai-agent-toolkit",
-  "design_lock": "DL-S2-E3-V5-PROJECTION-BOOTSTRAP-RECOVERY-001",
+  "design_lock": "DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
   "toolkit_package_version": "2.10.8",
   "canonical_state": {
     "schema": "toolkit.github-program.state.v5",
     "parent_issue": 240,
     "current_child_issue": 359,
     "current_zero_lane_requires_active_blocking_recovery_hold": true,
+    "zero_lane_classes": [
+      "RECOVERY_HELD",
+      "CLEAN_INTER_EPOCH"
+    ],
+    "clean_inter_epoch": {
+      "design_lock": "DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
+      "source_canonical_digest": "1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa",
+      "stage_a_canonical_digest": "c1a84af3e7ea7baf3129cd64ce12ba038e3c71fe8d1610eb516d4955d488eb65",
+      "stage_b_canonical_digest": "4122eead6382d95be5e0593d2e2f35b54a6c07bf8592cf4c5a5d9a67ee8b95c2",
+      "allowed_states": [
+        "STAGE_A",
+        "STAGE_B"
+      ],
+      "zero_lane_requires_hold": false,
+      "narrow_exact_digest_class": true,
+      "generic_zero_lane_relaxation": false
+    },
     "unknown_major_fails_closed": true
   },
   "managed_blocks": {
@@ -53,6 +70,88 @@
     "no_general_state_control": true,
     "no_pr_body_renderer": true
   },
+  "post_merge_finalisation": {
+    "root": "E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
+    "lock": "DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002",
+    "decision_schema": "toolkit.github-program.post-merge-finalisation-decision.v1",
+    "evidence_schema": "toolkit.github-program.post-merge-finalisation-evidence.v1",
+    "source_canonical_digest": "1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa",
+    "stage_a_canonical_digest": "c1a84af3e7ea7baf3129cd64ce12ba038e3c71fe8d1610eb516d4955d488eb65",
+    "stage_b_canonical_digest": "4122eead6382d95be5e0593d2e2f35b54a6c07bf8592cf4c5a5d9a67ee8b95c2",
+    "source_only_derivation": {
+      "sequence": [
+        "VALIDATE_ACCEPTED_DECISION_SOURCE",
+        "DERIVE_SOURCE",
+        "DERIVE_STAGE_A_FROM_SOURCE",
+        "DERIVE_STAGE_B_FROM_STAGE_A",
+        "RENDER_TARGET_BODIES_PROJECTIONS_DIGESTS",
+        "DEEP_FREEZE_TARGET_CHECKPOINT_TABLE",
+        "INSPECT_PROVIDER_EVIDENCE"
+      ],
+      "provider_evidence_is_observational_only": true,
+      "provider_evidence_may_define_target": false,
+      "provider_evidence_may_select_target_constructor": false,
+      "provider_evidence_may_construct_stage_a_or_b": false,
+      "provider_evidence_may_rebase_transaction": false,
+      "previous_source_binding_is_corroboration_only": true
+    },
+    "targets": {
+      "active_lanes": [],
+      "holds": [],
+      "recovery_present": false,
+      "stage_a": {
+        "pr_379_registry_status": "RETIRED",
+        "pr_379_github_state": "OPEN",
+        "pr_380_status": "ACCEPTED",
+        "pr_380_github_state": "MERGED",
+        "pr_380_merged": true,
+        "pr_380_completes_child": false,
+        "e3_status": "ACCEPTED",
+        "e4_status": "PENDING",
+        "e4_started": false,
+        "active_gate": false,
+        "not_reintroduced_prs": [376, 377, 378]
+      },
+      "stage_b": {
+        "differs_from_stage_a_only": "children[1].pr_registry[1].github_state",
+        "pr_379_github_state": "CLOSED"
+      }
+    },
+    "targets_derived_before_evidence": true,
+    "targets_deep_frozen": true,
+    "previous_source_binding_corroboration_only": true,
+    "fallback_target_constructor": false,
+    "checkpoints": [
+      "BEFORE_STAGE_A",
+      "CHILD_STAGE_A_OBSERVED",
+      "PARENT_STAGE_A_OBSERVED",
+      "PR379_CLOSED_STAGE_A",
+      "CHILD_STAGE_B_OBSERVED",
+      "FINAL_TARGET_OBSERVED"
+    ],
+    "operations": [
+      "CHILD_STAGE_A",
+      "PARENT_STAGE_A",
+      "PR379_CLOSE",
+      "CHILD_STAGE_B",
+      "PARENT_STAGE_B"
+    ],
+    "operation_sequence": [
+      { "order": 1, "operation_id": "CHILD_STAGE_A", "issue": 359, "target_kind": "ISSUE_BODY", "target_stage": "STAGE_A" },
+      { "order": 2, "operation_id": "PARENT_STAGE_A", "issue": 240, "target_kind": "ISSUE_BODY", "target_stage": "STAGE_A" },
+      { "order": 3, "operation_id": "PR379_CLOSE", "issue": 379, "target_kind": "PULL_REQUEST_STATE", "target_stage": null },
+      { "order": 4, "operation_id": "CHILD_STAGE_B", "issue": 359, "target_kind": "ISSUE_BODY", "target_stage": "STAGE_B" },
+      { "order": 5, "operation_id": "PARENT_STAGE_B", "issue": 240, "target_kind": "ISSUE_BODY", "target_stage": "STAGE_B" }
+    ],
+    "one_next_operation_or_zero_delta": true,
+    "unknown_or_mixed_state_fails_closed": true,
+    "pr_380_immutable": true,
+    "pr_379_open_to_closed_only": true,
+    "provider_client": false,
+    "provider_cas": false,
+    "programme_apply": false,
+    "e4_activation": false
+  },
   "write_safety": {
     "mode": "WEB_EXCLUSIVE_SINGLE_WRITER_RECOVERY_WINDOW",
     "provider_cas_available": false,
@@ -60,6 +159,15 @@
     "fresh_prewrite_evidence_revision_rebinding": true,
     "postwrite_exact_readback": true,
     "residual_external_race_disclosed": true
+  },
+  "post_merge_finalisation_write_safety": {
+    "mode": "WEB_EXCLUSIVE_POST_MERGE_FINALISATION",
+    "provider_client_available": false,
+    "provider_cas_available": false,
+    "provider_cas_claim": false,
+    "fresh_complete_rebind": true,
+    "exact_readback_required": true,
+    "one_next_operation_only": true
   },
   "receipt_binding": {
     "schema": "toolkit.github-program.run-receipt.v1",
@@ -83,6 +191,7 @@
     "provider_client": false,
     "provider_cas": false,
     "programme_apply": false,
+    "e4_activation": false,
     "pr_body_mutation": false,
     "pr_renderer": false,
     "normal_lane_creation": false,
