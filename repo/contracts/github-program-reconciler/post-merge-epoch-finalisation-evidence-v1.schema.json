@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "toolkit.github-program.post-merge-epoch-finalisation-evidence.v1",
+  "title": "Bounded Web evidence for v5 post-merge epoch finalisation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "root",
+    "lock",
+    "decision_digest",
+    "repository",
+    "parent_issue",
+    "child_issue",
+    "parent",
+    "child",
+    "pr_379",
+    "pr_380",
+    "accepted_evidence",
+    "accepted_epoch_event",
+    "merge_ancestry",
+    "canonical_main",
+    "source_revisions",
+    "write_authority",
+    "pagination",
+    "provider_facts",
+    "collector",
+    "transaction",
+    "evidence_digest"
+  ],
+  "properties": {
+    "schema": { "const": "toolkit.github-program.post-merge-epoch-finalisation-evidence.v1" },
+    "root": { "const": "E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+    "lock": { "const": "DL-S2-E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+    "decision_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "repository": { "const": "weijunswj/ai-agent-toolkit" },
+    "parent_issue": { "const": 240 },
+    "child_issue": { "const": 359 },
+    "parent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_digest", "canonical_digest", "complete", "issue", "native_children", "prefix_digest", "raw_body", "relationships", "revision", "state", "suffix_digest"],
+      "properties": {
+        "issue": { "const": 240 },
+        "raw_body": { "type": "string" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "revision": { "type": "string" },
+        "state": { "$ref": "programme-state-v5.schema.json" },
+        "native_children": { "const": [358, 359, 360, 361, 362, 363] },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["child_issue", "child_is_native_sub_issue", "parent_issue", "sole_current"],
+          "properties": {
+            "child_issue": { "const": 359 },
+            "child_is_native_sub_issue": { "const": true },
+            "parent_issue": { "const": 240 },
+            "sole_current": { "const": true }
+          }
+        },
+        "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "complete": { "const": true }
+      }
+    },
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_digest", "canonical_digest", "complete", "dependencies", "issue", "labels", "native_parent", "prefix_digest", "projection", "raw_body", "relationships", "revision", "sole_current", "state", "suffix_digest"],
+      "properties": {
+        "issue": { "const": 359 },
+        "raw_body": { "type": "string" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "revision": { "type": "string" },
+        "labels": { "const": ["current"] },
+        "native_parent": { "const": 240 },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["child_issue", "child_is_native_sub_issue", "parent_issue", "sole_current"],
+          "properties": {
+            "child_issue": { "const": 359 },
+            "child_is_native_sub_issue": { "const": true },
+            "parent_issue": { "const": 240 },
+            "sole_current": { "const": true }
+          }
+        },
+        "sole_current": { "const": true },
+        "dependencies": { "const": [] },
+        "state": { "type": "object" },
+        "projection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonical_digest", "extension_digest", "kind", "number", "parent_issue", "projection_digest", "repository", "schema"],
+          "properties": {
+            "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "extension_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "kind": { "const": "child" },
+            "number": { "const": 359 },
+            "parent_issue": { "const": 240 },
+            "projection_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "repository": { "const": "weijunswj/ai-agent-toolkit" },
+            "schema": { "const": "toolkit.github-program.projection.v1" }
+          }
+        },
+        "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "complete": { "const": true }
+      }
+    },
+    "pr_379": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_ref", "base_sha", "branch", "candidate", "changed_files", "complete", "draft", "github_state", "head", "merged", "merged_at", "non_convergence_evidence_ref", "pr", "repository", "retention_evidence_ref", "retirement_evidence_ref", "state", "status", "tree"],
+      "properties": {
+        "repository": { "const": "weijunswj/ai-agent-toolkit" },
+        "pr": { "const": 379 },
+        "state": { "enum": ["OPEN", "CLOSED"] },
+        "github_state": { "enum": ["OPEN", "CLOSED"] },
+        "status": { "const": "RETIRED" },
+        "draft": { "const": true },
+        "merged": { "const": false },
+        "merged_at": { "const": null },
+        "head": { "const": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1" },
+        "tree": { "const": "2c712aa9c7c6e66a89bdd9d033acece5415fd575" },
+        "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
+        "base_ref": { "const": "main" },
+        "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+        "changed_files": { "const": 48 },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+          "properties": {
+            "repository": { "const": "weijunswj/ai-agent-toolkit" },
+            "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
+            "base_ref": { "const": "main" },
+            "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+            "head": { "const": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1" },
+            "tree": { "const": "2c712aa9c7c6e66a89bdd9d033acece5415fd575" },
+            "version": { "const": "2.11.0" }
+          }
+        },
+        "retention_evidence_ref": { "const": "web-pr379-retained-5580538176" },
+        "retirement_evidence_ref": { "const": "post-merge-technical-finality-5144137683" },
+        "non_convergence_evidence_ref": { "const": "pr379-non-convergence-5579738186" },
+        "complete": { "const": true }
+      }
+    },
+    "pr_380": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_evidence_ref", "accepted_head_tree", "base_ref", "base_sha", "candidate", "complete", "draft", "github_state", "head", "merged", "merge_commit", "merge_method", "ordered_parents", "pr", "repository", "state", "status", "tree"],
+      "properties": {
+        "repository": { "const": "weijunswj/ai-agent-toolkit" },
+        "pr": { "const": 380 },
+        "state": { "const": "MERGED" },
+        "github_state": { "const": "MERGED" },
+        "status": { "const": "ACCEPTED" },
+        "draft": { "const": false },
+        "merged": { "const": true },
+        "merge_method": { "const": "MERGE_COMMIT" },
+        "merge_commit": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "ordered_parents": { "const": ["c72028c63cc09dd07d3e522692065448b6b7dbb6", "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a"] },
+        "accepted_head_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+        "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "base_ref": { "const": "main" },
+        "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+          "properties": {
+            "repository": { "const": "weijunswj/ai-agent-toolkit" },
+            "branch": { "const": "codex/e3-v5-projection-bootstrap-recovery-001" },
+            "base_ref": { "const": "main" },
+            "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+            "head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+            "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+            "version": { "const": "2.10.8" }
+          }
+        },
+        "accepted_evidence_ref": { "const": "post-merge-g4-web-acceptance-5143994659" },
+        "complete": { "const": true }
+      }
+    },
+    "accepted_evidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["body_digest", "id", "kind", "reference"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "const": "WEB" },
+          "reference": { "type": "string" },
+          "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "accepted_epoch_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["child_issue", "complete", "disposition", "epoch_id", "evidence_ref", "gate", "id", "occurrence"],
+      "properties": {
+        "child_issue": { "const": 359 },
+        "disposition": { "const": "ACCEPTED" },
+        "epoch_id": { "const": "E3" },
+        "evidence_ref": { "const": "post-merge-g4-web-acceptance-5143994659" },
+        "gate": { "const": "G4" },
+        "id": { "const": "e3-post-merge-epoch-finalisation" },
+        "occurrence": { "const": 1 },
+        "complete": { "const": true }
+      }
+    },
+    "merge_ancestry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_head", "accepted_head_tree", "merge_commit", "merge_tree", "merged", "method", "ordered_parents"],
+      "properties": {
+        "merged": { "const": true },
+        "method": { "const": "MERGE_COMMIT" },
+        "merge_commit": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "ordered_parents": { "const": ["c72028c63cc09dd07d3e522692065448b6b7dbb6", "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a"] },
+        "accepted_head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+        "accepted_head_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "merge_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" }
+      }
+    },
+    "canonical_main": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "equals_merge_commit", "ref", "sha", "tree"],
+      "properties": {
+        "ref": { "const": "main" },
+        "sha": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "equals_merge_commit": { "const": true },
+        "complete": { "const": true }
+      }
+    },
+    "source_revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_digest", "child", "complete", "parent"],
+      "properties": {
+        "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "parent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "prefix_digest", "revision", "suffix_digest"],
+          "properties": {
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string" },
+            "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "child": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["body_digest", "prefix_digest", "revision", "suffix_digest"],
+          "properties": {
+            "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "prefix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "revision": { "type": "string" },
+            "suffix_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "complete": { "const": true }
+      }
+    },
+    "write_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body", "body_digest", "complete", "lock", "reference", "repository", "root", "scope"],
+      "properties": {
+        "reference": { "type": "string" },
+        "body": { "type": "string" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "repository": { "const": "weijunswj/ai-agent-toolkit" },
+        "root": { "const": "E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+        "lock": { "const": "DL-S2-E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+        "scope": { "const": "POST_MERGE_EPOCH_FINALISATION" },
+        "complete": { "const": true }
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collections", "complete"],
+      "properties": {
+        "complete": { "const": true },
+        "collections": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["complete", "endpoint_or_query_identity", "expected_count", "id", "inventory_digest", "page_count", "retrieved_count"],
+            "properties": {
+              "id": { "type": "string" },
+              "endpoint_or_query_identity": { "type": "string" },
+              "page_count": { "const": 1 },
+              "retrieved_count": { "type": "integer", "minimum": 1 },
+              "expected_count": { "type": "integer", "minimum": 1 },
+              "inventory_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "complete": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    "provider_facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "facts_digest", "inventory", "provider_cas_claim", "provider_client_used"],
+      "properties": {
+        "inventory": { "const": "EXACT_BOUNDED" },
+        "provider_client_used": { "const": false },
+        "provider_cas_claim": { "const": false },
+        "facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "complete": { "const": true }
+      }
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authenticated", "identity", "kind", "provider_client_used", "version"],
+      "properties": {
+        "kind": { "const": "WEB_AUTHENTICATED_GITHUB_COLLECTION" },
+        "identity": { "const": "github-web-readonly-adapter" },
+        "version": { "const": "v1" },
+        "authenticated": { "const": true },
+        "provider_client_used": { "const": false }
+      }
+    },
+    "transaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acknowledgement", "acknowledgement_loss_operation_order", "checkpoint", "complete", "completed_operation_orders", "continuation", "duplicate_event_count", "readback"],
+      "properties": {
+        "checkpoint": { "type": "string" },
+        "acknowledgement": { "enum": ["CONFIRMED", "LOST"] },
+        "acknowledgement_loss_operation_order": { "type": ["integer", "null"], "minimum": 1 },
+        "completed_operation_orders": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+        "continuation": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["authority_body_digest", "complete", "decision_digest", "exact_readback", "fresh_complete_rebind", "previous_checkpoint"],
+          "properties": {
+            "previous_checkpoint": { "type": "string" },
+            "decision_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "authority_body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "fresh_complete_rebind": { "const": true },
+            "exact_readback": { "const": true },
+            "complete": { "const": true }
+          }
+        },
+        "readback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "exact"],
+          "properties": { "complete": { "const": true }, "exact": { "const": true } }
+        },
+        "duplicate_event_count": { "const": 1 },
+        "complete": { "const": true }
+      }
+    },
+    "evidence_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

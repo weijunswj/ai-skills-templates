@@ -13,6 +13,10 @@ const repository = programme.REPOSITORY;
 const decision = programme.createRecoveryDecision();
 const decisionSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'projection-bootstrap-recovery-decision-v1.schema.json');
 const publishedDecisionSchema = JSON.parse(fs.readFileSync(decisionSchemaPath, 'utf8'));
+const finalisationDecisionSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'post-merge-epoch-finalisation-decision-v1.schema.json');
+const finalisationEvidenceSchemaPath = path.join(__dirname, '..', 'contracts', 'github-program-reconciler', 'post-merge-epoch-finalisation-evidence-v1.schema.json');
+const publishedFinalisationDecisionSchema = JSON.parse(fs.readFileSync(finalisationDecisionSchemaPath, 'utf8'));
+const publishedFinalisationEvidenceSchema = JSON.parse(fs.readFileSync(finalisationEvidenceSchemaPath, 'utf8'));
 const PARENT_BODY = "<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:BEGIN v5 -->\n# Programme dashboard\n\n## Goal\nDeliver the six-stage Toolkit programme through truthful, deterministic, source-traceable programme views.\n\n## Programme status\n| Field | Value |\n| --- | --- |\n| Aggregate programme state | HELD |\n| Concurrency mode | SINGLE_DEFAULT |\n| Active lanes | 1 |\n| Max lanes | 1 |\n| Current child IDs | #359 |\n| Programme finality state | HELD |\n\n## Active work\n| Child | State | Epoch / Gate | Candidate / PR | Material hold |\n| --- | --- | --- | --- | --- |\n| #359 - S2 — Productize retained skills + native host adapters | ACTIVE | E3 / G4 | PR #366 @ a7dcb69da43100c5411076008307a221e89b720f | None |\n\n## Children\n| Child | Lifecycle | Dependencies | Outcome |\n| --- | --- | --- | --- |\n| #358 - S1 — Canonical topology collapse + permanent Ledger retirement | COMPLETED | None | S1 — Canonical topology collapse + permanent Ledger retirement is completed with retained evidence. |\n| #359 - S2 — Productize retained skills + native host adapters | CURRENT | None | S2 — Productize retained skills + native host adapters is current in E3 at G4. |\n| #360 - S3 — Repository Loop Manager + trusted CI live integration | QUEUED | #358 | S3 — Repository Loop Manager + trusted CI live integration is queued behind its declared dependencies. |\n| #361 - S4 — Official n8n Skills + API-first workflow transport | QUEUED | #358, #359, #360 | S4 — Official n8n Skills + API-first workflow transport is queued behind its declared dependencies. |\n| #362 - S5 — External authority, secrets + hosted operations | QUEUED | #358, #359, #360 | S5 — External authority, secrets + hosted operations is queued behind its declared dependencies. |\n| #363 - S6 — Native UAT + final whole-Toolkit assurance | QUEUED | #358, #359, #360, #361, #362 | S6 — Native UAT + final whole-Toolkit assurance is queued behind its declared dependencies. |\n\n## Progress\n| Metric | Value |\n| --- | --- |\n| Completed children / total | 1 / 6 |\n| Retired children | 0 |\n| Accepted or retired epochs / total | 3 / 9 |\n| Active lanes | 1 |\n| Web-decision-required lanes | 0 |\n\n## Major holds\nNone\n\n## Additional context\nNone\n\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CANONICAL v5 eyJlbnZlbG9wZSI6eyJjYW5vbmljYWxfZGlnZXN0IjoiYTA5ZmRhZmE2Yjc3YWQ4NTYyNDI5OGNlZWE0ODhhNWMzNDJkMDBhMDcwMDIxOGRlNjJiYTIyNzZlZDA1MDI4MCIsImV4dGVuc2lvbl9kaWdlc3QiOiI0ZjUzY2RhMThjMmJhYTBjMDM1NGJiNWY5YTNlY2JlNWVkMTJhYjRkOGUxMWJhODczYzJmMTExNjEyMDJiOTQ1Iiwia2luZCI6InBhcmVudCIsIm51bWJlciI6MjQwLCJwYXJlbnRfaXNzdWUiOjI0MCwicHJvamVjdGlvbl9kaWdlc3QiOiI3ZjY4OGNmM2M5MzIxOGYyMzA4MWJhMDQ0NzFjMWYwYjZjYTdlNGMxMjA2ZDk3ODBmMjIxMjI0NmM3ODI5ZDRjIiwicmVwb3NpdG9yeSI6IndlaWp1bnN3ai9haS1hZ2VudC10b29sa2l0Iiwic2NoZW1hIjoidG9vbGtpdC5naXRodWItcHJvZ3JhbS5wcm9qZWN0aW9uLnYxIn0sInN0YXRlIjp7ImFjdGl2ZV9sYW5lcyI6W3siY2FuZGlkYXRlIjp7ImJhc2VfcmVmIjoibWFpbiIsImJhc2Vfc2hhIjoiZTg2YTJkNzRmZDc3MWY2NTAwYWEwMmZlMDg5Mjk0MDkzM2JmNzY0NyIsImJyYW5jaCI6InNvbC9zMi1wcm9kdWN0aXNhdGlvbi1nMyIsImVwb2NoX2lkIjoiRTMiLCJoZWFkIjoiYTdkY2I2OWRhNDMxMDBjNTQxMTA3NjAwODMwN2EyMjFlODliNzIwZiIsInByIjozNjYsInRyZWUiOiIyYzg4NzgyZmEyNzRlNTAyZmI2YzhjNTEyNmQ1NTQ3MDExMmYzOGU5IiwidmVyc2lvbiI6IjIuMTIuMCJ9LCJjaGlsZF9pc3N1ZSI6MzU5LCJlcG9jaF9pZCI6IkUzIiwiZ2F0ZSI6Ikc0IiwiZ2F0ZV9yZXN1bHQiOm51bGwsImdhdGVfc3RhdGUiOiJBQ1RJVkUiLCJsYW5lX2lkIjoiY2hpbGQtMzU5Iiwid29ya19jbGFpbXMiOlt7Im1vZGUiOiJXUklURSIsIm9wZXJhdGlvbiI6ImNhbm9uaWNhbC10cmFuc2l0aW9uIiwicmVzb3VyY2UiOiJwcm9ncmFtbWUvY2hpbGQvMzU5In1dfV0sImNoaWxkcmVuIjpbeyJib3VuZGFyaWVzIjpbIktlZXAgY29tcGxldGVkIGFuZCBtZXJnZWQgUzEgc2NvcGUgY2xvc2VkLiIsIlMyIHRocm91Z2ggUzYgcmVtYWluIG91dHNpZGUgUzEuIl0sImRlbGl2ZXJhYmxlcyI6WyJDYW5vbmljYWwgVG9vbGtpdCB0b3BvbG9neSBjb2xsYXBzZS4iLCJQZXJtYW5lbnQgcmV0aXJlbWVudCBvZiBvYnNvbGV0ZSB0b3BvbG9neSBhbmQgZXh0ZXJuYWwgZXhlY3V0b3ItZXZhbHVhdGlvbiBMZWRnZXIgY291cGxpbmcuIl0sImRlcGVuZGVuY2llcyI6W10sImRvbmVfd2hlbiI6WyJDYW5vbmljYWwgc3VyZmFjZXMgYXJlIHJldGFpbmVkLCBvYnNvbGV0ZSB0b3BvbG9neSBhbmQgTGVkZ2VyIGNvdXBsaW5nIGFyZSBwZXJtYW5lbnRseSByZXRpcmVkLCBhbmQgY29tcGxldGVkIHNjb3BlIHJlbWFpbnMgY2xvc2VkLiJdLCJlbGk1IjoiVGhlIG9sZCBsYXlvdXQgd2FzIGNsZWFuZWQgdXAgYW5kIHRoaXMgZmluaXNoZWQgc3RlcCBzdGF5cyBjbG9zZWQuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOiJzMS1hY2NlcHRlZCIsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzEiLCJsb2NrIjoiREwtUzEtQ0FOT05JQ0FMLVRPUE9MT0dZLUNPTExBUFNFLTAwMS1HMiIsIm5hbWUiOiJTMSAtIENhbm9uaWNhbCB0b3BvbG9neSBjb2xsYXBzZSIsInB1cnBvc2UiOiJDYW5vbmljYWwgdG9wb2xvZ3kgY29sbGFwc2UiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6IkFDQ0VQVEVEIn1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjoiczEtYWNjZXB0ZWQiLCJzdGF0ZSI6Ik1FUkdFRCJ9LCJob2xkcyI6W10sImlzc3VlIjozNTgsImxpZmVjeWNsZSI6IkNPTVBMRVRFRCIsIm9iamVjdGl2ZSI6IkNvbGxhcHNlIFRvb2xraXQgdG8gY2Fub25pY2FsIHN1cmZhY2VzIGFuZCBwZXJtYW5lbnRseSByZXRpcmUgb2Jzb2xldGUgdG9wb2xvZ3kgcmVzaWR1ZS4iLCJvcmRlciI6MSwib3V0X29mX3Njb3BlIjpbIlJlb3BlbmluZyBjb21wbGV0ZWQgb3IgbWVyZ2VkIFMxIHNjb3BlLiIsIlMyIHRocm91Z2ggUzYgd29yay4iXSwicHJfcmVnaXN0cnkiOltdLCJzY29wZSI6WyJDb21wbGV0ZWQgUzEgdG9wb2xvZ3kgY29sbGFwc2UgYW5kIHBlcm1hbmVudCBvYnNvbGV0ZS9MZWRnZXIgY291cGxpbmcgcmV0aXJlbWVudC4iXSwic3VtbWFyeSI6IkNvbGxhcHNlIFRvb2xraXQgdG8gY2Fub25pY2FsIHN1cmZhY2VzIGFuZCBwZXJtYW5lbnRseSByZXRpcmUgb2Jzb2xldGUgdG9wb2xvZ3kgcmVzaWR1ZS4iLCJ0aXRsZSI6IlMxIOKAlCBDYW5vbmljYWwgdG9wb2xvZ3kgY29sbGFwc2UgKyBwZXJtYW5lbnQgTGVkZ2VyIHJldGlyZW1lbnQifSx7ImJvdW5kYXJpZXMiOlsiV2ViIG93bnMgZnJlc2ggRzQgZGlzcG9zaXRpb24sIEUzIGFjY2VwdGFuY2UsIFJlYWR5LCBtZXJnZSBhbmQgZmluYWxpdHkuIiwiRnJlc2ggRzQgaXMgYWN0aXZlIHdpdGggbm8gcmVzdWx0IHlldC4iLCJFNCBhbmQgUzMgdGhyb3VnaCBTNiBkbyBub3QgYmVnaW4gaW4gdGhpcyB0cmFuc2l0aW9uLiJdLCJkZWxpdmVyYWJsZXMiOlsiUmV0YWluZWQtc2tpbGwgcHJvZHVjdGlzYXRpb24uIiwiR2l0SHViIHByb2dyYW1tZSByZWNvbmNpbGVyIHY1LiIsIkZ1dHVyZSBFNCB0cnV0aGZ1bCBuYXRpdmUgYWRhcHRlcnMuIl0sImRlcGVuZGVuY2llcyI6W10sImRvbmVfd2hlbiI6WyJFMSBhbmQgRTIgcmVtYWluIGFjY2VwdGVkIHdpdGggcmV0YWluZWQgZXZpZGVuY2UuIiwiRTMgUmVwYWlyLTIsIHY1IG1pZ3JhdGlvbi9yZWFkYmFjay96ZXJvLWRlbHRhLCBjYW5vbmljYWwtZGF0YSBVWCBjb3JyZWN0aW9uLCBmcmVzaCBHNCBhbmQgV2ViIGFjY2VwdGFuY2UgYXJlIGNvbXBsZXRlLiIsIkU0IHRydXRoZnVsIG5hdGl2ZSBhZGFwdGVycyBhcmUgY29tcGxldGUgYW5kIFdlYiByZWNvcmRzIFMyIGZpbmFsaXR5LiJdLCJlbGk1IjoiVGhlIHByb2dyYW1tZSB0b29sIGlzIHJlcGFpcmVkIGFuZCBpdHMgZmluYWwgaW5kZXBlbmRlbnQgRTMgcmV2aWV3IGdhdGUgaXMgbm93IGFjdGl2ZSwgYnV0IG5vIHJlc3VsdCBvciBhY2NlcHRhbmNlIGV4aXN0cyB5ZXQuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOiJlMS1hY2NlcHRlZCIsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiRTEiLCJsb2NrIjoiREwtUzItQ1JFQVRJT04tR0FURS0wMDMiLCJuYW1lIjoiRTEgLSBDcmVhdGlvbiBHYXRlIiwicHVycG9zZSI6IkNyZWF0aW9uIGFuZCBhZG1pc3Npb24gZ2F0ZSIsInRlcm1pbmFsX2Rpc3Bvc2l0aW9uIjoiQUNDRVBURUQifSx7ImV2aWRlbmNlX3JlZiI6ImUyLWFjY2VwdGVkIiwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJFMiIsImxvY2siOiJETC1TMi1QUk9EVUNULVBPUlRGT0xJTy0wMTUiLCJuYW1lIjoiRTIgLSBQcm9kdWN0IFBvcnRmb2xpbyIsInB1cnBvc2UiOiJSZXRhaW5lZCBwcm9kdWN0IHBvcnRmb2xpbyIsInRlcm1pbmFsX2Rpc3Bvc2l0aW9uIjoiQUNDRVBURUQifSx7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJFMyIsImxvY2siOiJETC1TMi1HSVRIVUItUFJPR1JBTS1DT05WRVJHRU5DRS0wMDIiLCJuYW1lIjoiRTMgLSBHaXRIdWIgUHJvZ3JhbW1lIFByb2R1Y3QiLCJwdXJwb3NlIjoiTWFuYWdlZCBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsaWF0aW9uIiwidGVybWluYWxfZGlzcG9zaXRpb24iOm51bGx9LHsiZXZpZGVuY2VfcmVmIjpudWxsLCJnYXRlcyI6WyJHMSIsIkcyIiwiRzMiLCJHNCJdLCJpZCI6IkU0IiwibG9jayI6IkRMLVMyLU5BVElWRS1BREFQVEVSUy0wMDIiLCJuYW1lIjoiRTQgLSBOYXRpdmUgQWRhcHRlcnMiLCJwdXJwb3NlIjoiVHJ1dGhmdWwgbmF0aXZlIGhvc3QgYWRhcHRlcnMiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzU5LCJsaWZlY3ljbGUiOiJDVVJSRU5UIiwib2JqZWN0aXZlIjoiUHJvZHVjdGlzZSByZXRhaW5lZCBza2lsbHMsIGNvbXBsZXRlIHRoZSBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIsIHRoZW4gZmluaXNoIHRydXRoZnVsIG5hdGl2ZSBob3N0IGFkYXB0ZXJzLiIsIm9yZGVyIjoyLCJvdXRfb2Zfc2NvcGUiOlsiRzQgcmVzdWx0IG9yIEUzIGFjY2VwdGFuY2UgYmVmb3JlIHNlcGFyYXRlIFdlYiBhdXRob3JpdHkuIiwiUmVhZHksIG1lcmdlLCBmaW5hbGl0eSwgRTQgZXhlY3V0aW9uIGFuZCBTMyB0aHJvdWdoIFM2IHByb2dyZXNzaW9uLiJdLCJwcl9yZWdpc3RyeSI6W3siYWNjZXB0ZWRfZXZpZGVuY2VfcmVmIjpudWxsLCJjb21wbGV0ZXNfY2hpbGQiOmZhbHNlLCJlcG9jaF9pZCI6IkUzIiwicHIiOjM2NiwicmV0aXJlbWVudF9ldmlkZW5jZV9yZWYiOm51bGwsInJvbGUiOiJJTlRFUk1FRElBVEUiLCJzdGF0dXMiOiJBQ1RJVkUifV0sInNjb3BlIjpbIlJldGFpbmVkLXNraWxsIHByb2R1Y3Rpc2F0aW9uLCBHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIgdjUgYW5kIGZ1dHVyZSBFNCB0cnV0aGZ1bCBuYXRpdmUgYWRhcHRlcnMuIiwiRnJlc2ggRTMgRzQgdHJhbnNpdGlvbiBhbmQgZXhhY3QtY2FuZGlkYXRlIHZhbGlkYXRpb24uIl0sInN1bW1hcnkiOiJFMSBhbmQgRTIgYXJlIGFjY2VwdGVkOyBFMyBSZXBhaXItMiBpbXBsZW1lbnRhdGlvbiwgdjUgbWlncmF0aW9uL3JlYWRiYWNrL3plcm8tZGVsdGEgYW5kIGRvZ2Zvb2QgVVggY29ycmVjdGlvbiBhcmUgYWNoaWV2ZWQ7IGZyZXNoIEc0IGlzIG5vdyBhY3RpdmUgd2l0aCBubyByZXN1bHQuIiwidGl0bGUiOiJTMiDigJQgUHJvZHVjdGl6ZSByZXRhaW5lZCBza2lsbHMgKyBuYXRpdmUgaG9zdCBhZGFwdGVycyJ9LHsiYm91bmRhcmllcyI6WyJDb25zZXF1ZW50aWFsIGxpdmUgb3IgcmVwb3NpdG9yeS1wcm90ZWN0aW9uIG11dGF0aW9uIHJlcXVpcmVzIGV4cGxpY2l0IGF1dGhvcml0eS4iLCJUaGlzIHF1ZXVlZCBjaGlsZCBkb2VzIG5vdCBzdGFydCB1bnRpbCBpdHMgZGVwZW5kZW5jaWVzIGFyZSBjb21wbGV0ZSBvciByZXRpcmVkLiJdLCJkZWxpdmVyYWJsZXMiOlsiUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIgYW5kIHdvcmsgZ3JhcGguIiwiTGVhc2VzLCBmZW5jZXMsIGR1cmFibGUgcmVjb3ZlcnkgYW5kIGlkZW1wb3RlbmN5LiIsIkJvdW5kZWQgY29udmVyZ2VuY2Ugd2l0aCBhIHR3by1yZXBhaXIgc3RvcC4iLCJUcnVzdGVkIENJIGFuZCBwZXJtYW5lbnQgaG9zdC1iYWNrZWQgb3JjaGVzdHJhdGlvbi4iXSwiZGVwZW5kZW5jaWVzIjpbMzU4XSwiZG9uZV93aGVuIjpbIlRoZSBMb29wIE1hbmFnZXIsIHdvcmsgZ3JhcGgsIGxlYXNlcy9mZW5jZXMsIGR1cmFibGUgcmVjb3ZlcnksIGlkZW1wb3RlbmN5IGFuZCBib3VuZGVkIGNvbnZlcmdlbmNlIGFyZSBwcm92ZW4uIiwiVHJ1c3RlZCBDSSBhbmQgcGVybWFuZW50IGhvc3QtYmFja2VkIG9yY2hlc3RyYXRpb24gYXJlIG9wZXJhdGlvbmFsIHVuZGVyIGFjY2VwdGVkIGF1dGhvcml0eSBib3VuZGFyaWVzLiJdLCJlbGk1IjoiVGhpcyBsYXRlciBzdGVwIHdpbGwgYXV0b21hdGUgdGhlIGxvb3AgYXJvdW5kIHRoZSBwcm9ncmFtbWUgdG9vbC4iLCJlcG9jaHMiOlt7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJTMyIsImxvY2siOiJTMy1ERVNJR04tTE9DSy1QRU5ESU5HIiwibmFtZSI6IlMzIC0gUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIiLCJwdXJwb3NlIjoiUmVwb3NpdG9yeSBsb29wIGFuZCB0cnVzdGVkIENJIGF1dG9tYXRpb24iLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYwLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJCdWlsZCB0aGUgUmVwb3NpdG9yeSBMb29wIE1hbmFnZXIgYW5kIHRydXN0ZWQtQ0kgYXV0b21hdGlvbiBhcm91bmQgdGhlIEUzIHByaW1pdGl2ZS4iLCJvcmRlciI6Mywib3V0X29mX3Njb3BlIjpbIlM0IHRocm91Z2ggUzYgZXhlY3V0aW9uLiIsIlVuYXBwcm92ZWQgY29uc2VxdWVudGlhbCBsaXZlIG9yIHJlcG9zaXRvcnktcHJvdGVjdGlvbiBtdXRhdGlvbi4iXSwicHJfcmVnaXN0cnkiOltdLCJzY29wZSI6WyJSZXBvc2l0b3J5IExvb3AgTWFuYWdlciwgd29yayBncmFwaCwgbGVhc2VzL2ZlbmNlcywgZHVyYWJsZSByZWNvdmVyeSwgaWRlbXBvdGVuY3ksIGJvdW5kZWQgY29udmVyZ2VuY2UvdHdvLXJlcGFpciBzdG9wLCB0cnVzdGVkIENJIGFuZCBwZXJtYW5lbnQgaG9zdC1iYWNrZWQgb3JjaGVzdHJhdGlvbi4iXSwic3VtbWFyeSI6IkJ1aWxkIHRoZSBSZXBvc2l0b3J5IExvb3AgTWFuYWdlciBhbmQgdHJ1c3RlZC1DSSBhdXRvbWF0aW9uIGFyb3VuZCB0aGUgRTMgcHJpbWl0aXZlLiIsInRpdGxlIjoiUzMg4oCUIFJlcG9zaXRvcnkgTG9vcCBNYW5hZ2VyICsgdHJ1c3RlZCBDSSBsaXZlIGludGVncmF0aW9uIn0seyJib3VuZGFyaWVzIjpbIkxpdmUgbjhuIG9wZXJhdGlvbnMgcmVxdWlyZSBleHBsaWNpdCBhdXRob3JpdHkuIiwiVGhpcyBxdWV1ZWQgY2hpbGQgZG9lcyBub3Qgc3RhcnQgdW50aWwgaXRzIGRlcGVuZGVuY2llcyBhcmUgY29tcGxldGUgb3IgcmV0aXJlZC4iXSwiZGVsaXZlcmFibGVzIjpbIkV4YWN0LXBpbm5lZCBvZmZpY2lhbCBuOG4gU2tpbGxzLiIsIkFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQuIiwiQ3JlZGVudGlhbC0gYW5kIGlkZW50aXR5LXNhZmUgYm91bmRhcmllcy4iLCJQYXVzZS1iZWZvcmUtZXhpdCBhbmQgSlNPTiBwcmltaXRpdmUgaW1wb3J0IHJlZ3Jlc3Npb25zIGZpeGVkIGFuZCBjb3ZlcmVkLiJdLCJkZXBlbmRlbmNpZXMiOlszNTgsMzU5LDM2MF0sImRvbmVfd2hlbiI6WyJPZmZpY2lhbCBuOG4gU2tpbGxzIGFyZSBleGFjdC1waW5uZWQgYW5kIEFQSS1maXJzdCB0cmFuc3BvcnQgaXMgcHJvdmVuLiIsIkNyZWRlbnRpYWwvaWRlbnRpdHkgc2FmZXR5LCBwYXVzZS1iZWZvcmUtZXhpdCBhbmQgSlNPTiBwcmltaXRpdmUgaW1wb3J0IHJlZ3Jlc3Npb25zIHBhc3MgdGhlaXIgcmVxdWlyZWQgZXZpZGVuY2UuIl0sImVsaTUiOiJUaGlzIGxhdGVyIHN0ZXAgd2lsbCBtYWtlIG44biBzdXBwb3J0IG9mZmljaWFsIGFuZCBzYWZlbHkgdHJhbnNwb3J0IHdvcmtmbG93cy4iLCJlcG9jaHMiOlt7ImV2aWRlbmNlX3JlZiI6bnVsbCwiZ2F0ZXMiOlsiRzEiLCJHMiIsIkczIiwiRzQiXSwiaWQiOiJTNCIsImxvY2siOiJTNC1ERVNJR04tTE9DSy1QRU5ESU5HIiwibmFtZSI6IlM0IC0gbjhuIHNraWxscyBhbmQgdHJhbnNwb3J0IiwicHVycG9zZSI6Ik9mZmljaWFsIG44biBza2lsbHMgYW5kIEFQSS1maXJzdCB0cmFuc3BvcnQiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYxLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJNb3ZlIG44biBzdXBwb3J0IHRvIG9mZmljaWFsIG44biBTa2lsbHMgYW5kIHNhZmUgQVBJLWZpcnN0IHdvcmtmbG93IHRyYW5zcG9ydC4iLCJvcmRlciI6NCwib3V0X29mX3Njb3BlIjpbIkN1c3RvbSBuOG4gTUNQIHJldml2YWwuIiwiTGl2ZSBuOG4gb3BlcmF0aW9ucyB3aXRob3V0IGV4cGxpY2l0IGF1dGhvcml0eS4iLCJTNSBhbmQgUzYgZXhlY3V0aW9uLiJdLCJwcl9yZWdpc3RyeSI6W10sInNjb3BlIjpbIk9mZmljaWFsIG44biBTa2lsbHMsIEFQSS1maXJzdCB0cmFuc3BvcnQsIGNyZWRlbnRpYWwvaWRlbnRpdHktc2FmZSBib3VuZGFyaWVzIGFuZCB0aGUgdHdvIHJlcG9ydGVkIHJlZ3Jlc3Npb25zLiJdLCJzdW1tYXJ5IjoiTW92ZSBuOG4gc3VwcG9ydCB0byBvZmZpY2lhbCBuOG4gU2tpbGxzIGFuZCBzYWZlIEFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQuIiwidGl0bGUiOiJTNCDigJQgT2ZmaWNpYWwgbjhuIFNraWxscyArIEFQSS1maXJzdCB3b3JrZmxvdyB0cmFuc3BvcnQifSx7ImJvdW5kYXJpZXMiOlsiTm8gc2VjcmV0IHZhbHVlcyBpbiByZXBvLCBwcm9tcHRzLCBsb2dzIG9yIHB1YmxpYyBldmlkZW5jZS4iLCJDb25zZXF1ZW50aWFsIHByb3ZpZGVyIGFjdGlvbnMgcmVxdWlyZSBleHBsaWNpdCBhdXRob3JpdHkuIiwiVGhpcyBxdWV1ZWQgY2hpbGQgZG9lcyBub3Qgc3RhcnQgdW50aWwgaXRzIGRlcGVuZGVuY2llcyBhcmUgY29tcGxldGUgb3IgcmV0aXJlZC4iXSwiZGVsaXZlcmFibGVzIjpbIkV4dGVybmFsIGF1dGhvcml0eSBhbmQgc2VjcmV0LXJlZmVyZW5jZSBib3VuZGFyaWVzLiIsIlNlbnNpdGl2ZS1maWxlIGJvdW5kYXJpZXMuIiwiSG9zdGVkIG9wZXJhdGlvbnMsIGJhY2t1cCwgcm9sbGJhY2sgYW5kIGhlYWx0aC4iLCJQcml2YWN5LXNhZmUgdGVsZW1ldHJ5LiJdLCJkZXBlbmRlbmNpZXMiOlszNTgsMzU5LDM2MF0sImRvbmVfd2hlbiI6WyJFeHRlcm5hbCBhdXRob3JpdHksIHNlY3JldC1yZWZlcmVuY2UgYW5kIHNlbnNpdGl2ZS1maWxlIGJvdW5kYXJpZXMgYXJlIHByb3Zlbi4iLCJIb3N0ZWQgb3BlcmF0aW9ucywgYmFja3VwL3JvbGxiYWNrL2hlYWx0aCBhbmQgcHJpdmFjeS1zYWZlIHRlbGVtZXRyeSBtZWV0IGFjY2VwdGVkIGV2aWRlbmNlIHJlcXVpcmVtZW50cy4iXSwiZWxpNSI6IlRoaXMgbGF0ZXIgc3RlcCB3aWxsIGRlZmluZSB3aG8gbWF5IHRvdWNoIHByb3ZpZGVycywgc2VjcmV0cyBhbmQgaG9zdGVkIHN5c3RlbXMuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOm51bGwsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzUiLCJsb2NrIjoiUzUtREVTSUdOLUxPQ0stUEVORElORyIsIm5hbWUiOiJTNSAtIEV4dGVybmFsIGF1dGhvcml0eSBib3VuZGFyaWVzIiwicHVycG9zZSI6IkV4dGVybmFsIGF1dGhvcml0eSBhbmQgaG9zdGVkLW9wZXJhdGlvbiBib3VuZGFyaWVzIiwidGVybWluYWxfZGlzcG9zaXRpb24iOm51bGx9XSwiZmluYWxpdHkiOnsiYXV0aG9yaXR5X3JlZiI6bnVsbCwic3RhdGUiOiJIRUxEIn0sImhvbGRzIjpbXSwiaXNzdWUiOjM2MiwibGlmZWN5Y2xlIjoiUVVFVUVEIiwib2JqZWN0aXZlIjoiRXN0YWJsaXNoIGV4dGVybmFsIGF1dGhvcml0eSwgc2VjcmV0cywgcHJvdmlkZXIvZGVwbG95bWVudCBhbmQgaG9zdGVkLW9wZXJhdGlvbiBib3VuZGFyaWVzLiIsIm9yZGVyIjo1LCJvdXRfb2Zfc2NvcGUiOlsiU2VjcmV0IHZhbHVlcyBpbiByZXBvc2l0b3J5IGZpbGVzLCBwcm9tcHRzLCBsb2dzIG9yIHB1YmxpYyBldmlkZW5jZS4iLCJDb25zZXF1ZW50aWFsIHByb3ZpZGVyIGFjdGlvbnMgd2l0aG91dCBleHBsaWNpdCBhdXRob3JpdHkuIiwiUzYgZXhlY3V0aW9uLiJdLCJwcl9yZWdpc3RyeSI6W10sInNjb3BlIjpbIkV4dGVybmFsIGF1dGhvcml0eSwgc2VjcmV0IHJlZmVyZW5jZXMsIHNlbnNpdGl2ZSBmaWxlcywgaG9zdGVkIG9wZXJhdGlvbnMsIGJhY2t1cC9yb2xsYmFjay9oZWFsdGggYW5kIHByaXZhY3ktc2FmZSB0ZWxlbWV0cnkuIl0sInN1bW1hcnkiOiJFc3RhYmxpc2ggZXh0ZXJuYWwgYXV0aG9yaXR5LCBzZWNyZXRzLCBwcm92aWRlci9kZXBsb3ltZW50IGFuZCBob3N0ZWQtb3BlcmF0aW9uIGJvdW5kYXJpZXMuIiwidGl0bGUiOiJTNSDigJQgRXh0ZXJuYWwgYXV0aG9yaXR5LCBzZWNyZXRzICsgaG9zdGVkIG9wZXJhdGlvbnMifSx7ImJvdW5kYXJpZXMiOlsiUzYgcmVtYWlucyBsYXN0LiIsIkNvbnNlcXVlbnRpYWwgbGl2ZSBhY3Rpb25zIHJlcXVpcmUgc2VwYXJhdGUgYXV0aG9yaXR5LiJdLCJkZWxpdmVyYWJsZXMiOlsiRmluYWwgbmF0aXZlL2xpdmUgVUFULiIsIkxvb3AgTWFuYWdlciwgdHJ1c3RlZC1DSSBhbmQgbjhuIFVBVC4iLCJSZXNpZHVlIHZlcmlmaWNhdGlvbi4iLCJGaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iXSwiZGVwZW5kZW5jaWVzIjpbMzU4LDM1OSwzNjAsMzYxLDM2Ml0sImRvbmVfd2hlbiI6WyJOYXRpdmUvbGl2ZSwgTG9vcCBNYW5hZ2VyLCB0cnVzdGVkLUNJIGFuZCBuOG4gVUFUIGFyZSBjb21wbGV0ZSB1bmRlciB0aGVpciBhdXRob3JpdGllcy4iLCJSZXNpZHVlIHZlcmlmaWNhdGlvbiBhbmQgZmluYWwgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UgYXJlIGFjY2VwdGVkIGJ5IFdlYi4iXSwiZWxpNSI6IlRoaXMgZmluYWwgc3RlcCB3aWxsIHRlc3QgdGhlIHdob2xlIFRvb2xraXQgYWZ0ZXIgZXZlcnkgZWFybGllciBzdGVwIGlzIGRvbmUuIiwiZXBvY2hzIjpbeyJldmlkZW5jZV9yZWYiOm51bGwsImdhdGVzIjpbIkcxIiwiRzIiLCJHMyIsIkc0Il0sImlkIjoiUzYiLCJsb2NrIjoiUzYtREVTSUdOLUxPQ0stUEVORElORyIsIm5hbWUiOiJTNiAtIE5hdGl2ZSBVQVQgYW5kIGFzc3VyYW5jZSIsInB1cnBvc2UiOiJOYXRpdmUgVUFULCBjbGVhbnVwIGFuZCBmaW5hbCBhc3N1cmFuY2UiLCJ0ZXJtaW5hbF9kaXNwb3NpdGlvbiI6bnVsbH1dLCJmaW5hbGl0eSI6eyJhdXRob3JpdHlfcmVmIjpudWxsLCJzdGF0ZSI6IkhFTEQifSwiaG9sZHMiOltdLCJpc3N1ZSI6MzYzLCJsaWZlY3ljbGUiOiJRVUVVRUQiLCJvYmplY3RpdmUiOiJQZXJmb3JtIG5hdGl2ZS9saXZlIFVBVCwgcmVzaWR1ZSBjbGVhbnVwIGFuZCBmaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iLCJvcmRlciI6Niwib3V0X29mX3Njb3BlIjpbIlN0YXJ0aW5nIGJlZm9yZSBTMSB0aHJvdWdoIFM1IG9ibGlnYXRpb25zIGFyZSB0ZXJtaW5hbCBhbmQgYWNjZXB0ZWQuIiwiQ29uc2VxdWVudGlhbCBsaXZlIGFjdGlvbnMgd2l0aG91dCBzZXBhcmF0ZSBhdXRob3JpdHkuIl0sInByX3JlZ2lzdHJ5IjpbXSwic2NvcGUiOlsiRmluYWwgbmF0aXZlL2xpdmUgVUFULCBMb29wIE1hbmFnZXIvdHJ1c3RlZC1DSS9uOG4gVUFULCByZXNpZHVlIHZlcmlmaWNhdGlvbiBhbmQgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UuIl0sInN1bW1hcnkiOiJQZXJmb3JtIG5hdGl2ZS9saXZlIFVBVCwgcmVzaWR1ZSBjbGVhbnVwIGFuZCBmaW5hbCB3aG9sZS1Ub29sa2l0IGFzc3VyYW5jZS4iLCJ0aXRsZSI6IlM2IOKAlCBOYXRpdmUgVUFUICsgZmluYWwgd2hvbGUtVG9vbGtpdCBhc3N1cmFuY2UifV0sImNvbmN1cnJlbmN5X2F1dGhvcml0eSI6eyJhdXRob3JpdHlfZGlnZXN0IjpudWxsLCJhdXRob3JpdHlfcmVmIjpudWxsLCJtYXhfYWN0aXZlX2xhbmVzIjoxLCJtb2RlIjoiU0lOR0xFX0RFRkFVTFQiLCJwZXJtaXR0ZWRfY2hpbGRfaXNzdWVzIjpbXX0sImRlc2lnbl9sb2NrIjoiREwtUzItR0lUSFVCLVBST0dSQU0tU1VSRkFDRS1SRUNPVkVSWS0wMDMiLCJldmlkZW5jZV9yZWZzIjpbeyJpZCI6ImUzLWc0LWFjdGl2ZS10cmFuc2l0aW9uIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1Njo1NDU2MDc3NjQ3Iiwic3VtbWFyeSI6IkUzIEc0IGNvbnRyb2wtcGxhbmUgdHJhbnNpdGlvbiAtIFBSRVZJRVcgT05MWS4ifSx7ImlkIjoicmVwYWlyMS1jdXJyZW50Iiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDUyMTM4MzkwIiwic3VtbWFyeSI6IkUzIEczIGNvbnZlcmdlbmNlIFJlcGFpciAxIGlzIGN1cnJlbnQgYW5kIGF3YWl0cyBXZWIgcmVjb25jaWxpYXRpb24uIn0seyJpZCI6InByaW9yLWc0LWFtZW5kIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDQ4ODE4MTQyIiwic3VtbWFyeSI6IlByaW9yIGlzb2xhdGVkIEUzIEc0IHJldHVybmVkIEFNRU5EIGFuZCByZXF1aXJlZCBjb252ZXJnZW5jZSBHMiByZS1lbnRyeS4ifSx7ImlkIjoiY29udmVyZ2VuY2UtZzItYWNjZXB0ZWQiLCJraW5kIjoiV0VCIiwicmVmZXJlbmNlIjoiZ2l0aHViOmlzc3VlLWNvbW1lbnQ6MzU5OjU0NDkwNzUzMDQiLCJzdW1tYXJ5IjoiRTMgY29udmVyZ2VuY2UgRzIgZGVzaWduIExvY2sgd2FzIGFjY2VwdGVkIGFuZCBHMyBhdXRob3Jpc2VkLiJ9LHsiaWQiOiJlMS1hY2NlcHRlZCIsImtpbmQiOiJXRUIiLCJyZWZlcmVuY2UiOiJnaXRodWI6aXNzdWUtY29tbWVudDozNjY6NTQyODc0MTIzMSIsInN1bW1hcnkiOiJTMiBFMSBDcmVhdGlvbiBHYXRlIHdhcyBXZWIgYWNjZXB0ZWQuIn0seyJpZCI6ImUyLWFjY2VwdGVkIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM2Njo1NDM3MjY2MTU3Iiwic3VtbWFyeSI6IlMyIEUyIFByb2R1Y3QgUG9ydGZvbGlvIHdhcyBXZWIgYWNjZXB0ZWQuIn0seyJpZCI6InMxLWFjY2VwdGVkIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1ODo1NDI2OTQ4Mzk0Iiwic3VtbWFyeSI6IlMxIHdhcyB0ZXJtaW5hbCwgY2Fub25pY2FsLCBhbmQgYWNjZXB0ZWQuIn0seyJpZCI6InByZWRlY2Vzc29yLWNvdmVyYWdlIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDM3ODI3MDMwIiwic3VtbWFyeSI6IlByZWRlY2Vzc29yIGNvdmVyYWdlIGlzIGV4YWN0bHkgNDUgaXNzdWVzLCA4NCBjcml0ZXJpYSwgYW5kIHplcm8gdW5tYXBwZWQuIn0seyJpZCI6InJlcGFpci1oZWFkIiwia2luZCI6IkNPTU1JVCIsInJlZmVyZW5jZSI6ImdpdDpjb21taXQ6NDQ2NDcxZTYyNDhiZjhiYzY1NDBkNGEwM2FhMmEwZTFhYjYyNWYzZCIsInN1bW1hcnkiOiJFeGFjdCBSZXBhaXIgMSBjYW5kaWRhdGUgY29tbWl0LiJ9LHsiaWQiOiJyZXBhaXItY2hlY2tzIiwia2luZCI6IkNIRUNLIiwicmVmZXJlbmNlIjoiZ2l0aHViOmNoZWNrczo0NDY0NzFlNjI0OGJmOGJjNjU0MGQ0YTAzYWEyYTBlMWFiNjI1ZjNkIiwic3VtbWFyeSI6IkV4YWN0LWhlYWQgdmFsaWRhdGlvbiBhbmQgQ29kZVFMIHBhc3NlZC4ifSx7ImlkIjoid2ViXzc3MDRjYTBkODcyNTZiNDI3ZjYzIiwia2luZCI6IldFQiIsInJlZmVyZW5jZSI6ImdpdGh1Yjppc3N1ZS1jb21tZW50OjM1OTo1NDYyOTg1MDcxIiwic3VtbWFyeSI6IldlYi1jb250cm9sbGVkIEUzIGFyY2hpdGVjdHVyZSBhbmQgZXhhY3QtY2FuZGlkYXRlIGFkbWlzc2lvbiBhdXRob3JpdHkuIn0seyJpZCI6ImUzLWczLWRvZ2Zvb2QtYWNjZXB0ZWQiLCJraW5kIjoiV0VCIiwicmVmZXJlbmNlIjoiZ2l0aHViOmlzc3VlLWNvbW1lbnQ6MzU5OjU0NjY5MTI1NjYiLCJzdW1tYXJ5IjoiV2ViIGFjY2VwdGVkIEUzIEczIGRvZ2Zvb2QgYW5kIGF1dGhvcmlzZWQgdGhlIGZyZXNoIEc0IHRyYW5zaXRpb24gcHJldmlldy4ifV0sImV4dGVuc2lvbnMiOltdLCJoaXN0b3JpY2FsX3RyYW5zaXRpb25zIjpbeyJjaGlsZF9pc3N1ZSI6MzU5LCJkaXNwb3NpdGlvbiI6IkFNRU5EIiwiZXBvY2hfaWQiOiJFMyIsImV2aWRlbmNlX3JlZiI6InByaW9yLWc0LWFtZW5kIiwiZ2F0ZSI6Ikc0IiwiaWQiOiJlMy1wcmlvci1nNC1hbWVuZCJ9LHsiY2hpbGRfaXNzdWUiOjM1OSwiZGlzcG9zaXRpb24iOiJBQ0NFUFRFRCIsImVwb2NoX2lkIjoiRTMiLCJldmlkZW5jZV9yZWYiOiJjb252ZXJnZW5jZS1nMi1hY2NlcHRlZCIsImdhdGUiOiJHMiIsImlkIjoiZTMtY29udmVyZ2VuY2UtZzItYWNjZXB0ZWQifSx7ImNoaWxkX2lzc3VlIjozNTksImRpc3Bvc2l0aW9uIjoiQUNDRVBURUQiLCJlcG9jaF9pZCI6IkUzIiwiZXZpZGVuY2VfcmVmIjoiZTMtZzMtZG9nZm9vZC1hY2NlcHRlZCIsImdhdGUiOiJHMyIsImlkIjoiZTMtZzMtZG9nZm9vZC1hY2NlcHRlZCJ9XSwicGFyZW50Ijp7ImdvYWwiOiJEZWxpdmVyIHRoZSBzaXgtc3RhZ2UgVG9vbGtpdCBwcm9ncmFtbWUgdGhyb3VnaCB0cnV0aGZ1bCwgZGV0ZXJtaW5pc3RpYywgc291cmNlLXRyYWNlYWJsZSBwcm9ncmFtbWUgdmlld3MuIiwiaXNzdWUiOjI0MCwidGl0bGUiOiJbIFBBUkVOVCBUSFJFQUQgXSBBSSBBZ2VudCBUb29sa2l0IOKAlCBSb2xsaW5nIFdvcmsgUXVldWUifSwicHJlZGVjZXNzb3JfY29udHJhY3RfZGlnZXN0IjoiNmVhOWEzNTM5NzM3Njk5NTczMGMwNDJmN2NkOTE1MDg0MzQ4YzQyM2VhZTc2ZGIwNThhNDgwYWM5YzllMjI3NiIsInBycyI6W3siY2hhbmdlZF9zdXJmYWNlcyI6WyJHaXRIdWIgcHJvZ3JhbW1lIHJlY29uY2lsZXIgcnVudGltZSBhbmQgcG9saWN5LiIsIlByb2dyYW1tZSBzdXJmYWNlIGFuZCBwcmVkZWNlc3NvciBjb250cmFjdHMuIiwiRm9jdXNlZCByZWNvbmNpbGlhdGlvbiBhbmQgYnJpZGdlIHRlc3RzLiIsIkFsaWduZWQgbmF0aXZlIHBsdWdpbiBhbmQgYnJpZGdlIHZlcnNpb24gc3VyZmFjZXMuIl0sImNoaWxkX2lzc3VlIjozNTksImRlc2lnbl9jb25zdHJhaW50cyI6WyJSb2xlIHJlbWFpbnMgSU5URVJNRURJQVRFIGFuZCBjb21wbGV0ZXNfY2hpbGQgcmVtYWlucyBmYWxzZS4iLCJQUiByZW1haW5zIGRyYWZ0LiIsIk5vIGZpbmFsaXR5IG9wZXJhdGlvbiBpcyBhdXRob3Jpc2VkIGJ5IHRoaXMgcmVjb25jaWxpYXRpb24uIl0sImVsaTUiOiJUaGUgcmVwYWlyIGFuZCBkb2dmb29kIGNvcnJlY3Rpb24gYXJlIGFjY2VwdGVkLCBhbmQgdGhlIGZpbmFsIGluZGVwZW5kZW50IEUzIHJldmlldyBnYXRlIGlzIGFjdGl2ZSB3aXRob3V0IGEgcmVzdWx0LiIsImV2aWRlbmNlX3JlZnMiOltdLCJudW1iZXIiOjM2Niwib3V0X29mX3Njb3BlIjpbIkc0IHJlc3VsdCBvciBFMyBhY2NlcHRhbmNlIGJlZm9yZSBzZXBhcmF0ZSBXZWIgYXV0aG9yaXR5LiIsIlJlYWR5LCBtZXJnZSwgZmluYWxpdHksIEU0IGFuZCBTMyB0aHJvdWdoIFM2IGV4ZWN1dGlvbi4iLCJQcm92aWRlciwgZGVwbG95bWVudCwgY3JlZGVudGlhbCBhbmQgbGl2ZSBuOG4gb3BlcmF0aW9ucy4iXSwicHVycG9zZSI6IkltcGxlbWVudCBhbmQgcHJvdmUgdGhlIGRldGVybWluaXN0aWMgR2l0SHViIHByb2dyYW1tZSByZWNvbmNpbGVyIHByb2R1Y3QgZm9yIFMyIEUzLiIsInNjb3BlIjpbIkNhbm9uaWNhbCBwYXJlbnQsIGNoaWxkIGFuZCBQUiB2aWV3cy4iLCJNYW5hZ2VkIGxpZmVjeWNsZSBsYWJlbHMgYW5kIHR5cGVkIGV2ZW50cy4iLCJFeGlzdGluZy1pc3N1ZSBzdWItaXNzdWUgYW5kIGJsb2NrZWQtYnkgcmVsYXRpb25zaGlwcy4iLCJQcmV2aWV3LCBleHBsaWNpdCBhcHBseSwgcmVhZGJhY2sgdmVyaWZpY2F0aW9uIGFuZCBleGFjdCByZXJ1biB6ZXJvIGRlbHRhLiJdLCJzdW1tYXJ5IjoiRTMgUmVwYWlyLTIgaW1wbGVtZW50YXRpb24sIHY1IG1pZ3JhdGlvbi9yZWFkYmFjay96ZXJvLWRlbHRhIGFuZCBkb2dmb29kIFVYIGNvcnJlY3Rpb24gYXJlIGFjaGlldmVkOyBmcmVzaCBHNCBpcyBub3cgYWN0aXZlIHdpdGggbm8gcmVzdWx0LiIsInZhbGlkYXRpb25fcmVxdWlyZW1lbnRzIjpbIlJlcGFpci0yIGZvY3VzZWQgdGVzdHMgcGFzc2VkIDI0LzI0LiIsIlJlbGV2YW50IHJlY29uY2lsZXIgc3VpdGUgcGFzc2VkIDI1NS8yNTUuIiwiVG9vbGtpdCB2YWxpZGF0aW9uIGFuZCBhdWRpdHMgcGFzc2VkLiIsIkV4YWN0LWhlYWQgVmFsaWRhdGUgcGFzc2VkLiIsIkV4YWN0LWhlYWQgVmFsaWRhdGUgdG9vbGtpdCBwYXNzZWQuIiwiQ29kZVFMIGFuZCBsYW5ndWFnZSBhbmFseXNlcyBwYXNzZWQuIiwiRHluYW1pYyBHSEFTIHVuc3VwcG9ydGVkLW1vZGVsIGZhaWx1cmUgaXMgZXh0ZXJuYWwvbm9uLWNhbmRpZGF0ZSBldmlkZW5jZS4iLCJEdXJhYmxlIG9yaWdpbmFsIG1pZ3JhdGlvbiBwcmV2aWV3IGFuZCByZWNlaXB0IHdlcmUgcmVhZCBiYWNrLiIsIkV4YWN0bHkgb25lIGF1dGhvcmlzZWQgdjUgbWlncmF0aW9uIEFwcGx5IGNvbXBsZXRlZC4iLCJNaWdyYXRpb24gZXZlbnQ6IDg3ODUxYjM2ZTBmNTRkZDk2OWFjMWI4NWU0OWUyZjE1OWFlZWZlZTE0OTc4NjFmMjBlMmZkNDViMDIxMjhlNjYuIiwiSW1tZWRpYXRlIG1pZ3JhdGlvbiByZXJ1bjogUFJPR1JBTU1FX1pFUk9fREVMVEEgLyBtdXRhdGlvbl9jb3VudD0wLiIsIkRvZ2Zvb2QgVVggY29ycmVjdGlvbiBhY2NlcHRlZCBieSBXZWIgdW5kZXIgYXV0aG9yaXR5IGNvbW1lbnQgNTQ2NjkxMjU2Ni4iLCJGcmVzaCBHNDogQUNUSVZFIC8gTk8gUkVTVUxULiJdfV0sInJlcG9zaXRvcnkiOiJ3ZWlqdW5zd2ovYWktYWdlbnQtdG9vbGtpdCIsInNjaGVtYSI6InRvb2xraXQuZ2l0aHViLXByb2dyYW0uc3RhdGUudjUifX0 -->\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PARENT:END -->";
 const CHILD_BODY = "<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:BEGIN v5 -->\n# S2 — Productize retained skills + native host adapters\n\n## Summary\nE1 and E2 are accepted; E3 Repair-2 implementation, v5 migration/readback/zero-delta and dogfood UX correction are achieved; fresh G4 is now active with no result.\n\n## Operating contract\n| Field | Value |\n| --- | --- |\n| Parent | #240 |\n| Lane | child-359 |\n| Lifecycle | CURRENT |\n| Epoch | E3 |\n| Gate | G4 |\n| Gate state | ACTIVE |\n| Lock | DL-S2-GITHUB-PROGRAM-CONVERGENCE-002 |\n| Finality | HELD |\n\n## Objective\nProductise retained skills, complete the GitHub programme reconciler, then finish truthful native host adapters.\n\n## Deliverables\n- Retained-skill productisation.\n- GitHub programme reconciler v5.\n- Future E4 truthful native adapters.\n\n## Done when\n- E1 and E2 remain accepted with retained evidence.\n- E3 Repair-2, v5 migration/readback/zero-delta, canonical-data UX correction, fresh G4 and Web acceptance are complete.\n- E4 truthful native adapters are complete and Web records S2 finality.\n\n## Scope\n- Retained-skill productisation, GitHub programme reconciler v5 and future E4 truthful native adapters.\n- Fresh E3 G4 transition and exact-candidate validation.\n\n## Out of scope\n- G4 result or E3 acceptance before separate Web authority.\n- Ready, merge, finality, E4 execution and S3 through S6 progression.\n\n## Progress\n- E1: ACCEPTED\n- E2: ACCEPTED\n- E3: G4 ACTIVE\n- E4: PENDING\n\n## Achieved\n- E1 ACCEPTED\n- E2 ACCEPTED\n- E3 G4 AMEND\n- E3 G2 ACCEPTED\n- E3 G3 ACCEPTED\n\n## Remaining\n- E3 G4\n- E4 G1\n- E4 G2\n- E4 G3\n- E4 G4\n- Web finality disposition\n\n## Epochs / Locks\n| Epoch | Lock | State | Purpose |\n| --- | --- | --- | --- |\n| E1 | DL-S2-CREATION-GATE-003 | ACCEPTED | Creation and admission gate |\n| E2 | DL-S2-PRODUCT-PORTFOLIO-015 | ACCEPTED | Retained product portfolio |\n| E3 | DL-S2-GITHUB-PROGRAM-CONVERGENCE-002 | ACTIVE | Managed GitHub programme reconciliation |\n| E4 | DL-S2-NATIVE-ADAPTERS-002 | PENDING | Truthful native host adapters |\n\n## PR registry\n| PR | Status | Role | Completes Child |\n| --- | --- | --- | --- |\n| #366 | ACTIVE | INTERMEDIATE | No |\n\n## Holds\nNone\n\n## Boundaries\n- Web owns fresh G4 disposition, E3 acceptance, Ready, merge and finality.\n- Fresh G4 is active with no result yet.\n- E4 and S3 through S6 do not begin in this transition.\n\n## Next action\nComplete E3 G4 without advancing finality.\n\n## ELI5\nThe programme tool is repaired and its final independent E3 review gate is now active, but no result or acceptance exists yet.\n\n## Additional context\nNone\n\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-PROJECTION v1 eyJjYW5vbmljYWxfZGlnZXN0IjoiYTA5ZmRhZmE2Yjc3YWQ4NTYyNDI5OGNlZWE0ODhhNWMzNDJkMDBhMDcwMDIxOGRlNjJiYTIyNzZlZDA1MDI4MCIsImV4dGVuc2lvbl9kaWdlc3QiOiI0ZjUzY2RhMThjMmJhYTBjMDM1NGJiNWY5YTNlY2JlNWVkMTJhYjRkOGUxMWJhODczYzJmMTExNjEyMDJiOTQ1Iiwia2luZCI6ImNoaWxkIiwibnVtYmVyIjozNTksInBhcmVudF9pc3N1ZSI6MjQwLCJwcm9qZWN0aW9uX2RpZ2VzdCI6IjQ3MmFlMDkxZmY2NzRmN2IxMzk4OTg0NGE5MjBiZmVlYjliYjE5ZWU2NWY0ZWYyNWFmZjQ1YzgyNDQ0MTQ4ZjkiLCJyZXBvc2l0b3J5Ijoid2VpanVuc3dqL2FpLWFnZW50LXRvb2xraXQiLCJzY2hlbWEiOiJ0b29sa2l0LmdpdGh1Yi1wcm9ncmFtLnByb2plY3Rpb24udjEifQ -->\n<!-- AI-AGENT-TOOLKIT:GITHUB-PROGRAM-CHILD:END -->";
 const PR379_REVIEW_BODY = "## WEB EXACT-HEAD G3 BLOCKED ADJUDICATION / REPAIR-1 AUTHORITY\n\nExact reviewed head: `d3587fb69f0043d74936c116168a17247174ba07` / tree `1cf1bfbccee02b757040350c872bf18ad8056071` against canonical main `c72028c63cc09dd07d3e522692065448b6b7dbb6`.\n\nWeb accepts the G3 implementation structurally but does not accept it as G3-complete because both hosted Validate jobs fail.\n\nThe two failures are adjudicated as same-root test harness/fixture defects only:\n1. real receipt-store tamper test reopens/reads the deliberately corrupted store outside the intended fail-closed assertion boundary;\n2. real SQLite recovery fixture references `harnessA.scope.scope_digest` instead of canonical `harnessA.scope.grant.scope_digest`.\n\nNo runtime, G1 or G2 defect is presently established.\n\nControlling Repair-1 authority: #359 comment `5578743909`.\nParent mirror: #240 comment `5578745835`.\n\nRepair 1 may change only the receipt test, programme-bootstrap-recovery test, then a bootstrap-only repin. No other candidate mutation is authorised. Repair 2, G4, Ready, merge and Programme Apply remain unauthorised pending Web adjudication.";
@@ -25,9 +29,273 @@ function withEvidenceDigest(value) {
   delete next.evidence_digest;
   return { ...value, evidence_digest: programme.digestValue(next) };
 }
+function finalisationAuthority() {
+  const body = 'synthetic future Web finalisation write authority for test fixtures';
+  return {
+    reference: 'synthetic:web-finalisation-authority:001',
+    body_digest: digestText(body),
+    body,
+    repository,
+    root: programme.FINALISATION_ROOT,
+    lock: programme.FINALISATION_LOCK,
+    scope: programme.FINALISATION_SCOPE,
+    complete: true,
+  };
+}
+function finalisationDecision() {
+  const authority = finalisationAuthority();
+  return programme.postMergeEpochFinalisation.createDecision(authority);
+}
+function finalisationStateFixtures() {
+  const source = parsedSources();
+  const sourceState = programme.buildRecoveryTargetState(source.parent.state);
+  assert.ok(sourceState);
+  const stageA = programme.postMergeEpochFinalisation.buildStageATargetState(sourceState);
+  assert.ok(stageA);
+  const stageB = programme.postMergeEpochFinalisation.buildStageBTargetState(stageA);
+  assert.ok(stageB);
+  const renderedSource = programme.renderProgrammeV5(sourceState);
+  const renderedStageA = programme.renderProgrammeV5(stageA);
+  const renderedStageB = programme.renderProgrammeV5(stageB);
+  assert.equal(renderedSource.ok, true, renderedSource.code);
+  assert.equal(renderedStageA.ok, true, renderedStageA.code);
+  assert.equal(renderedStageB.ok, true, renderedStageB.code);
+  return {
+    sourceState,
+    stageA,
+    stageB,
+    renderedSource,
+    renderedStageA,
+    renderedStageB,
+    sourceParent: programme.parseParentV5Body(renderedSource.parent, { repository, parent_issue: 240 }),
+    sourceChild: programme.parseChildV5Body(renderedSource.child, { repository, parent_issue: 240 }),
+    stageAParent: programme.parseParentV5Body(renderedStageA.parent, { repository, parent_issue: 240 }),
+    stageAChild: programme.parseChildV5Body(renderedStageA.child, { repository, parent_issue: 240 }),
+    stageBParent: programme.parseParentV5Body(renderedStageB.parent, { repository, parent_issue: 240 }),
+    stageBChild: programme.parseChildV5Body(renderedStageB.child, { repository, parent_issue: 240 }),
+  };
+}
+function finalisationBodyEvidence(parsed, state, kind, revision) {
+  const rawBody = parsed.prefix + parsed.managed + parsed.suffix;
+  const value = kind === 'parent'
+    ? {
+      issue: 240,
+      raw_body: rawBody,
+      body_digest: parsed.body_digest,
+      canonical_digest: programme.digestValue(state),
+      revision,
+      state: clone(state),
+      native_children: [358, 359, 360, 361, 362, 363],
+      relationships: { child_issue: 359, child_is_native_sub_issue: true, parent_issue: 240, sole_current: true },
+      prefix_digest: parsed.prefix_digest,
+      suffix_digest: parsed.suffix_digest,
+      complete: true,
+    }
+    : {
+      issue: 359,
+      raw_body: rawBody,
+      body_digest: parsed.body_digest,
+      canonical_digest: programme.digestValue(state),
+      revision,
+      labels: ['current'],
+      native_parent: 240,
+      relationships: { child_issue: 359, child_is_native_sub_issue: true, parent_issue: 240, sole_current: true },
+      sole_current: true,
+      dependencies: [],
+      state: snapshotState(state),
+      projection: clone(parsed.envelope),
+      prefix_digest: parsed.prefix_digest,
+      suffix_digest: parsed.suffix_digest,
+      complete: true,
+    };
+  return value;
+}
+function finalisationTransaction(checkpoint, decisionValue) {
+  const normal = {
+    BEFORE_STAGE_A: { completed: [], previous: null },
+    CHILD_STAGE_A_OBSERVED: { completed: [1], previous: 'BEFORE_STAGE_A' },
+    PARENT_STAGE_A_OBSERVED: { completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
+    PR379_CLOSED_STAGE_A: { completed: [1, 2, 3], previous: 'PARENT_STAGE_A_OBSERVED' },
+    CHILD_STAGE_B_OBSERVED: { completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
+    FINAL_TARGET_OBSERVED: { completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
+  };
+  const acknowledgement = {
+    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_A_OBSERVED', order: 1, completed: [1], previous: 'BEFORE_STAGE_A' },
+    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 2, completed: [1, 2], previous: 'CHILD_STAGE_A_OBSERVED' },
+    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: { base: 'PARENT_STAGE_A_OBSERVED', order: 3, completed: [1, 2], previous: 'PARENT_STAGE_A_OBSERVED' },
+    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'CHILD_STAGE_B_OBSERVED', order: 4, completed: [1, 2, 3, 4], previous: 'PR379_CLOSED_STAGE_A' },
+    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: { base: 'FINAL_TARGET_OBSERVED', order: 5, completed: [1, 2, 3, 4, 5], previous: 'CHILD_STAGE_B_OBSERVED' },
+  };
+  const ack = acknowledgement[checkpoint] || null;
+  const base = ack ? ack.base : checkpoint;
+  const spec = normal[base];
+  return {
+    checkpoint,
+    acknowledgement: ack ? 'LOST' : 'CONFIRMED',
+    acknowledgement_loss_operation_order: ack ? ack.order : null,
+    completed_operation_orders: ack ? ack.completed : spec.completed,
+    continuation: (ack || spec).previous === null ? null : {
+      previous_checkpoint: (ack || spec).previous,
+      decision_digest: programme.digestValue(decisionValue),
+      authority_body_digest: decisionValue.write_authority.body_digest,
+      fresh_complete_rebind: true,
+      exact_readback: true,
+      complete: true,
+    },
+    readback: { complete: true, exact: true },
+    duplicate_event_count: 1,
+    complete: true,
+  };
+}
+function makeFinalisationEvidence(checkpoint = 'BEFORE_STAGE_A') {
+  const decisionValue = finalisationDecision();
+  assert.ok(decisionValue);
+  const fixtures = finalisationStateFixtures();
+  const sourceRevision = '2026-09-09T00:00:00Z';
+  const sourceParentRevision = programme.FINALISATION_SOURCE_PARENT_REVISION || '2026-09-08T11:02:43Z';
+  const sourceChildRevision = programme.FINALISATION_SOURCE_CHILD_REVISION || '2026-09-08T11:01:45Z';
+  const bodyByCheckpoint = {
+    BEFORE_STAGE_A: [fixtures.sourceParent, fixtures.sourceChild, fixtures.sourceState, 'OPEN'],
+    CHILD_STAGE_A_OBSERVED: [fixtures.sourceParent, fixtures.stageAChild, fixtures.sourceState, 'OPEN'],
+    PARENT_STAGE_A_OBSERVED: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
+    PR379_CLOSED_STAGE_A: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'CLOSED'],
+    CHILD_STAGE_B_OBSERVED: [fixtures.stageAParent, fixtures.stageBChild, fixtures.stageA, 'CLOSED'],
+    FINAL_TARGET_OBSERVED: [fixtures.stageBParent, fixtures.stageBChild, fixtures.stageB, 'CLOSED'],
+    CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST: [fixtures.sourceParent, fixtures.stageAChild, fixtures.sourceState, 'OPEN'],
+    PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
+    PR379_CLOSE_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageAChild, fixtures.stageA, 'OPEN'],
+    CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST: [fixtures.stageAParent, fixtures.stageBChild, fixtures.stageA, 'CLOSED'],
+    PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST: [fixtures.stageBParent, fixtures.stageBChild, fixtures.stageB, 'CLOSED'],
+  };
+  const [parentParsed, childParsed, parentState, pr379State] = bodyByCheckpoint[checkpoint] || [];
+  assert.ok(parentParsed && childParsed && parentState);
+  const parentRevision = parentParsed === fixtures.sourceParent ? sourceParentRevision : sourceRevision;
+  const childRevision = childParsed === fixtures.sourceChild ? sourceChildRevision : sourceRevision;
+  const childCanonicalState = childParsed === fixtures.sourceChild
+    ? fixtures.sourceState
+    : childParsed === fixtures.stageAChild ? fixtures.stageA : fixtures.stageB;
+  const pr379 = {
+    repository,
+    pr: 379,
+    state: pr379State,
+    github_state: pr379State,
+    status: 'RETIRED',
+    draft: true,
+    merged: false,
+    merged_at: null,
+    head: programme.FROZEN_HEAD,
+    tree: programme.FROZEN_TREE,
+    branch: 'codex/e3-canonical-historical-receipt-resolution-003',
+    base_ref: 'main',
+    base_sha: programme.MAIN_SHA,
+    changed_files: 48,
+    candidate: clone(decision.pr_379.candidate),
+    retention_evidence_ref: 'web-pr379-retained-5580538176',
+    retirement_evidence_ref: programme.POST_MERGE_TECHNICAL_EVIDENCE_REF,
+    non_convergence_evidence_ref: programme.PR379_NON_CONVERGENCE_EVIDENCE_REF,
+    complete: true,
+  };
+  const pr380 = {
+    repository,
+    pr: 380,
+    state: 'MERGED',
+    github_state: 'MERGED',
+    status: 'ACCEPTED',
+    draft: false,
+    merged: true,
+    merge_method: 'MERGE_COMMIT',
+    merge_commit: programme.MERGE_COMMIT_SHA,
+    ordered_parents: [programme.MAIN_SHA, programme.PR380_HEAD],
+    accepted_head_tree: programme.PR380_TREE,
+    head: programme.PR380_HEAD,
+    tree: programme.PR380_TREE,
+    base_ref: 'main',
+    base_sha: programme.MAIN_SHA,
+    candidate: {
+      repository,
+      branch: 'codex/e3-v5-projection-bootstrap-recovery-001',
+      base_ref: 'main',
+      base_sha: programme.MAIN_SHA,
+      head: programme.PR380_HEAD,
+      tree: programme.PR380_TREE,
+      version: '2.10.8',
+    },
+    accepted_evidence_ref: programme.FINAL_G4_EVIDENCE_REF,
+    complete: true,
+  };
+  const canonicalMain = { ref: 'main', sha: programme.MERGE_COMMIT_SHA, tree: programme.MERGE_COMMIT_TREE, equals_merge_commit: true, complete: true };
+  const authority = finalisationAuthority();
+  const evidence = {
+    schema: programme.FINALISATION_EVIDENCE_SCHEMA,
+    root: programme.FINALISATION_ROOT,
+    lock: programme.FINALISATION_LOCK,
+    decision_digest: programme.digestValue(decisionValue),
+    repository,
+    parent_issue: 240,
+    child_issue: 359,
+    parent: finalisationBodyEvidence(parentParsed, parentState, 'parent', parentRevision),
+    child: finalisationBodyEvidence(childParsed, childCanonicalState, 'child', childRevision),
+    pr_379: pr379,
+    pr_380: pr380,
+    accepted_evidence: clone(decisionValue.accepted_evidence),
+    accepted_epoch_event: {
+      child_issue: 359,
+      disposition: 'ACCEPTED',
+      epoch_id: 'E3',
+      evidence_ref: programme.FINAL_G4_EVIDENCE_REF,
+      gate: 'G4',
+      id: 'e3-post-merge-epoch-finalisation',
+      occurrence: 1,
+      complete: true,
+    },
+    merge_ancestry: {
+      merged: true,
+      method: 'MERGE_COMMIT',
+      merge_commit: programme.MERGE_COMMIT_SHA,
+      ordered_parents: [programme.MAIN_SHA, programme.PR380_HEAD],
+      accepted_head: programme.PR380_HEAD,
+      accepted_head_tree: programme.PR380_TREE,
+      merge_tree: programme.MERGE_COMMIT_TREE,
+    },
+    canonical_main: canonicalMain,
+    source_revisions: {
+      canonical_digest: programme.FINALISATION_SOURCE_CANONICAL_DIGEST || programme.TARGET_CANONICAL_DIGEST,
+      parent: { body_digest: fixtures.sourceParent.body_digest, prefix_digest: fixtures.sourceParent.prefix_digest, revision: sourceParentRevision, suffix_digest: fixtures.sourceParent.suffix_digest },
+      child: { body_digest: fixtures.sourceChild.body_digest, prefix_digest: fixtures.sourceChild.prefix_digest, revision: sourceChildRevision, suffix_digest: fixtures.sourceChild.suffix_digest },
+      complete: true,
+    },
+    write_authority: authority,
+    provider_facts: {
+      inventory: 'EXACT_BOUNDED',
+      provider_client_used: false,
+      provider_cas_claim: false,
+      facts_digest: programme.digestValue({ pr_379: pr379, pr_380: pr380, canonical_main: canonicalMain }),
+      complete: true,
+    },
+    collector: {
+      kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
+      identity: 'github-web-readonly-adapter',
+      version: 'v1',
+      authenticated: true,
+      provider_client_used: false,
+    },
+    transaction: finalisationTransaction(checkpoint, decisionValue),
+    pagination: null,
+    evidence_digest: null,
+  };
+  evidence.pagination = programme.postMergeEpochFinalisation.buildPaginationEvidence(evidence);
+  return withEvidenceDigest(evidence);
+}
+function replaceFinalisationEvidence(value, pathParts, replacement) {
+  const next = clone(value);
+  let cursor = next;
+  for (let index = 0; index < pathParts.length - 1; index += 1) cursor = cursor[pathParts[index]];
+  cursor[pathParts[pathParts.length - 1]] = replacement;
+  return withEvidenceDigest(next);
+}
 const DECISION_SCHEMA_TYPES = new Set(['null', 'boolean', 'object', 'array', 'number', 'integer', 'string']);
 const SUPPORTED_DECISION_SCHEMA_KEYWORDS = new Set([
-  '$schema', '$id', 'title', 'type', 'const', 'enum', 'required', 'properties',
+  '$schema', '$id', '$ref', 'title', 'type', 'const', 'enum', 'required', 'properties',
   'additionalProperties', 'items', 'minItems', 'maxItems', 'minimum', 'pattern',
 ]);
 function isSchemaRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -801,6 +1069,196 @@ test('receipt subsystem remains unchanged and the binding is truthful idempotent
   assert.equal(receipt.SAFETY_CLASSES.includes('CAS'), true);
   assert.equal(programme.WRITE_SAFETY_MODE, 'WEB_EXCLUSIVE_SINGLE_WRITER_RECOVERY_WINDOW');
   assert.equal(digestText(fs.readFileSync(receiptPath, 'utf8')), before);
+});
+
+test('post-merge decision and evidence schemas are closed and runtime-valid', () => {
+  const finalDecision = finalisationDecision();
+  const evidence = makeFinalisationEvidence();
+  assert.ok(finalDecision);
+  assert.equal(publishedFinalisationDecisionSchema.additionalProperties, false);
+  assert.equal(publishedFinalisationEvidenceSchema.additionalProperties, false);
+  assert.equal(validateDecisionAgainstPublishedSchema(finalDecision, publishedFinalisationDecisionSchema), true, 'decision schema');
+  assert.equal(validateDecisionAgainstPublishedSchema(evidence, publishedFinalisationEvidenceSchema), true, 'evidence schema');
+  assert.equal(programme.postMergeEpochFinalisation.validateDecision(finalDecision).ok, true, 'decision runtime');
+  const evidenceValidation = programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision);
+  assert.equal(evidenceValidation.ok, true, evidenceValidation.code);
+});
+
+test('clean inter-epoch Stage A and Stage B targets validate with exact E3/E4 and registry semantics', () => {
+  const fixtures = finalisationStateFixtures();
+  const stageAChild = fixtures.stageA.children.find((item) => item.issue === 359);
+  const stageBChild = fixtures.stageB.children.find((item) => item.issue === 359);
+  assert.equal(programme.validateCanonicalStateV5(fixtures.sourceState).ok, true);
+  assert.equal(programme.postMergeEpochFinalisation.buildStageATargetState(fixtures.sourceState).design_lock, programme.FINALISATION_LOCK);
+  assert.equal(programme.validateCanonicalStateV5(fixtures.stageA).ok, true);
+  assert.equal(programme.validateCanonicalStateV5(fixtures.stageB).ok, true);
+  for (const child of [stageAChild, stageBChild]) {
+    assert.equal(child.lifecycle, 'CURRENT');
+    assert.deepEqual(child.finality, { state: 'UNMERGED', authority_ref: null });
+    assert.deepEqual(child.holds, []);
+    assert.deepEqual(child.epochs.filter((epoch) => epoch.id !== 'E4').map((epoch) => epoch.terminal_disposition), ['ACCEPTED', 'ACCEPTED', 'ACCEPTED']);
+    assert.deepEqual(child.epochs.find((epoch) => epoch.id === 'E4'), { ...child.epochs.find((epoch) => epoch.id === 'E4'), terminal_disposition: null, evidence_ref: null });
+    assert.equal(child.pr_registry.find((entry) => entry.pr === 380).status, 'ACCEPTED');
+    assert.equal(child.pr_registry.find((entry) => entry.pr === 380).github_state, 'MERGED');
+    assert.equal(child.pr_registry.find((entry) => entry.pr === 380).completes_child, false);
+  }
+  assert.equal(stageAChild.pr_registry.find((entry) => entry.pr === 379).github_state, 'OPEN');
+  assert.equal(stageBChild.pr_registry.find((entry) => entry.pr === 379).github_state, 'CLOSED');
+  assert.equal(stageAChild.pr_registry.some((entry) => [376, 377, 378].includes(entry.pr)), false);
+});
+
+test('finalisation recognises the exact operation order and all bounded normal checkpoints', () => {
+  const finalDecision = finalisationDecision();
+  const checkpoints = [
+    'BEFORE_STAGE_A',
+    'CHILD_STAGE_A_OBSERVED',
+    'PARENT_STAGE_A_OBSERVED',
+    'PR379_CLOSED_STAGE_A',
+    'CHILD_STAGE_B_OBSERVED',
+    'FINAL_TARGET_OBSERVED',
+  ];
+  const expectedOrders = [
+    ['CHILD_STAGE_A', 'PARENT_STAGE_A', 'PR379_CLOSE', 'CHILD_STAGE_B', 'PARENT_STAGE_B'],
+    ['PARENT_STAGE_A', 'PR379_CLOSE', 'CHILD_STAGE_B', 'PARENT_STAGE_B'],
+    ['PR379_CLOSE', 'CHILD_STAGE_B', 'PARENT_STAGE_B'],
+    ['CHILD_STAGE_B', 'PARENT_STAGE_B'],
+    ['PARENT_STAGE_B'],
+    [],
+  ];
+  checkpoints.forEach((checkpoint, index) => {
+    const evidence = makeFinalisationEvidence(checkpoint);
+    const validation = programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision);
+    assert.equal(validation.ok, true, `${checkpoint}: ${validation.code}`);
+    const classification = programme.postMergeEpochFinalisation.classifyCheckpoint({ decision: finalDecision, evidence });
+    assert.equal(classification.ok, true, `${checkpoint}: ${classification.code}`);
+    assert.equal(classification.checkpoint, checkpoint);
+    const preview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence });
+    assert.equal(preview.ok, true, `${checkpoint}: ${preview.code}`);
+    assert.deepEqual(preview.operation_order, expectedOrders[index]);
+    assert.equal(preview.operation_count, expectedOrders[index].length);
+    assert.equal(preview.programme_apply, false);
+    assert.equal(preview.e4_auto_launch, false);
+    assert.equal(preview.provider_cas_claim, false);
+    assert.equal(preview.duplicate_write, false);
+  });
+});
+
+test('acknowledgement-loss checkpoints require a fresh rebind and never blindly repeat a write', () => {
+  const finalDecision = finalisationDecision();
+  for (const checkpoint of programme.FINALISATION_ACK_LOSS_CHECKPOINTS) {
+    const evidence = makeFinalisationEvidence(checkpoint);
+    const validation = programme.postMergeEpochFinalisation.validateEvidence(evidence, finalDecision);
+    assert.equal(validation.ok, true, `${checkpoint}: ${validation.code}`);
+    const preview = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence });
+    assert.equal(preview.ok, true, `${checkpoint}: ${preview.code}`);
+    assert.equal(preview.acknowledgement_loss, true);
+    assert.deepEqual(preview.operations, []);
+    assert.equal(preview.status, 'REQUIRES_FRESH_COMPLETE_REBIND');
+    assert.equal(preview.fresh_complete_rebind_required, true);
+    assert.equal(preview.duplicate_write, false);
+  }
+});
+
+test('already-valid Stage A after #379 closure continues with Stage B only, and final rerun is exact zero delta', () => {
+  const finalDecision = finalisationDecision();
+  const closed = makeFinalisationEvidence('PR379_CLOSED_STAGE_A');
+  const continuation = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence: closed });
+  assert.equal(continuation.ok, true, continuation.code);
+  assert.deepEqual(continuation.operation_order, ['CHILD_STAGE_B', 'PARENT_STAGE_B']);
+  const finalEvidence = makeFinalisationEvidence('FINAL_TARGET_OBSERVED');
+  const first = programme.postMergeEpochFinalisation.preview({ decision: finalDecision, evidence: finalEvidence });
+  const second = programme.postMergeEpochFinalisation.preview({ decision: clone(finalDecision), evidence: clone(finalEvidence) });
+  assert.equal(first.ok, true, first.code);
+  assert.equal(first.code, 'FINALISATION_ZERO_DELTA');
+  assert.equal(first.status, 'ALREADY_FINAL');
+  assert.deepEqual(first.operations, []);
+  assert.equal(first.operation_count, 0);
+  assert.equal(first.zero_delta, true);
+  assert.deepEqual(second, first);
+  assert.equal(programme.postMergeEpochFinalisation.validateReadback({ decision: finalDecision, evidence: finalEvidence }).ok, true);
+});
+
+test('finalisation rejects wrong merge/candidate/evidence/authority identities and unsafe controls', () => {
+  const finalDecision = finalisationDecision();
+  const valid = makeFinalisationEvidence();
+  const mutate = (pathParts, replacement) => programme.postMergeEpochFinalisation.validateEvidence(
+    replaceFinalisationEvidence(valid, pathParts, replacement), finalDecision,
+  ).ok;
+  assert.equal(mutate(['pr_380', 'candidate', 'head'], 'f'.repeat(40)), false);
+  assert.equal(mutate(['pr_380', 'candidate', 'tree'], 'f'.repeat(40)), false);
+  assert.equal(mutate(['pr_380', 'base_sha'], 'f'.repeat(40)), false);
+  assert.equal(mutate(['pr_380', 'github_state'], 'OPEN'), false);
+  assert.equal(mutate(['pr_380', 'merge_commit'], 'f'.repeat(40)), false);
+  assert.equal(mutate(['pr_380', 'ordered_parents'], [programme.PR380_HEAD, programme.MAIN_SHA]), false);
+  assert.equal(mutate(['merge_ancestry', 'merge_commit'], 'f'.repeat(40)), false);
+  assert.equal(mutate(['merge_ancestry', 'ordered_parents'], [programme.PR380_HEAD, programme.MAIN_SHA]), false);
+  assert.equal(mutate(['accepted_evidence'], valid.accepted_evidence.slice(0, 2)), false);
+  assert.equal(mutate(['accepted_evidence', 0, 'body_digest'], 'f'.repeat(64)), false);
+  assert.equal(mutate(['write_authority', 'body'], 'changed authority body'), false);
+  assert.equal(mutate(['source_revisions', 'parent', 'revision'], 'stale-parent'), false);
+  assert.equal(mutate(['source_revisions', 'child', 'revision'], 'stale-child'), false);
+  assert.equal(mutate(['pagination', 'collections', 0, 'complete'], false), false);
+  assert.equal(mutate(['provider_facts', 'provider_cas_claim'], true), false);
+  assert.equal(mutate(['accepted_epoch_event', 'occurrence'], 2), false);
+  assert.equal(mutate(['transaction', 'checkpoint'], 'UNKNOWN'), false);
+  const programmeApply = clone(valid);
+  programmeApply.programme_apply = true;
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(programmeApply), finalDecision).ok, false);
+});
+
+test('finalisation rejects stale or manufactured canonical states and parent-child divergence', () => {
+  const finalDecision = finalisationDecision();
+  const valid = makeFinalisationEvidence('PARENT_STAGE_A_OBSERVED');
+  const staleState = clone(valid);
+  staleState.parent.state.children.find((item) => item.issue === 359).lifecycle = 'QUEUED';
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(staleState), finalDecision).ok, false);
+  const noRegistry = clone(valid);
+  noRegistry.parent.state.children.find((item) => item.issue === 359).pr_registry = noRegistry.parent.state.children.find((item) => item.issue === 359).pr_registry.filter((entry) => entry.pr !== 380);
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(noRegistry), finalDecision).ok, false);
+  const e4Active = clone(valid);
+  e4Active.parent.state.children.find((item) => item.issue === 359).epochs.find((epoch) => epoch.id === 'E4').terminal_disposition = 'ACCEPTED';
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(e4Active), finalDecision).ok, false);
+  const manufacturedLane = clone(valid);
+  manufacturedLane.parent.state.active_lanes = [{ child_issue: 359 }];
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(manufacturedLane), finalDecision).ok, false);
+  const divergence = clone(valid);
+  divergence.child.canonical_digest = 'f'.repeat(64);
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(divergence), finalDecision).ok, false);
+  const prematureClose = makeFinalisationEvidence('BEFORE_STAGE_A');
+  prematureClose.pr_379.state = 'CLOSED';
+  prematureClose.pr_379.github_state = 'CLOSED';
+  prematureClose.pagination = programme.postMergeEpochFinalisation.buildPaginationEvidence(prematureClose);
+  assert.equal(programme.postMergeEpochFinalisation.validateEvidence(withEvidenceDigest(prematureClose), finalDecision).ok, false);
+});
+
+test('renderers derive recovery and clean inter-epoch truth from one canonical state', () => {
+  const fixtures = finalisationStateFixtures();
+  const recoveryRendered = programme.renderProgrammeV5(fixtures.sourceState);
+  const cleanRendered = programme.renderProgrammeV5(fixtures.stageA);
+  const closedRendered = programme.renderProgrammeV5(fixtures.stageB);
+  for (const rendered of [cleanRendered, closedRendered]) {
+    assert.match(rendered.parent, /#380 \| ACCEPTED \| MERGED/);
+    assert.match(rendered.child, /E3: ACCEPTED/);
+    assert.match(rendered.child, /E4: PENDING/);
+    assert.match(rendered.child, /Finality \| UNMERGED/);
+    assert.match(rendered.child, /Normal active lanes: 0/);
+    assert.match(rendered.child, /Active blocking recovery hold: NO/);
+    assert.match(rendered.child, /G4 active: NO/);
+    assert.match(rendered.child, /Wait for separate Web E4 authority/);
+  }
+  assert.match(cleanRendered.parent, /#379 \| RETIRED \| OPEN/);
+  assert.match(closedRendered.parent, /#379 \| RETIRED \| CLOSED/);
+  assert.match(recoveryRendered.child, /Active blocking recovery hold: YES/);
+  assert.match(recoveryRendered.child, /E3: UNACCEPTED/);
+  assert.match(recoveryRendered.child, /Maintain the blocking recovery hold/);
+});
+
+test('recovery API remains unchanged and the governance facade exposes the same finalisation primitive', () => {
+  assert.equal(programme.projectionBootstrapRecovery.validateDecision(decision).ok, true);
+  assert.equal(governance.programmeV5.postMergeEpochFinalisation, programme.postMergeEpochFinalisation);
+  const runtime = governance.createRuntime({ repository });
+  assert.equal(runtime.programmeV5.postMergeEpochFinalisation, programme.postMergeEpochFinalisation);
+  assert.equal(programme.programmeV5.postMergeEpochFinalisation, programme.postMergeEpochFinalisation);
 });
 
 test('bootstrap proof uses workspace bytes and never requires a historical Git object', (t) => {

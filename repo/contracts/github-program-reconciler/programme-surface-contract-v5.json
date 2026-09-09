@@ -10,7 +10,30 @@
     "schema": "toolkit.github-program.state.v5",
     "parent_issue": 240,
     "current_child_issue": 359,
-    "current_zero_lane_requires_active_blocking_recovery_hold": true,
+    "current_zero_lane_requires_active_blocking_recovery_hold": false,
+    "zero_lane_classes": {
+      "recovery_held": {
+        "current_child": 359,
+        "active_lanes": 0,
+        "recovery_present": true,
+        "active_blocking_recovery_hold": true,
+        "finality": "HELD"
+      },
+      "clean_inter_epoch": {
+        "current_child": 359,
+        "active_lanes": 0,
+        "recovery_present": false,
+        "active_blocking_recovery_hold": false,
+        "finality": "UNMERGED",
+        "accepted_epoch_prefix": ["E1", "E2", "E3"],
+        "first_remaining_epoch": "E4",
+        "first_remaining_epoch_status": "PENDING",
+        "active_candidate": false,
+        "active_gate": false,
+        "active_lane": false,
+        "accepted_merged_epoch_registry_evidence": "E3"
+      }
+    },
     "unknown_major_fails_closed": true
   },
   "managed_blocks": {
@@ -53,6 +76,42 @@
     "no_general_state_control": true,
     "no_pr_body_renderer": true
   },
+  "post_merge_epoch_finalisation": {
+    "decision_schema": "toolkit.github-program.post-merge-epoch-finalisation-decision.v1",
+    "evidence_schema": "toolkit.github-program.post-merge-epoch-finalisation-evidence.v1",
+    "root": "E3-V5-POST-MERGE-EPOCH-FINALISATION-001",
+    "lock": "DL-S2-E3-V5-POST-MERGE-EPOCH-FINALISATION-001",
+    "source_state": "RECOVERY_HELD_CANONICAL_STATE",
+    "target_state": "CLEAN_INTER_EPOCH",
+    "operation_order": [
+      "CHILD_STAGE_A",
+      "PARENT_STAGE_A",
+      "PR379_CLOSE",
+      "CHILD_STAGE_B",
+      "PARENT_STAGE_B"
+    ],
+    "recognised_checkpoints": [
+      "BEFORE_STAGE_A",
+      "CHILD_STAGE_A_OBSERVED",
+      "PARENT_STAGE_A_OBSERVED",
+      "PR379_CLOSED_STAGE_A",
+      "CHILD_STAGE_B_OBSERVED",
+      "FINAL_TARGET_OBSERVED",
+      "CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST",
+      "PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST",
+      "PR379_CLOSE_ACKNOWLEDGEMENT_LOST",
+      "CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST",
+      "PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST"
+    ],
+    "requires_future_write_authority": true,
+    "requires_exact_authority_body_digest": true,
+    "provider_client": false,
+    "provider_cas_claim": false,
+    "programme_apply": false,
+    "e4_activation": false,
+    "unknown_checkpoint_fails_closed": true,
+    "zero_delta_is_noop": true
+  },
   "write_safety": {
     "mode": "WEB_EXCLUSIVE_SINGLE_WRITER_RECOVERY_WINDOW",
     "provider_cas_available": false,
@@ -60,6 +119,17 @@
     "fresh_prewrite_evidence_revision_rebinding": true,
     "postwrite_exact_readback": true,
     "residual_external_race_disclosed": true
+  },
+  "post_merge_write_safety": {
+    "mode": "WEB_EXCLUSIVE_POST_MERGE_EPOCH_FINALISATION",
+    "provider_cas_available": false,
+    "provider_cas_claim": false,
+    "provider_client": false,
+    "fresh_complete_rebind_between_operations": true,
+    "exact_readback_between_operations": true,
+    "acknowledgement_loss_requires_readback": true,
+    "unknown_checkpoint_fails_closed": true,
+    "zero_delta_is_noop": true
   },
   "receipt_binding": {
     "schema": "toolkit.github-program.run-receipt.v1",
@@ -87,6 +157,8 @@
     "pr_renderer": false,
     "normal_lane_creation": false,
     "workflow_or_fetch_depth_change": false,
-    "repair3": false
+    "repair3": false,
+    "post_merge_epoch_finalisation": true,
+    "e4_activation": false
   }
 }

@@ -1522,7 +1522,10 @@ function createRuntime(options = {}) {
     classifyFinding,
     registerDeferredFinding,
     governanceReadiness: autoCodeReadiness,
-    programmeV5: Object.freeze({ projectionBootstrapRecovery: programmeV5.projectionBootstrapRecovery }),
+    programmeV5: Object.freeze({
+      projectionBootstrapRecovery: programmeV5.projectionBootstrapRecovery,
+      postMergeEpochFinalisation: programmeV5.postMergeEpochFinalisation,
+    }),
   });
 }
 

@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "toolkit.github-program.post-merge-epoch-finalisation-decision.v1",
+  "title": "Fixed v5 post-merge epoch finalisation decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "root",
+    "lock",
+    "repository",
+    "parent_issue",
+    "child_issue",
+    "source_state",
+    "target_state",
+    "pr_379",
+    "pr_380",
+    "merge_ancestry",
+    "accepted_evidence",
+    "write_authority",
+    "allowed_operations",
+    "allowed_checkpoints",
+    "prohibitions",
+    "write_safety"
+  ],
+  "properties": {
+    "schema": { "const": "toolkit.github-program.post-merge-epoch-finalisation-decision.v1" },
+    "root": { "const": "E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+    "lock": { "const": "DL-S2-E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+    "repository": { "const": "weijunswj/ai-agent-toolkit" },
+    "parent_issue": { "const": 240 },
+    "child_issue": { "const": 359 },
+    "source_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_lanes", "canonical_digest", "e3", "e4", "finality", "holds", "lifecycle", "recovery_present"],
+      "properties": {
+        "canonical_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "lifecycle": { "const": "CURRENT" },
+        "finality": { "const": "HELD" },
+        "recovery_present": { "const": true },
+        "active_lanes": { "const": 0 },
+        "holds": { "const": 1 },
+        "e3": { "const": "UNACCEPTED" },
+        "e4": { "const": "PENDING" }
+      }
+    },
+    "target_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_epoch_prefix", "active_candidate", "active_gate", "active_lane", "active_lanes", "class", "completes_child", "e4_candidate", "finality", "first_remaining_epoch", "first_remaining_epoch_status", "holds", "lifecycle", "recovery_present"],
+      "properties": {
+        "class": { "const": "CLEAN_INTER_EPOCH" },
+        "lifecycle": { "const": "CURRENT" },
+        "finality": { "const": "UNMERGED" },
+        "recovery_present": { "const": false },
+        "active_lanes": { "const": 0 },
+        "holds": { "const": 0 },
+        "accepted_epoch_prefix": { "const": ["E1", "E2", "E3"] },
+        "first_remaining_epoch": { "const": "E4" },
+        "first_remaining_epoch_status": { "const": "PENDING" },
+        "active_candidate": { "const": false },
+        "active_gate": { "const": false },
+        "active_lane": { "const": false },
+        "e4_candidate": { "const": false },
+        "completes_child": { "const": false }
+      }
+    },
+    "pr_379": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate", "completes_child", "draft", "epoch_id", "github_state", "merged", "non_convergence_evidence_ref", "pr", "retention_evidence_ref", "role", "status"],
+      "properties": {
+        "pr": { "const": 379 },
+        "status": { "const": "RETIRED" },
+        "github_state": { "const": "OPEN_OR_CLOSED_AFTER_STAGE_A" },
+        "draft": { "const": true },
+        "merged": { "const": false },
+        "role": { "const": "INTERMEDIATE" },
+        "completes_child": { "const": false },
+        "epoch_id": { "const": "E3" },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+          "properties": {
+            "repository": { "const": "weijunswj/ai-agent-toolkit" },
+            "branch": { "const": "codex/e3-canonical-historical-receipt-resolution-003" },
+            "base_ref": { "const": "main" },
+            "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+            "head": { "const": "adca2ffec8322eb57afcd9f9fdc67210503ebcf1" },
+            "tree": { "const": "2c712aa9c7c6e66a89bdd9d033acece5415fd575" },
+            "version": { "const": "2.11.0" }
+          }
+        },
+        "retention_evidence_ref": { "const": "web-pr379-retained-5580538176" },
+        "non_convergence_evidence_ref": { "const": "pr379-non-convergence-5579738186" }
+      }
+    },
+    "pr_380": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_evidence_ref", "candidate", "completes_child", "draft", "epoch_id", "github_state", "merged", "pr", "role", "status"],
+      "properties": {
+        "pr": { "const": 380 },
+        "status": { "const": "ACCEPTED" },
+        "github_state": { "const": "MERGED" },
+        "draft": { "const": false },
+        "merged": { "const": true },
+        "role": { "const": "INTERMEDIATE" },
+        "completes_child": { "const": false },
+        "epoch_id": { "const": "E3" },
+        "accepted_evidence_ref": { "const": "post-merge-g4-web-acceptance-5143994659" },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_ref", "base_sha", "branch", "head", "repository", "tree", "version"],
+          "properties": {
+            "repository": { "const": "weijunswj/ai-agent-toolkit" },
+            "branch": { "const": "codex/e3-v5-projection-bootstrap-recovery-001" },
+            "base_ref": { "const": "main" },
+            "base_sha": { "const": "c72028c63cc09dd07d3e522692065448b6b7dbb6" },
+            "head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+            "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+            "version": { "const": "2.10.8" }
+          }
+        }
+      }
+    },
+    "merge_ancestry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_head", "accepted_head_tree", "merge_commit", "merge_tree", "merged", "method", "ordered_parents"],
+      "properties": {
+        "merged": { "const": true },
+        "method": { "const": "MERGE_COMMIT" },
+        "merge_commit": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "ordered_parents": { "const": ["c72028c63cc09dd07d3e522692065448b6b7dbb6", "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a"] },
+        "accepted_head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+        "accepted_head_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "merge_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" }
+      }
+    },
+    "accepted_evidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["body_digest", "id", "kind", "reference"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "const": "WEB" },
+          "reference": { "type": "string" },
+          "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "write_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_digest", "lock", "reference", "repository", "root", "scope"],
+      "properties": {
+        "reference": { "type": "string" },
+        "body_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "repository": { "const": "weijunswj/ai-agent-toolkit" },
+        "root": { "const": "E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+        "lock": { "const": "DL-S2-E3-V5-POST-MERGE-EPOCH-FINALISATION-001" },
+        "scope": { "const": "POST_MERGE_EPOCH_FINALISATION" }
+      }
+    },
+    "allowed_operations": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["issue", "operation_id", "operation_kind", "order", "target", "target_kind"],
+        "properties": {
+          "order": { "type": "integer", "minimum": 1 },
+          "operation_id": { "type": "string" },
+          "issue": { "type": "integer", "minimum": 1 },
+          "target_kind": { "type": "string" },
+          "target": { "type": "string" },
+          "operation_kind": { "type": "string" }
+        }
+      }
+    },
+    "allowed_checkpoints": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "enum": [
+          "BEFORE_STAGE_A",
+          "CHILD_STAGE_A_OBSERVED",
+          "PARENT_STAGE_A_OBSERVED",
+          "PR379_CLOSED_STAGE_A",
+          "CHILD_STAGE_B_OBSERVED",
+          "FINAL_TARGET_OBSERVED",
+          "CHILD_STAGE_A_ACKNOWLEDGEMENT_LOST",
+          "PARENT_STAGE_A_ACKNOWLEDGEMENT_LOST",
+          "PR379_CLOSE_ACKNOWLEDGEMENT_LOST",
+          "CHILD_STAGE_B_ACKNOWLEDGEMENT_LOST",
+          "PARENT_STAGE_B_ACKNOWLEDGEMENT_LOST"
+        ]
+      }
+    },
+    "prohibitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arbitrary_patch", "arbitrary_target_state", "arbitrary_transition", "automatic_e4_transition", "desired_state_api", "e4_activation", "pr_body_mutation", "programme_apply", "provider_cas_claim", "provider_client"],
+      "properties": {
+        "desired_state_api": { "const": false },
+        "arbitrary_patch": { "const": false },
+        "arbitrary_transition": { "const": false },
+        "arbitrary_target_state": { "const": false },
+        "programme_apply": { "const": false },
+        "e4_activation": { "const": false },
+        "provider_client": { "const": false },
+        "provider_cas_claim": { "const": false },
+        "pr_body_mutation": { "const": false },
+        "automatic_e4_transition": { "const": false }
+      }
+    },
+    "write_safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acknowledgement_loss_requires_readback", "exact_readback_between_operations", "fresh_complete_rebind_between_operations", "mode", "provider_cas_available", "provider_cas_claim", "provider_client", "web_exclusive_single_writer", "zero_delta_is_noop"],
+      "properties": {
+        "mode": { "const": "WEB_EXCLUSIVE_POST_MERGE_EPOCH_FINALISATION" },
+        "provider_cas_available": { "const": false },
+        "provider_cas_claim": { "const": false },
+        "provider_client": { "const": false },
+        "fresh_complete_rebind_between_operations": { "const": true },
+        "exact_readback_between_operations": { "const": true },
+        "acknowledgement_loss_requires_readback": { "const": true },
+        "web_exclusive_single_writer": { "const": true },
+        "zero_delta_is_noop": { "const": true }
+      }
+    }
+  }
+}
