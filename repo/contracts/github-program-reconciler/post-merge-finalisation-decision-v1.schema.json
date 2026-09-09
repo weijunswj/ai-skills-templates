@@ -48,8 +48,8 @@
       "properties": {
         "kind": { "const": "RECOVERY_HELD_CANONICAL" },
         "canonical_digest": { "const": "1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa" },
-        "parent_body_sha256": { "const": "70b2524bc382d332798cd5f6a4aefb8f09bc0916e94f0b80f7b31eb8608d2f04" },
-        "child_body_sha256": { "const": "094d62971a92a6a8ecde41e8ed0f3944992dcdb23da36abffaea440a6c14c60a" },
+        "parent_body_sha256": { "const": "7f9e745069a968a99e16df15e628e9d3daffc42a7ac65ebb8f1677b4ad71565d" },
+        "child_body_sha256": { "const": "8a59498b66fc1c6e2e83117cfca4d7dd46e853632d5ed9cf8a991c04d6a17ea4" },
         "parent_revision": { "const": "2026-09-08T07:21:55Z" },
         "child_revision": { "const": "2026-09-08T07:21:42Z" },
         "pr_379_revision": { "const": "2026-09-08T07:22:12Z" },

@@ -1428,7 +1428,7 @@ function projectionPayload(state, kind) {
   const child = childByIssue(state, CHILD_ISSUE);
   const interEpoch = looksLikeInterEpochState(state);
   if (kind === 'parent') {
-    return {
+    const payload = {
       schema: PROJECTION_SCHEMA,
       kind: 'parent',
       number: PARENT_ISSUE,
@@ -1449,8 +1449,13 @@ function projectionPayload(state, kind) {
       old_root: state.recovery ? OLD_ROOT : null,
       parked_root: state.recovery ? PARKED_ROOT : null,
     };
+    if (state.recovery) {
+      delete payload.accepted_pr;
+      delete payload.pr_379_github_state;
+    }
+    return payload;
   }
-  return {
+  const payload = {
     schema: PROJECTION_SCHEMA,
     kind: 'child',
     number: CHILD_ISSUE,
@@ -1473,16 +1478,22 @@ function projectionPayload(state, kind) {
     old_root: state.recovery ? OLD_ROOT : null,
     parked_root: state.recovery ? PARKED_ROOT : null,
   };
+  if (state.recovery) {
+    delete payload.accepted_pr;
+    delete payload.pr_379_github_state;
+  }
+  return payload;
 }
 function projectionEnvelope(state, kind) {
   const payload = projectionPayload(state, kind);
+  const extension = {
+    schema: SURFACE_SCHEMA,
+    recovery: state.recovery || null,
+  };
+  if (looksLikeInterEpochState(state)) extension.finalisation = FINALISATION_ROOT;
   return {
     canonical_digest: digestValue(state),
-    extension_digest: digestValue({
-      schema: SURFACE_SCHEMA,
-      recovery: state.recovery || null,
-      finalisation: looksLikeInterEpochState(state) ? FINALISATION_ROOT : null,
-    }),
+    extension_digest: digestValue(extension),
     kind,
     number: kind === 'parent' ? PARENT_ISSUE : CHILD_ISSUE,
     parent_issue: PARENT_ISSUE,
@@ -1596,6 +1607,7 @@ function managedContent(kind, state) {
   const registry = child.pr_registry;
   const registryRows = registry.map((entry) => '| #' + String(entry.pr) + ' | ' + entry.status + ' | ' + (entry.github_state || 'UNKNOWN') + ' | ' + String(entry.draft ?? false) + ' | ' + String(entry.merged ?? false) + ' | ' + entry.role + ' | ' + String(entry.completes_child) + ' | ' + entry.epoch_id + ' |');
   const e3Status = recovery ? 'UNACCEPTED / HELD' : interEpoch ? 'ACCEPTED' : 'ACTIVE';
+  const e3LegacyStatus = recovery ? 'UNACCEPTED' : e3Status;
   const e4Status = 'PENDING';
   const gateState = recovery ? 'HELD' : interEpoch ? 'NONE' : 'ACTIVE';
   const lines = [];
@@ -1644,7 +1656,7 @@ function managedContent(kind, state) {
       recovery ? '- Parked root: ' + PARKED_ROOT + ' / NOT_LAUNCHED' : '',
       '',
       '## Epoch and queue status',
-      '- E3: ' + e3Status,
+      '- E3: ' + e3LegacyStatus,
       '- E4: ' + e4Status,
       '- S3-S6: BLOCKED/QUEUED',
       '- G4 active: NO',
@@ -1699,7 +1711,7 @@ function managedContent(kind, state) {
     '## Progress',
     '- E1: ACCEPTED',
     '- E2: ACCEPTED',
-    '- E3: ' + e3Status,
+    '- E3: ' + e3LegacyStatus,
     '- E4: ' + e4Status,
     '- Normal active lanes: ' + String(state.active_lanes.length),
     '- Active blocking recovery hold: ' + (recovery ? 'YES' : 'NO'),
@@ -3112,6 +3124,88 @@ function validateFinalisationPr380(value) {
     || value.complete !== true) return false;
   return true;
 }
+function finalisationExecutionCurrentMainFixture() {
+  const acceptedHead = digestValue({
+    fixture: 'post-merge-finalisation-implementation-head',
+    root: FINALISATION_ROOT,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const acceptedHeadTree = digestValue({
+    fixture: 'post-merge-finalisation-implementation-head-tree',
+    accepted_head: acceptedHead,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const mergeCommit = digestValue({
+    fixture: 'post-merge-finalisation-implementation-merge',
+    accepted_head: acceptedHead,
+    parent: PR380_MERGE_COMMIT,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  const mergeTree = digestValue({
+    fixture: 'post-merge-finalisation-implementation-merge-tree',
+    merge_commit: mergeCommit,
+    source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+  }).slice(0, 40);
+  return {
+    ref: 'main',
+    sha: mergeCommit,
+    tree: mergeTree,
+    implementation_merge: {
+      accepted_head: acceptedHead,
+      accepted_head_tree: acceptedHeadTree,
+      merge_commit: mergeCommit,
+      merge_tree: mergeTree,
+      method: 'MERGE_COMMIT',
+      ordered_parents: [PR380_MERGE_COMMIT, acceptedHead],
+      source_canonical_digest: FINALISATION_SOURCE_CANONICAL_DIGEST,
+      contains_finalisation_implementation: true,
+      complete: true,
+    },
+    fresh: true,
+    complete: true,
+  };
+}
+function validateFinalisationImmutableSourceMain(value) {
+  const required = ['ref', 'sha', 'tree', 'equals_merge_commit', 'complete'];
+  return isRecord(value)
+    && exactKeys(value, required)
+    && value.ref === 'main'
+    && value.sha === PR380_MERGE_COMMIT
+    && value.tree === PR380_TREE
+    && value.equals_merge_commit === true
+    && value.complete === true;
+}
+function validateFinalisationExecutionCurrentMain(value) {
+  const required = ['ref', 'sha', 'tree', 'implementation_merge', 'fresh', 'complete'];
+  const mergeRequired = [
+    'accepted_head', 'accepted_head_tree', 'merge_commit', 'merge_tree', 'method',
+    'ordered_parents', 'source_canonical_digest', 'contains_finalisation_implementation', 'complete',
+  ];
+  const merge = isRecord(value) ? value.implementation_merge : null;
+  return isRecord(value)
+    && exactKeys(value, required)
+    && value.ref === 'main'
+    && isSha(value.sha)
+    && value.sha !== PR380_MERGE_COMMIT
+    && isSha(value.tree)
+    && value.fresh === true
+    && value.complete === true
+    && isRecord(merge)
+    && exactKeys(merge, mergeRequired)
+    && isSha(merge.accepted_head)
+    && isSha(merge.accepted_head_tree)
+    && isSha(merge.merge_commit)
+    && merge.merge_commit === value.sha
+    && isSha(merge.merge_tree)
+    && merge.merge_tree === value.tree
+    && merge.method === 'MERGE_COMMIT'
+    && Array.isArray(merge.ordered_parents)
+    && merge.ordered_parents.length === 2
+    && same(merge.ordered_parents, [PR380_MERGE_COMMIT, merge.accepted_head])
+    && merge.source_canonical_digest === FINALISATION_SOURCE_CANONICAL_DIGEST
+    && merge.contains_finalisation_implementation === true
+    && merge.complete === true;
+}
 function finalisationBindingFromEvidence(value) {
   return {
     parent_canonical_digest: value.parent.canonical_digest,
@@ -3128,8 +3222,9 @@ function finalisationBindingFromEvidence(value) {
     pr_379_github_state: value.pr_379.github_state,
     pr_379_revision: value.pr_379.revision,
     pr_380_facts_digest: value.pr_380.facts_digest,
-    canonical_main_digest: digestValue(value.canonical_main),
+    immutable_source_main_digest: digestValue(value.immutable_source_main),
     merge_ancestry_digest: digestValue(value.merge_ancestry),
+    execution_current_main_digest: digestValue(value.execution_current_main),
   };
 }
 function validateFinalisationSourceBinding(value, evidence) {
@@ -3189,7 +3284,7 @@ function validateFinalisationTransaction(value, checkpoint) {
 }
 const FINALISATION_EVIDENCE_KEYS = Object.freeze([
   'schema', 'root', 'lock', 'decision_digest', 'repository', 'parent_issue', 'child_issue',
-  'parent', 'child', 'pr_379', 'pr_380', 'canonical_main', 'merge_ancestry',
+  'parent', 'child', 'pr_379', 'pr_380', 'immutable_source_main', 'merge_ancestry', 'execution_current_main',
   'collector', 'freshness', 'source_binding', 'transaction', 'evidence_digest',
 ]);
 function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINALISATION_DECISION_TEMPLATE) {
@@ -3208,13 +3303,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINAL
     || !validateFinalisationBodyObservation(value.child, 'child')
     || !validateFinalisationPr379(value.pr_379)
     || !validateFinalisationPr380(value.pr_380)
-    || !isRecord(value.canonical_main)
-    || !exactKeys(value.canonical_main, ['ref', 'sha', 'tree', 'equals_merge_commit', 'complete'])
-    || value.canonical_main.ref !== 'main'
-    || value.canonical_main.sha !== PR380_MERGE_COMMIT
-    || value.canonical_main.tree !== PR380_TREE
-    || value.canonical_main.equals_merge_commit !== true
-    || value.canonical_main.complete !== true
+    || !validateFinalisationImmutableSourceMain(value.immutable_source_main)
     || !isRecord(value.merge_ancestry)
     || !exactKeys(value.merge_ancestry, ['accepted_head', 'accepted_head_tree', 'merge_commit', 'merge_tree', 'method', 'ordered_parents', 'merged'])
     || value.merge_ancestry.accepted_head !== PR380_HEAD
@@ -3224,6 +3313,7 @@ function validatePostMergeEpochFinalisationEvidence(value, decisionInput = FINAL
     || value.merge_ancestry.method !== 'MERGE_COMMIT'
     || !same(value.merge_ancestry.ordered_parents, [PR380_BASE_SHA, PR380_HEAD])
     || value.merge_ancestry.merged !== true
+    || !validateFinalisationExecutionCurrentMain(value.execution_current_main)
     || !finalisationCollectorValid(value.collector)
     || !finalisationFreshnessValid(value.freshness)
     || !isDigest(value.evidence_digest)) return failure('FINALISATION_EVIDENCE_INVALID');
@@ -3331,7 +3421,7 @@ function buildPostMergeEpochFinalisationEvidence(input = {}) {
       facts_digest: digestValue(finalisationPr380Facts()),
       complete: true,
     },
-    canonical_main: { ref: 'main', sha: PR380_MERGE_COMMIT, tree: PR380_TREE, equals_merge_commit: true, complete: true },
+    immutable_source_main: { ref: 'main', sha: PR380_MERGE_COMMIT, tree: PR380_TREE, equals_merge_commit: true, complete: true },
     merge_ancestry: {
       accepted_head: PR380_HEAD,
       accepted_head_tree: PR380_TREE,
@@ -3341,6 +3431,9 @@ function buildPostMergeEpochFinalisationEvidence(input = {}) {
       ordered_parents: [PR380_BASE_SHA, PR380_HEAD],
       merged: true,
     },
+    execution_current_main: input.execution_current_main === undefined
+      ? finalisationExecutionCurrentMainFixture()
+      : clone(input.execution_current_main),
     collector: {
       kind: 'WEB_AUTHENTICATED_GITHUB_COLLECTION',
       identity: 'github-web-readonly-adapter',

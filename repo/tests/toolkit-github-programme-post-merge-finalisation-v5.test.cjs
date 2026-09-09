@@ -6,6 +6,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const programme = require('../scripts/toolkit-github-program-state-v5.cjs');
 
+let Ajv2020 = null;
+try {
+  Ajv2020 = require('ajv/dist/2020');
+} catch (error) {
+  if (error.code !== 'MODULE_NOT_FOUND') throw error;
+}
+
 const contractDir = path.join(__dirname, '..', 'contracts', 'github-program-reconciler');
 const decisionSchema = JSON.parse(fs.readFileSync(path.join(contractDir, 'post-merge-finalisation-decision-v1.schema.json'), 'utf8'));
 const evidenceSchema = JSON.parse(fs.readFileSync(path.join(contractDir, 'post-merge-finalisation-evidence-v1.schema.json'), 'utf8'));
@@ -116,7 +123,8 @@ function validateSchemaNode(value, schema, root = schema, documents = { [allowed
   }
   if (Object.prototype.hasOwnProperty.call(schema, 'const') && !deepEqual(value, schema.const)) return false;
   if (schema.enum && !schema.enum.some((item) => deepEqual(value, item))) return false;
-  if (schema.required && (value === null || typeof value !== 'object' || schema.required.some((key) => !Object.prototype.hasOwnProperty.call(value, key)))) return false;
+  if (schema.required && value !== null && !Array.isArray(value) && typeof value === 'object'
+    && schema.required.some((key) => !Object.prototype.hasOwnProperty.call(value, key))) return false;
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     if (schema.additionalProperties === false
       && Object.keys(value).some((key) => !schema.properties || !Object.prototype.hasOwnProperty.call(schema.properties, key))) return false;
@@ -158,6 +166,27 @@ function makeEvidence(checkpoint, options = {}) {
     ...bodies[checkpoint],
     ...options,
   });
+}
+
+function syntheticExecutionCurrentMain({ sha = '1'.repeat(40), tree = '2'.repeat(40), acceptedHead = '3'.repeat(40), acceptedHeadTree = '4'.repeat(40) } = {}) {
+  return {
+    ref: 'main',
+    sha,
+    tree,
+    implementation_merge: {
+      accepted_head: acceptedHead,
+      accepted_head_tree: acceptedHeadTree,
+      merge_commit: sha,
+      merge_tree: tree,
+      method: 'MERGE_COMMIT',
+      ordered_parents: [programme.PR380_MERGE_COMMIT, acceptedHead],
+      source_canonical_digest: programme.FINALISATION_SOURCE_CANONICAL_DIGEST,
+      contains_finalisation_implementation: true,
+      complete: true,
+    },
+    fresh: true,
+    complete: true,
+  };
 }
 
 function markerPayload(body, kind) {
@@ -222,8 +251,9 @@ function rebindObservation(evidence, parentBody, childBody) {
     pr_379_github_state: next.pr_379.github_state,
     pr_379_revision: next.pr_379.revision,
     pr_380_facts_digest: next.pr_380.facts_digest,
-    canonical_main_digest: programme.digestValue(next.canonical_main),
+    immutable_source_main_digest: programme.digestValue(next.immutable_source_main),
     merge_ancestry_digest: programme.digestValue(next.merge_ancestry),
+    execution_current_main_digest: programme.digestValue(next.execution_current_main),
   };
   next.source_binding = { ...binding, snapshot_digest: programme.digestValue(binding) };
   delete next.evidence_digest;
@@ -267,6 +297,48 @@ test('fixed source, derived stages, digests, and immutable target table', () => 
   assert.deepEqual(diff, ['children[1].pr_registry[1].github_state']);
 });
 
+test('recovery source rebind is byte-identical to the accepted live rendering', () => {
+  const expectedParentBody = '7f9e745069a968a99e16df15e628e9d3daffc42a7ac65ebb8f1677b4ad71565d';
+  const expectedChildBody = '8a59498b66fc1c6e2e83117cfca4d7dd46e853632d5ed9cf8a991c04d6a17ea4';
+  const expectedExtension = 'c30902bf95f518600a6a833f946af13a96fe25b6ec9ffae00b7e135acaa9a95a';
+  assert.equal(programme.FINALISATION_SOURCE_PARENT_BODY_DIGEST, expectedParentBody);
+  assert.equal(programme.FINALISATION_SOURCE_CHILD_BODY_DIGEST, expectedChildBody);
+  assert.equal(sourceRendered.projections.parent.extension_digest, expectedExtension);
+  assert.equal(sourceRendered.projections.child.extension_digest, expectedExtension);
+  assert.equal(sourceRendered.projections.parent.projection_digest, '9ec4c4720f7100fefb1ff6e2e5bc99a207d14181a00d8282fcb5fbe75c6336c4');
+  assert.equal(sourceRendered.projections.child.projection_digest, 'd4f58d47e3bdf03bfe34fc55a702171ea0e29ab8d98a08514704d3f7da6128af');
+  assert.match(sourceRendered.parent, /\n- E3: UNACCEPTED\n/);
+  assert.match(sourceRendered.child, /## Progress\n(?:.*\n){2}- E3: UNACCEPTED\n/);
+  assert.match(sourceRendered.child, /\| E3 \| UNACCEPTED \/ HELD \|/);
+  const parentParsed = programme.parseParentV5Body(sourceRendered.parent, { repository: programme.REPOSITORY, parent_issue: programme.PARENT_ISSUE });
+  const childParsed = programme.parseChildV5Body(sourceRendered.child, { repository: programme.REPOSITORY, parent_issue: programme.PARENT_ISSUE });
+  assert.equal(parentParsed.ok, true);
+  assert.equal(childParsed.ok, true);
+  assert.equal(parentParsed.envelope.canonical_digest, programme.FINALISATION_SOURCE_CANONICAL_DIGEST);
+  assert.equal(childParsed.envelope.canonical_digest, programme.FINALISATION_SOURCE_CANONICAL_DIGEST);
+  const evidence = makeEvidence('BEFORE_STAGE_A', {
+    parent_revision: '2026-09-10T08:30:01Z',
+    child_revision: '2026-09-10T08:30:02Z',
+    pr_379_revision: '2026-09-10T08:30:03Z',
+  });
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(evidence, decision).ok, true);
+  assert.equal(validatePublishedSchema(evidence, evidenceSchema), true);
+});
+
+test('successor stages keep finalisation rendering separate from recovery rendering', () => {
+  for (const rendered of [stageARendered, stageBRendered]) {
+    assert.match(rendered.parent, /\n- E3: ACCEPTED\n/);
+    assert.match(rendered.parent, /\n- E4: PENDING\n/);
+    assert.match(rendered.parent, /\n\| Active blocking recovery hold \| NO \|\n/);
+    assert.match(rendered.child, /\n- E3: ACCEPTED\n/);
+    assert.match(rendered.child, /\n- E4: PENDING\n/);
+    assert.match(rendered.child, /\n- Active blocking recovery hold: NO\n/);
+    assert.match(rendered.child, /\n\| Lock \| DL-S2-E3-V5-POST-MERGE-FINALISATION-SOURCE-ANCHORED-TARGETS-002 \|\n/);
+    assert.notEqual(rendered.projections.parent.extension_digest, sourceRendered.projections.parent.extension_digest);
+    assert.equal(rendered.projections.parent.extension_digest, rendered.projections.child.extension_digest);
+  }
+});
+
 test('closed decision and observational evidence schemas reject state control', () => {
   assert.equal(programme.validatePostMergeEpochFinalisationDecision(decision).ok, true);
   assert.equal(validatePublishedSchema(decision, decisionSchema), true);
@@ -276,6 +348,19 @@ test('closed decision and observational evidence schemas reject state control', 
   const before = makeEvidence('BEFORE_STAGE_A');
   assert.equal(programme.validatePostMergeEpochFinalisationEvidence(before, decision).ok, true);
   assert.equal(validatePublishedSchema(before, evidenceSchema), true);
+  const later = makeEvidence('CHILD_STAGE_A_OBSERVED');
+  assert.deepEqual(Object.keys(later.transaction.previous_source_binding).sort(), ['binding_digest', 'checkpoint', 'complete']);
+  assert.deepEqual(Object.keys(later.transaction.readback).sort(), ['complete', 'exact', 'fresh_complete_rebind']);
+  for (const field of ['state', 'target', 'desired_state', 'patch', 'transition', 'operation', 'unknown']) {
+    const badPrevious = clone(later);
+    badPrevious.transaction.previous_source_binding[field] = {};
+    assert.equal(validatePublishedSchema(badPrevious, evidenceSchema), false, 'previous:' + field);
+    assert.equal(programme.validatePostMergeEpochFinalisationEvidence(badPrevious, decision).ok, false, 'previous:' + field);
+    const badReadback = clone(later);
+    badReadback.transaction.readback[field] = {};
+    assert.equal(validatePublishedSchema(badReadback, evidenceSchema), false, 'readback:' + field);
+    assert.equal(programme.validatePostMergeEpochFinalisationEvidence(badReadback, decision).ok, false, 'readback:' + field);
+  }
   const withState = { ...before, state: {} };
   assert.equal(programme.validatePostMergeEpochFinalisationEvidence(withState, decision).ok, false);
   const withTarget = { ...decision, target: {} };
@@ -417,6 +502,42 @@ test('provider facts are observational and #380 is immutable', () => {
   const stageB = programme.FINALISATION_STAGE_B_TARGET_STATE;
   assert.equal(stageA.children[1].pr_registry.find((entry) => entry.pr === 379).github_state, 'OPEN');
   assert.equal(stageB.children[1].pr_registry.find((entry) => entry.pr === 379).github_state, 'CLOSED');
+});
+
+test('execution current main is post-merge evidence and cannot steer targets', () => {
+  const baseline = makeEvidence('BEFORE_STAGE_A');
+  const synthetic = makeEvidence('BEFORE_STAGE_A', {
+    execution_current_main: syntheticExecutionCurrentMain(),
+  });
+  const baselineValid = programme.validatePostMergeEpochFinalisationEvidence(baseline, decision);
+  const syntheticValid = programme.validatePostMergeEpochFinalisationEvidence(synthetic, decision);
+  assert.equal(baselineValid.ok, true);
+  assert.equal(syntheticValid.ok, true);
+  assert.equal(validatePublishedSchema(synthetic, evidenceSchema), true);
+  assert.equal(synthetic.immutable_source_main.sha, programme.PR380_MERGE_COMMIT);
+  assert.equal(synthetic.immutable_source_main.tree, programme.PR380_TREE);
+  assert.deepEqual(synthetic.merge_ancestry.ordered_parents, [programme.PR380_BASE_SHA, programme.PR380_HEAD]);
+  assert.notEqual(synthetic.execution_current_main.sha, synthetic.immutable_source_main.sha);
+  const baselinePreview = programme.previewPostMergeEpochFinalisation({ decision, evidence: baseline });
+  const syntheticPreview = programme.previewPostMergeEpochFinalisation({ decision, evidence: synthetic });
+  assert.equal(baselinePreview.ok, true);
+  assert.equal(syntheticPreview.ok, true);
+  assert.deepEqual(syntheticPreview.operations.map((operation) => operation.operation_id), ['CHILD_STAGE_A']);
+  assert.equal(syntheticPreview.next_operation.operation_id, 'CHILD_STAGE_A');
+  assert.equal(syntheticPreview.checkpoint, baselinePreview.checkpoint);
+  assert.equal(syntheticPreview.next_operation.target_canonical_digest, baselinePreview.next_operation.target_canonical_digest);
+  assert.equal(syntheticPreview.next_operation.target_body_digest, baselinePreview.next_operation.target_body_digest);
+  const stale = clone(synthetic);
+  stale.execution_current_main.sha = '5'.repeat(40);
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(stale, decision).ok, false);
+  const noImplementation = clone(synthetic);
+  noImplementation.execution_current_main.implementation_merge.contains_finalisation_implementation = false;
+  assert.equal(validatePublishedSchema(noImplementation, evidenceSchema), false);
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(noImplementation, decision).ok, false);
+  const sourceOnly = clone(synthetic);
+  sourceOnly.execution_current_main = clone(sourceOnly.immutable_source_main);
+  assert.equal(validatePublishedSchema(sourceOnly, evidenceSchema), false);
+  assert.equal(programme.validatePostMergeEpochFinalisationEvidence(sourceOnly, decision).ok, false);
 });
 
 test('canonical-rebase attack matrix fails at every later checkpoint', () => {
@@ -561,4 +682,19 @@ test('published surface contract pins the narrow successor and no provider mutat
   assert.equal(surface.post_merge_finalisation.targets.stage_a.pr_379_github_state, 'OPEN');
   assert.equal(surface.post_merge_finalisation.targets.stage_b.differs_from_stage_a_only, 'children[1].pr_registry[1].github_state');
   assert.equal(surface.post_merge_finalisation.operation_sequence.length, 5);
+});
+
+test('Ajv cross-check agrees with the local closed transaction schemas', { skip: !Ajv2020 }, () => {
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validateDecision = ajv.compile(decisionSchema);
+  const validateEvidence = ajv.compile(evidenceSchema);
+  assert.equal(validateDecision(decision), true, JSON.stringify(validateDecision.errors));
+  const evidence = makeEvidence('CHILD_STAGE_A_OBSERVED');
+  assert.equal(validateEvidence(evidence), true, JSON.stringify(validateEvidence.errors));
+  const badPrevious = clone(evidence);
+  badPrevious.transaction.previous_source_binding.target = {};
+  assert.equal(validateEvidence(badPrevious), false);
+  const badReadback = clone(evidence);
+  badReadback.transaction.readback.patch = {};
+  assert.equal(validateEvidence(badReadback), false);
 });

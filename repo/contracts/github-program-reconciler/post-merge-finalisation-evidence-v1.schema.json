@@ -16,8 +16,9 @@
     "child",
     "pr_379",
     "pr_380",
-    "canonical_main",
+    "immutable_source_main",
     "merge_ancestry",
+    "execution_current_main",
     "collector",
     "freshness",
     "source_binding",
@@ -36,14 +37,14 @@
     "child": { "$ref": "#/$defs/child_body_observation" },
     "pr_379": { "$ref": "#/$defs/pr_379_observation" },
     "pr_380": { "$ref": "#/$defs/pr_380_observation" },
-    "canonical_main": {
+    "immutable_source_main": {
       "type": "object",
       "additionalProperties": false,
       "required": ["ref", "sha", "tree", "equals_merge_commit", "complete"],
       "properties": {
         "ref": { "const": "main" },
-        "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
-        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "sha": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
         "equals_merge_commit": { "const": true },
         "complete": { "const": true }
       }
@@ -52,6 +53,56 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["accepted_head", "accepted_head_tree", "merge_commit", "merge_tree", "method", "ordered_parents", "merged"],
+      "properties": {
+        "accepted_head": { "const": "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a" },
+        "accepted_head_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "merge_commit": { "const": "4381386c5fdfa45b8848af9b30b9082df06d99a0" },
+        "merge_tree": { "const": "d9e78e1a09fc53f88d077f3f4216027102534ce3" },
+        "method": { "const": "MERGE_COMMIT" },
+        "ordered_parents": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "const": ["c72028c63cc09dd07d3e522692065448b6b7dbb6", "f8afc5df62b9e86a478ce24745b6aa481cbc7a1a"],
+          "items": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+        },
+        "merged": { "const": true }
+      }
+    },
+    "execution_current_main": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha", "tree", "implementation_merge", "fresh", "complete"],
+      "properties": {
+        "ref": { "const": "main" },
+        "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "implementation_merge": { "$ref": "#/$defs/execution_implementation_merge" },
+        "fresh": { "const": true },
+        "complete": { "const": true }
+      }
+    },
+    "collector": { "$ref": "#/$defs/collector" },
+    "freshness": { "$ref": "#/$defs/freshness" },
+    "source_binding": { "$ref": "#/$defs/source_binding" },
+    "transaction": { "$ref": "#/$defs/transaction" },
+    "evidence_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "$defs": {
+    "execution_implementation_merge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted_head",
+        "accepted_head_tree",
+        "merge_commit",
+        "merge_tree",
+        "method",
+        "ordered_parents",
+        "source_canonical_digest",
+        "contains_finalisation_implementation",
+        "complete"
+      ],
       "properties": {
         "accepted_head": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
         "accepted_head_tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
@@ -64,16 +115,11 @@
           "maxItems": 2,
           "items": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
         },
-        "merged": { "const": true }
+        "source_canonical_digest": { "const": "1d810f3d7df41012707672cd323c12ccfcff279c172165bbf732e1a49eae39aa" },
+        "contains_finalisation_implementation": { "const": true },
+        "complete": { "const": true }
       }
     },
-    "collector": { "$ref": "#/$defs/collector" },
-    "freshness": { "$ref": "#/$defs/freshness" },
-    "source_binding": { "$ref": "#/$defs/source_binding" },
-    "transaction": { "$ref": "#/$defs/transaction" },
-    "evidence_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
-  },
-  "$defs": {
     "body_observation": {
       "type": "object",
       "additionalProperties": false,
@@ -253,8 +299,9 @@
         "pr_379_github_state",
         "pr_379_revision",
         "pr_380_facts_digest",
-        "canonical_main_digest",
+        "immutable_source_main_digest",
         "merge_ancestry_digest",
+        "execution_current_main_digest",
         "snapshot_digest"
       ],
       "properties": {
@@ -272,8 +319,9 @@
         "pr_379_github_state": { "enum": ["OPEN", "CLOSED"] },
         "pr_379_revision": { "type": "string", "minLength": 1 },
         "pr_380_facts_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "canonical_main_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "immutable_source_main_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "merge_ancestry_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "execution_current_main_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "snapshot_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     },
@@ -286,8 +334,26 @@
         "acknowledgement_loss_operation_order": { "type": ["integer", "null"], "minimum": 1 },
         "complete": { "const": true },
         "completed_operation_orders": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
-        "previous_source_binding": { "type": ["object", "null"] },
-        "readback": { "type": "object" },
+        "previous_source_binding": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["checkpoint", "binding_digest", "complete"],
+          "properties": {
+            "checkpoint": { "enum": ["BEFORE_STAGE_A", "CHILD_STAGE_A_OBSERVED", "PARENT_STAGE_A_OBSERVED", "PR379_CLOSED_STAGE_A", "CHILD_STAGE_B_OBSERVED"] },
+            "binding_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "complete": { "const": true }
+          }
+        },
+        "readback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "exact", "fresh_complete_rebind"],
+          "properties": {
+            "complete": { "const": true },
+            "exact": { "const": true },
+            "fresh_complete_rebind": { "const": true }
+          }
+        },
         "checkpoint": { "enum": ["BEFORE_STAGE_A", "CHILD_STAGE_A_OBSERVED", "PARENT_STAGE_A_OBSERVED", "PR379_CLOSED_STAGE_A", "CHILD_STAGE_B_OBSERVED", "FINAL_TARGET_OBSERVED"] }
       }
     }
